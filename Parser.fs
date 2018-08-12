@@ -19,6 +19,7 @@ let (<!>) (p: Parser<_>) label : Parser<_> =
         reply
 
 let ws = spaces
+let ws1 = spaces1
 let str s = pstring s
 
 let parseExpr, parseExprRef = createParserForwardedToRef ()
@@ -55,7 +56,7 @@ let parseCall =
             parseLet 
             parseVar
         ]
-    chainl1 parseNotCall (pchar ' ' |>> (fun _ f a -> ECall(f, a)))
+    chainl1 parseNotCall (spaces1 |>> (fun _ f a -> ECall(f, a)))
     <!> "parseCall"
 
 do parseExprRef := parseCall
