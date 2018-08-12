@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Util.fs" />
     <Compile Include="Expr.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="Infer.fs" />

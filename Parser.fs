@@ -1,10 +1,12 @@
 module Parser
 
 open System 
-open Expr
 
 open FParsec.CharParsers
 open FParsec.Primitives
+
+open Expr
+open Util 
 
 type ParserState = unit
 type Parser<'t> = Parser<'t, ParserState>
@@ -16,8 +18,6 @@ let (<!>) (p: Parser<_>) label : Parser<_> =
         printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
         reply
 
-let spaces : Parser<_> = spaces1
-let comma : Parser<_> = pstring ","
 let identifier : Parser<string> =
     let first = letter 
     let rest = many (letter <|> digit)
@@ -30,6 +30,7 @@ let identifier : Parser<string> =
     )
 
 let parseExpr, parseExprImpl = createParserForwardedToRef ()
+let parseSimpleExpr, parseSimpleExprImpl = createParserForwardedToRef ()
 
 let parseBool : Parser<Value> =
     (stringReturn "true" (VBool true))
@@ -41,48 +42,66 @@ let parseInt : Parser<Value> =
 let parseFloat : Parser<Value> =
     pfloat |>> VFloat
 
-let parseFun : Parser<Value> =
-    let a = sepBy identifier spaces
-    pipe3 (pstring "fun") a parseExpr (fun _ args body ->
-        VFun (args, body)
-    )
+// let parseFun : Parser<Value> =
+//     let idents = sepBy identifier spaces1
+//     pipe3 (pstring "fun") idents parseExpr (fun _ args body ->
+//         VFun (args, body)
+//     )
 
 let parseValue : Parser<Expr> =
     choice [
         parseBool
         parseInt
         parseFloat
-        parseFun
+        // parseFun
     ]
     |>> EValue
 
 let parseVar : Parser<Expr> = 
     identifier |>> EVar <!> "parseVar"
 
+let parseIdentList, parseIdentListImpl = createParserForwardedToRef ()
+do parseIdentListImpl :=
+    choice [
+        identifier                                  |>> List.singleton
+        identifier .>>. (spaces >>. parseIdentList) |>> List.Cons
+    ]
+
+let parseExprList, parseExprListImpl = createParserForwardedToRef ()
+do parseExprListImpl :=
+    choice [
+        parseExpr                                   |>> List.singleton
+        parseExpr .>>. (spaces >>. parseExprList)   |>> List.Cons
+    ]
+
 let parseCall : Parser<Expr> =
-    let a = sepBy parseExpr comma
-    let b = pipe3 (pchar '(') (attempt a) (pchar ')') (fun _ expr _ ->
-        expr
-    )
-    pipe2 parseVar b (fun name args ->
-        ECall (name, args)
+    pipe2 parseSimpleExpr parseExprList (fun fn args ->
+        ECall (fn, args)
     ) <!> "parseCall"
 
-let parseLet : Parser<Expr> =
-    let name = pipe2 (pstring "let") identifier (fun _ name -> name)
-    let value = pipe2 (pchar '=') parseExpr (fun _ value -> value)
-    let body = pipe2 (pstring "in") parseExpr (fun _ body -> body)
-    pipe3 name value body (fun name value body ->
-        ELet (name, value, body)
-    )
+// let parseLet : Parser<Expr> =
+//     let name = pipe2 (pstring "let") identifier (fun _ name -> name)
+//     let value = pipe2 (pchar '=') parseExpr (fun _ value -> value)
+//     let body = pipe2 (pstring "in") parseExpr (fun _ body -> body)
+//     pipe3 name value body (fun name value body ->
+//         ELet (name, value, body)
+//     )
+
+// Yeah most designs they'll have expressions and atoms.
 
 do parseExprImpl :=
     choice [
-        parseValue
+        parseSimpleExpr
+        // parseLet
+        // parseFun
+    ] <!> "parseExpr"
+
+do parseSimpleExprImpl :=
+    choice [
+        // parseValue
         parseVar
         parseCall
-        parseLet
-    ] <!> "parseExpr"
+    ]
 
 let inline readOrThrow (parser: Parser<'a,_>) input : 'a =
     match run parser input with
