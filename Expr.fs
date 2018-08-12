@@ -5,40 +5,25 @@ open System.Reflection.Metadata.Ecma335
 
 type Name = String
 
-type Value =
-    | VBool of bool
-    | VInt of int
-    | VFloat of float
-    | VFun of Name list * Expr
-with
-    override x.ToString () =
-        let rec f isSimple = function
-            | VBool b -> string b
-            | VInt i -> string i
-            | VFloat f -> string f
-            | VFun (paramList, bodyExpr) ->
-                let funStr = 
-                    sprintf "fun %s -> %s" 
-                        (String.concat " " paramList) 
-                        (string bodyExpr)
-                if isSimple then "(" + funStr + ")" else funStr
-        f false x
-
 and Expr =
-    | EValue of Value
     | EVar of Name
-    | ECall of Expr * Expr list
+    | EFun of Name * Expr
+    | ECall of Expr * Expr
     | ELet of Name * Expr * Expr
 with
     override x.ToString () =
         let rec f isSimple = function
-            | EValue v -> string v
             | EVar name -> name
-            | ECall (fnExpr, argList) ->
-                argList
-                |> List.map (f false)
-                |> String.concat ", "
-                |> (sprintf "%s(%s)" (f true fnExpr))
+            | EFun (param, bodyExpr) ->
+                let funStr = 
+                    sprintf "fun %s -> %s" 
+                        param
+                        (string bodyExpr)
+                if isSimple then "(" + funStr + ")" else funStr
+            | ECall (fnExpr, argExpr) ->
+                let fnStr = f true fnExpr
+                let argStr = f false argExpr
+                sprintf "%s %s" fnStr argStr
             | ELet (varName, valueExpr, bodyExpr) ->
                 let letStr =
                     sprintf "let %s = %s in %s"
@@ -54,7 +39,7 @@ type Level = int
 type Ty =
     | TConst of Name
     | TApp of Ty * Ty list
-    | TArrow of Ty list * Ty
+    | TArrow of Ty * Ty
     | TVar of Tvar ref
 with
     override x.ToString () =
@@ -72,20 +57,11 @@ with
                 |> List.map (f false)
                 |> String.concat ", "
                 |> sprintf "%s[%s]" (f true ty)
-            | TArrow (paramTyList, returnTy) ->
+            | TArrow (paramTy, returnTy) ->
                 let arrowTyStr =
-                    match paramTyList with
-                    | [paramTy] ->
-                        let paramTyStr = f true paramTy
-                        let returnTyStr = f false returnTy
-                        sprintf "%s -> %s" paramTyStr returnTyStr
-                    | _ ->
-                        let paramTyStr =
-                            paramTyList
-                            |> List.map (f false)
-                            |> String.concat ", "
-                        let returnTyStr = f false returnTy
-                        sprintf "(%s) -> %s" paramTyStr returnTyStr
+                    let paramTyStr = f true paramTy
+                    let returnTyStr = f false returnTy
+                    sprintf "%s -> %s" paramTyStr returnTyStr
                 if isSimple then "(" + arrowTyStr + ")" else arrowTyStr
             | TVar {contents = Generic id} ->
                 idNameMap

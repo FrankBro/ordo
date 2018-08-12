@@ -16,8 +16,8 @@ type Result =
 let tests = [
     ("", Fail);
     ("a", OK (EVar "a"));
-    ("f(x, y)", OK (ECall(EVar "f", [EVar "x"; EVar "y"])));
-    // ("f(x)(y)", OK (ECall(ECall(EVar "f", [EVar "x"]), [EVar "y"])));
+    ("f x", OK (ECall(EVar "f", EVar "x")));
+    ("f x y ", OK (ECall(ECall(EVar "f", EVar "x"), EVar "y")));
     // ("let f = fun x y -> g(x, y) in f(a, b)",
     //     OK (ELet("f", EValue (VFun(["x"; "y"], ECall(EVar "g", [EVar "x"; EVar "y"]))), ECall(EVar "f", [EVar "a"; EVar "b"]))));
     // ("let x = a in " +

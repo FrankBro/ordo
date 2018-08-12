@@ -32,8 +32,8 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TApp (ty, tyArgList) ->
             f ty
             List.iter f tyArgList
-        | TArrow (paramTyList, returnTy) ->
-            List.iter f paramTyList
+        | TArrow (paramTy, returnTy) ->
+            f paramTy
             f returnTy
         | TConst _ -> ()
     f ty
@@ -45,8 +45,8 @@ let rec unify ty1 ty2 =
     | TApp (ty1, tyArgList1), TApp (ty2, tyArgList2) ->
         unify ty1 ty2
         List.iter2 unify tyArgList1 tyArgList2
-    | TArrow (paramTyList1, returnTy1), TArrow (paramTyList2, returnTy2) ->
-        List.iter2 unify paramTyList1 paramTyList2
+    | TArrow (paramTy1, returnTy1), TArrow (paramTy2, returnTy2) ->
+        unify paramTy1 paramTy2
         unify returnTy1 returnTy2
     | TVar {contents = Link ty1}, ty2
     | ty1, TVar {contents = Link ty2} -> unify ty1 ty2
@@ -65,8 +65,8 @@ let rec generalize level = function
         TVar (ref (Generic id))
     | TApp (ty, tyArgList) ->
         TApp (generalize level ty, List.map (generalize level) tyArgList)
-    | TArrow (paramTyList, returnTy) ->
-        TArrow (List.map (generalize level) paramTyList, generalize level returnTy)
+    | TArrow (paramTy, returnTy) ->
+        TArrow (generalize level paramTy, generalize level returnTy)
     | TVar {contents = Link ty} -> generalize level ty
     | TVar {contents = Generic _ }
     | TVar {contents = Unbound _ }
@@ -89,40 +89,21 @@ let instantiate level ty =
         | TVar {contents = Unbound _} -> ty
         | TApp (ty, tyArgList) ->
             TApp (f ty, List.map f tyArgList)
-        | TArrow (paramTyList, returnTy) ->
-            TArrow (List.map f paramTyList, f returnTy)
+        | TArrow (paramTy, returnTy) ->
+            TArrow (f paramTy, f returnTy)
     f ty
 
-let rec matchFunTy numParams = function
-    | TArrow (paramTyList, returnTy) ->
-        if List.length paramTyList <> numParams then
-            error "unexpected number of arguments"
-        else
-            paramTyList, returnTy
-    | TVar {contents = Link ty} -> matchFunTy numParams ty
+let rec matchFunTy = function
+    | TArrow (paramTy, returnTy) -> paramTy, returnTy
+    | TVar {contents = Link ty} -> matchFunTy ty
     | TVar ({contents = Unbound(id, level)} as tvar) ->
-        let paramTyList =
-            let rec f = function
-                | 0 -> []
-                | n -> newVar level :: f (n - 1)
-            f numParams
+        let paramTy = newVar level
         let returnTy = newVar level
-        tvar := Link (TArrow(paramTyList, returnTy))
-        paramTyList, returnTy
+        tvar := Link (TArrow(paramTy, returnTy))
+        paramTy, returnTy
     | _ -> error "expected a function"
 
 let rec infer env level = function
-    | EValue (VBool _) -> TConst "bool"
-    | EValue (VInt _) -> TConst "int"
-    | EValue (VFloat _) -> TConst "float"
-    | EValue (VFun (paramList, bodyExpr)) ->
-        let paramTyList = List.map (fun _ -> newVar level) paramList
-        let fnEnv = 
-            List.foldBack2 (fun paramName paramTy env ->
-                Map.add paramName paramTy env
-            ) paramList paramTyList env
-        let returnTy = infer fnEnv level bodyExpr
-        TArrow (paramTyList, returnTy)
     | EVar name ->
         env
         |> Map.tryFind name
@@ -131,14 +112,18 @@ let rec infer env level = function
             sprintf "variable %s not found" name
             |> error
         )
+    | EFun (param, bodyExpr) ->
+        let paramTy = newVar level
+        let fnEnv = Map.add param paramTy env
+        let returnTy = infer fnEnv level bodyExpr
+        TArrow (paramTy, returnTy)
     | ELet (varName, valueExpr, bodyExpr) ->
         let varTy = infer env (level + 1) valueExpr
         let generalizedTy = generalize level varTy
         infer (Map.add varName generalizedTy env) level bodyExpr
-    | ECall (fnExpr, argList) ->
-        let paramTyList, returnTy =
-            matchFunTy (List.length argList) (infer env level fnExpr)
-        (paramTyList, argList)
-        ||> List.iter2 (fun paramTy argExpr -> unify paramTy (infer env level argExpr))
+    | ECall (fnExpr, argExpr) ->
+        let paramTy, returnTy =
+            matchFunTy (infer env level fnExpr)
+        unify paramTy (infer env level argExpr)
         returnTy
     
