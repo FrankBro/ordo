@@ -11,6 +11,9 @@ open Util
 type ParserState = unit
 type Parser<'t> = Parser<'t, ParserState>
 
+let ws = spaces
+let str s = pstring s
+
 let (<!>) (p: Parser<_>) label : Parser<_> =
     fun stream ->
         printfn "%A: Entering %s" stream.Position label
@@ -44,7 +47,7 @@ let parseFloat : Parser<Value> =
 
 // let parseFun : Parser<Value> =
 //     let idents = sepBy identifier spaces1
-//     pipe3 (pstring "fun") idents parseExpr (fun _ args body ->
+//     pipe3 (str "fun") idents parseExpr (fun _ args body ->
 //         VFun (args, body)
 //     )
 
@@ -63,26 +66,33 @@ let parseVar : Parser<Expr> =
 let parseIdentList, parseIdentListImpl = createParserForwardedToRef ()
 do parseIdentListImpl :=
     choice [
-        identifier                                  |>> List.singleton
-        identifier .>>. (spaces >>. parseIdentList) |>> List.Cons
+        identifier |>> 
+            (fun ident -> [ident])
+        pipe2 identifier (ws >>. parseIdentList)
+            (fun ident idents -> ident :: idents)
     ]
 
 let parseExprList, parseExprListImpl = createParserForwardedToRef ()
 do parseExprListImpl :=
     choice [
-        parseExpr                                   |>> List.singleton
-        parseExpr .>>. (spaces >>. parseExprList)   |>> List.Cons
+        parseExpr |>> 
+            (fun expr -> [expr])
+        pipe2 parseExpr (ws >>. parseExprList)
+            (fun expr exprs -> expr :: exprs)
     ]
 
 let parseCall : Parser<Expr> =
-    pipe2 parseSimpleExpr parseExprList (fun fn args ->
-        ECall (fn, args)
-    ) <!> "parseCall"
+    choice [
+        pipe2 parseSimpleExpr (between (ws >>. str "(") (ws >>. str ")") parseExprList)
+            (fun expr exprs -> ECall (expr, exprs))
+        pipe3 (ws >>. str "(") parseSimpleExpr (ws >>. str ")")
+            (fun _ expr _ -> ECall (expr, []))
+    ]
 
 // let parseLet : Parser<Expr> =
-//     let name = pipe2 (pstring "let") identifier (fun _ name -> name)
+//     let name = pipe2 (str "let") identifier (fun _ name -> name)
 //     let value = pipe2 (pchar '=') parseExpr (fun _ value -> value)
-//     let body = pipe2 (pstring "in") parseExpr (fun _ body -> body)
+//     let body = pipe2 (str "in") parseExpr (fun _ body -> body)
 //     pipe3 name value body (fun name value body ->
 //         ELet (name, value, body)
 //     )
@@ -109,5 +119,5 @@ let inline readOrThrow (parser: Parser<'a,_>) input : 'a =
     | ParserResult.Failure (se, e, state) -> failwith "Parser error" 
 let inline readExpr input = readOrThrow parseExpr input
 let inline readExprList input : Expr list =
-    let parser = (sepEndBy parseExpr spaces)
+    let parser = (sepEndBy parseExpr ws)
     readOrThrow parser input
