@@ -5,7 +5,7 @@ open System.Reflection.Metadata.Ecma335
 
 type Name = String
 
-and Expr =
+type Expr =
     | EVar of Name
     | EFun of Name * Expr
     | ECall of Expr * Expr
