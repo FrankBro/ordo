@@ -46,11 +46,19 @@ type TestParser (output: ITestOutputHelper) =
     member x.TestParser () =
         tests
         |> List.iter (fun (input, expected) ->
+            let mutable expr = None
+            let setExpr e = expr <- Some e
             let result =
                 try
                     Parser.readExpr input
                     |> OK
                 with _ ->
                     Fail
+            if result <> expected then
+                printfn "TestParser:"
+                printfn "    Input = %s" input
+                match expr with
+                | None -> printfn "    Expr fail"
+                | Some expr -> (Expr.ToStringRaw >> printfn "    Expr = %s") expr
             Assert.StrictEqual(expected, result)
         )

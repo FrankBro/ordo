@@ -23,6 +23,13 @@ with
                         (string bodyExpr)
                 if isSimple then "(" + funStr + ")" else funStr
         f false x
+    
+    static member ToStringRaw (x: Value) =
+        match x with
+        | VBool b -> sprintf "VBool %b" b
+        | VInt i -> sprintf "VInt %d" i
+        | VFloat f -> sprintf "VFloat %f" f
+        | VFun (name, expr) -> sprintf "VFun (%s, %s)" name (Expr.ToStringRaw expr)
 
 and Expr =
     | EValue of Value
@@ -46,6 +53,13 @@ with
                         (f false bodyExpr)
                 if isSimple then "(" + letStr + ")" else letStr
         f false x
+
+    static member ToStringRaw (x: Expr) =
+        match x with
+        | EValue v -> sprintf "EValue %s" (Value.ToStringRaw v)
+        | EVar name -> sprintf "EVar %s" name
+        | ECall (a, b) -> sprintf "ECall (%s, %s)" (Expr.ToStringRaw a) (Expr.ToStringRaw b)
+        | ELet (name, value, body) -> sprintf "ELet (%s, %s, %s" name (Expr.ToStringRaw value) (Expr.ToStringRaw body)
 
 type Id = int
 type Level = int
