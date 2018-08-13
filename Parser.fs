@@ -31,22 +31,22 @@ let parseVar =
     identifier |>> EVar
     <!> "parseVar"
 
-let parseFun : Parser<Expr> =
-    let p1 = str "fun" >>. identifier
-    let p2 = str "->" >>. parseExpr
-    (p1 .>>. p2) |>> EFun
-    <!> "parseFun"
+// let parseFun : Parser<Expr> =
+//     let p1 = str "fun" >>. identifier
+//     let p2 = str "->" >>. parseExpr
+//     (p1 .>>. p2) |>> EFun
+//     <!> "parseFun"
 
-let parseParen = 
-    between (ws >>. str "(") (ws >>. str ")") parseExpr
-    <!> "parseParen"
+// let parseParen = 
+//     between (ws >>. str "(") (ws >>. str ")") parseExpr
+//     <!> "parseParen"
 
-let parseLet = 
-    let p1 = str "let" >>. identifier
-    let p2 = str "=" >>. parseExpr
-    let p3 = str "in" >>. parseExpr
-    pipe3 p1 p2 p2 (fun var value body -> ELet (var, value, body))
-    <!> "parseLet"
+// let parseLet = 
+//     let p1 = str "let" >>. identifier
+//     let p2 = str "=" >>. parseExpr
+//     let p3 = str "in" >>. parseExpr
+//     pipe3 p1 p2 p2 (fun var value body -> ELet (var, value, body))
+//     <!> "parseLet"
 
 let parseCall =
     let parseNotCall =
