@@ -17,17 +17,16 @@ let tests = [
     ("", Fail);
     ("a", OK (EVar "a"));
     ("f x", OK (ECall(EVar "f", EVar "x")));
-    ("f x y ", OK (ECall(ECall(EVar "f", EVar "x"), EVar "y")));
+    ("f x y", OK (ECall(ECall(EVar "f", EVar "x"), EVar "y")));
     // ("let f = fun x y -> g(x, y) in f(a, b)",
     //     OK (ELet("f", EValue (VFun(["x"; "y"], ECall(EVar "g", [EVar "x"; EVar "y"]))), ECall(EVar "f", [EVar "a"; EVar "b"]))));
     // ("let x = a in " +
     //  "let y = b in " +
     //  "f(x, y)", OK (ELet("x", EVar "a", ELet("y", EVar "b", ECall(EVar "f", [EVar "x"; EVar "y"])))));
-    // ("f x", Fail);
-    // ("let a = one", Fail);
+    ("let a = one", Fail);
     // ("a, b", Fail);
-    // ("a = b", Fail);
-    // ("()", Fail);
+    ("a = b", Fail);
+    ("()", Fail);
     // ("fun x, y -> y", Fail);
     // ("1", OK (EValue (VInt 1)));
     // ("-1", OK (EValue (VInt (-1))));
