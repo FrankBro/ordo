@@ -27,37 +27,61 @@ let parseExpr, parseExprRef = createParserForwardedToRef ()
 let identifier : Parser<string> =
     many1 lower |>> (Array.ofList >> String)
 
-let parseVar = 
-    identifier |>> EVar
-    <!> "parseVar"
+let parseBool : Parser<Value> =
+    (stringReturn "true" (VBool true))
+    <|> (stringReturn "false" (VBool false))
 
-let parseFun : Parser<Expr> =
+let parseInt : Parser<Value> =    
+    pint32  |>> VInt
+
+let parseFloat : Parser<Value> =
+    let pa = opt (str "-")
+    let pb = many1 digit |>> (Array.ofList >> String)
+    let pc = str "." >>. many digit |>> (Array.ofList >> String)
+    pipe3 pa pb pc (fun sign whole decimal -> 
+        let number = whole + "." + decimal |> float
+        if Option.isSome sign then
+            -number
+        else
+            number
+    ) 
+    |>> VFloat
+
+let parseFun : Parser<Value> =
     let p1 = str "fun" >>. identifier
     let p2 = str "->" >>. parseExpr
-    (p1 .>>. p2) |>> EFun
-    <!> "parseFun"
+    (p1 .>>. p2) |>> VFun
+
+let parseValue : Parser<Expr> =
+    choice [
+        parseBool
+        attempt parseFloat
+        parseInt
+        parseFun
+    ]
+    |>> EValue
+
+let parseVar = 
+    identifier |>> EVar
 
 let parseParen = 
     between (ws >>. str "(") (ws >>. str ")") parseExpr
-    <!> "parseParen"
 
 let parseLet = 
     let p1 = str "let" >>. identifier
     let p2 = str "=" >>. parseExpr
     let p3 = str "in" >>. parseExpr
     pipe3 p1 p2 p2 (fun var value body -> ELet (var, value, body))
-    <!> "parseLet"
 
 let parseCall =
     let parseNotCall =
         choice [
             parseParen 
-            parseFun 
+            parseValue
             parseLet 
             parseVar
         ]
     chainl1 parseNotCall (spaces1 |>> (fun _ f a -> ECall(f, a)))
-    <!> "parseCall"
 
 do parseExprRef := parseCall
 

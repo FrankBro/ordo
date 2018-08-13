@@ -5,21 +5,35 @@ open System.Reflection.Metadata.Ecma335
 
 type Name = String
 
-type Expr =
-    | EVar of Name
-    | EFun of Name * Expr
-    | ECall of Expr * Expr
-    | ELet of Name * Expr * Expr
+type Value =
+    | VBool of bool
+    | VInt of int
+    | VFloat of float
+    | VFun of Name * Expr
 with
     override x.ToString () =
         let rec f isSimple = function
-            | EVar name -> name
-            | EFun (param, bodyExpr) ->
+            | VBool bool -> sprintf "%b" bool
+            | VInt int -> sprintf "%d" int
+            | VFloat float -> sprintf "%f" float
+            | VFun (param, bodyExpr) ->
                 let funStr = 
                     sprintf "fun %s -> %s" 
                         param
                         (string bodyExpr)
                 if isSimple then "(" + funStr + ")" else funStr
+        f false x
+
+and Expr =
+    | EValue of Value
+    | EVar of Name
+    | ECall of Expr * Expr
+    | ELet of Name * Expr * Expr
+with
+    override x.ToString () =
+        let rec f isSimple = function
+            | EValue value -> string value
+            | EVar name -> name
             | ECall (fnExpr, argExpr) ->
                 let fnStr = f true fnExpr
                 let argStr = f false argExpr

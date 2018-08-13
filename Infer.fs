@@ -104,6 +104,7 @@ let rec matchFunTy = function
     | _ -> error "expected a function"
 
 let rec infer env level = function
+    | EValue value -> inferValue env level value
     | EVar name ->
         env
         |> Map.tryFind name
@@ -112,11 +113,6 @@ let rec infer env level = function
             sprintf "variable %s not found" name
             |> error
         )
-    | EFun (param, bodyExpr) ->
-        let paramTy = newVar level
-        let fnEnv = Map.add param paramTy env
-        let returnTy = infer fnEnv level bodyExpr
-        TArrow (paramTy, returnTy)
     | ELet (varName, valueExpr, bodyExpr) ->
         let varTy = infer env (level + 1) valueExpr
         let generalizedTy = generalize level varTy
@@ -127,3 +123,12 @@ let rec infer env level = function
         unify paramTy (infer env level argExpr)
         returnTy
     
+and inferValue env level = function
+    | VBool _ -> TConst "bool"
+    | VInt _ -> TConst "int"
+    | VFloat _ -> TConst "float"
+    | VFun (param, bodyExpr) ->
+        let paramTy = newVar level
+        let fnEnv = Map.add param paramTy env
+        let returnTy = infer fnEnv level bodyExpr
+        TArrow (paramTy, returnTy)
