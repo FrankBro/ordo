@@ -10,8 +10,10 @@
     <Compile Include="Expr.fs" />
     <Compile Include="Parser.fs" />
     <Compile Include="Infer.fs" />
+    <Compile Include="Eval.fs" />
     <Compile Include="TestUtil.fs" />
     <Compile Include="TestParser.fs" />
+    <Compile Include="TestEval.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
