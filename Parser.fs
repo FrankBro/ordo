@@ -51,9 +51,9 @@ let parseLet =
 let parseCall =
     let parseNotCall =
         choice [
-            parseParen 
-            parseFun 
-            parseLet 
+            // parseParen 
+            // parseFun 
+            // parseLet 
             parseVar
         ]
     chainl1 parseNotCall (spaces1 |>> (fun _ f a -> ECall(f, a)))
