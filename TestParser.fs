@@ -7,7 +7,6 @@ open Xunit
 open Xunit.Abstractions
 
 open Expr
-open TestUtil
 
 type Result =
     | OK of Expr
@@ -40,14 +39,11 @@ let tests = [
 ]
 
 type TestParser (output: ITestOutputHelper) =
-    inherit MakeConsoleWork(output)
 
     [<Fact>]
     member x.TestParser () =
         tests
         |> List.iter (fun (input, expected) ->
-            let mutable expr = None
-            let setExpr e = expr <- Some e
             let result =
                 try
                     Parser.readExpr input
@@ -55,10 +51,6 @@ type TestParser (output: ITestOutputHelper) =
                 with _ ->
                     Fail
             if result <> expected then
-                printfn "TestParser:"
-                printfn "    Input = %s" input
-                match expr with
-                | None -> printfn "    Expr fail"
-                | Some expr -> (Expr.ToStringRaw >> printfn "    Expr = %s") expr
+                output.WriteLine(sprintf "TestParser: %s failed" input)
             Assert.StrictEqual(expected, result)
         )

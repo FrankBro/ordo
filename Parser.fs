@@ -32,7 +32,16 @@ let parseBool : Parser<Value> =
     <|> (stringReturn "false" (VBool false))
 
 let parseInt : Parser<Value> =    
-    pint32  |>> VInt
+    let pa = opt (str "-")
+    let pb = many1 digit |>> (Array.ofList >> String)
+    pipe2 pa pb (fun sign whole ->
+        let number = whole |> int
+        if Option.isSome sign then
+            -number
+        else
+            number
+    )
+    |>> VInt
 
 let parseFloat : Parser<Value> =
     let pa = opt (str "-")
@@ -48,16 +57,16 @@ let parseFloat : Parser<Value> =
     |>> VFloat
 
 let parseFun : Parser<Value> =
-    let p1 = str "fun" >>. identifier
-    let p2 = str "->" >>. parseExpr
+    let p1 = (str "fun" >>. ws1) >>. identifier .>> ws
+    let p2 = (str "->" >>. ws) >>. parseExpr .>> ws
     (p1 .>>. p2) |>> VFun
 
 let parseValue : Parser<Expr> =
     choice [
-        parseBool
-        attempt parseFloat
-        parseInt
-        parseFun
+        parseBool <!> "parseBool"
+        attempt parseFloat <!> "parseFloat"
+        parseInt <!> "parseInt"
+        parseFun <!> "parseFun"
     ]
     |>> EValue
 
@@ -65,21 +74,21 @@ let parseVar =
     identifier |>> EVar
 
 let parseParen = 
-    between (ws >>. str "(") (ws >>. str ")") parseExpr
+    between (str "(" >>. ws) (str ")" >>. ws) (parseExpr .>> ws)
 
 let parseLet = 
-    let p1 = str "let" >>. identifier
-    let p2 = str "=" >>. parseExpr
-    let p3 = str "in" >>. parseExpr
-    pipe3 p1 p2 p2 (fun var value body -> ELet (var, value, body))
+    let p1 = (str "let" >>. ws1) >>. identifier .>> ws
+    let p2 = (str "=" >>. ws) >>. parseExpr .>> ws
+    let p3 = (str "in" >>. ws1) >>. parseExpr .>> ws
+    pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
 
 let parseCall =
     let parseNotCall =
         choice [
-            parseParen 
-            parseValue
-            parseLet 
-            parseVar
+            parseParen <!> "parseParen"
+            parseValue <!> "parseValue"
+            parseLet  <!> "parseLet"
+            parseVar <!> "parseVar"
         ]
     chainl1 parseNotCall (spaces1 |>> (fun _ f a -> ECall(f, a)))
 

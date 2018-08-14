@@ -60,17 +60,20 @@ let rec unify ty1 ty2 =
         sprintf "cannot unify types %O and %O" ty1 ty2
         |> error 
 
-let rec generalize level = function
+let rec generalizeTy level = function
     | TVar {contents = Unbound(id, otherLevel)} when otherLevel > level ->  
         TVar (ref (Generic id))
     | TApp (ty, tyArgList) ->
-        TApp (generalize level ty, List.map (generalize level) tyArgList)
+        TApp (generalizeTy level ty, List.map (generalizeTy level) tyArgList)
     | TArrow (paramTy, returnTy) ->
-        TArrow (generalize level paramTy, generalize level returnTy)
-    | TVar {contents = Link ty} -> generalize level ty
+        TArrow (generalizeTy level paramTy, generalizeTy level returnTy)
+    | TVar {contents = Link ty} -> generalizeTy level ty
     | TVar {contents = Generic _ }
     | TVar {contents = Unbound _ }
     | TConst _ as ty -> ty
+
+let generalize ty =
+    generalizeTy (-1) ty
 
 let instantiate level ty =
     let mutable idVarMap = Map.empty
@@ -103,7 +106,7 @@ let rec matchFunTy = function
         paramTy, returnTy
     | _ -> error "expected a function"
 
-let rec infer env level = function
+let rec inferExpr env level = function
     | EValue value -> inferValue env level value
     | EVar name ->
         env
@@ -114,13 +117,13 @@ let rec infer env level = function
             |> error
         )
     | ELet (varName, valueExpr, bodyExpr) ->
-        let varTy = infer env (level + 1) valueExpr
-        let generalizedTy = generalize level varTy
-        infer (Map.add varName generalizedTy env) level bodyExpr
+        let varTy = inferExpr env (level + 1) valueExpr
+        let generalizedTy = generalizeTy level varTy
+        inferExpr (Map.add varName generalizedTy env) level bodyExpr
     | ECall (fnExpr, argExpr) ->
         let paramTy, returnTy =
-            matchFunTy (infer env level fnExpr)
-        unify paramTy (infer env level argExpr)
+            matchFunTy (inferExpr env level fnExpr)
+        unify paramTy (inferExpr env level argExpr)
         returnTy
     
 and inferValue env level = function
@@ -130,5 +133,8 @@ and inferValue env level = function
     | VFun (param, bodyExpr) ->
         let paramTy = newVar level
         let fnEnv = Map.add param paramTy env
-        let returnTy = infer fnEnv level bodyExpr
+        let returnTy = inferExpr fnEnv level bodyExpr
         TArrow (paramTy, returnTy)
+
+let infer expr =
+    inferExpr Map.empty 0 expr
