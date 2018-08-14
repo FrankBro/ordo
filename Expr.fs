@@ -1,7 +1,8 @@
 module Expr
+
 open System
-open System.Data.SqlTypes
-open System.Reflection.Metadata.Ecma335
+
+open Util
 
 type Name = String
 
@@ -115,6 +116,20 @@ with
             "forall[" + args + "] " + tyStr
         else
             tyStr
+
+    static member ToStringRaw (x: Ty) =
+        match x with
+        | TConst name -> sprintf "TConst %s" name
+        | TApp (ty, args) ->
+            let argsString =
+                args
+                |> List.map Ty.ToStringRaw
+                |> String.concat ", "
+            sprintf "TApp (%s, [%s])" (Ty.ToStringRaw ty) argsString
+        | TArrow (a, b) -> sprintf "TArrow (%s, %s)" (Ty.ToStringRaw a) (Ty.ToStringRaw b)
+        | TVar {contents = Unbound (id, level)} -> sprintf "TVar (Unbound (%d, %d))" id level
+        | TVar {contents = Link ty} -> sprintf "TVar (Link %s)" (Ty.ToStringRaw ty)
+        | TVar {contents = Generic id} -> sprintf "TVar (Generic %d)" id
 
 and Tvar =
     | Unbound of Id * Level
