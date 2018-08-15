@@ -98,25 +98,34 @@ let parseParen =
 
 let parseLet = 
     let p1 = (str "let" >>. ws1) >>. identifier .>> ws
-            .>> updateUserState (fun u -> { u with LetState = LetDone })
     let p2 = (str "=" >>. ws) >>. parseExpr .>> ws 
-            .>> updateUserState (fun u -> { u with LetState = EqualDone })
     let p3 = (str "in" >>. ws1) >>. parseExpr .>> ws
-            .>> updateUserState (fun u -> { u with LetState = InDone })
     pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
-    .>> updateUserState (fun u -> { u with LetState = NotInLet })
 
-let parseCall =
-    let parseNotCall =
-        choice [
-            parseParen
-            parseValue
-            parseLet
-            attempt parseVar
-        ]
-    chainl1 parseNotCall (ws1 |>> (fun _ f a -> printfn "DEBUG: %O, %O" f a; ECall(f, a)))
+let parseNotCall =
+    choice [
+        parseParen
+        parseValue
+        parseLet
+        attempt parseVar
+    ]
 
-do parseExprRef := parseCall
+let parseSingleOrCall  =
+    many1 (parseNotCall .>> ws)
+    >>= fun result ->
+        match result with
+        | [one] -> preturn one
+        | _ -> 
+            let rec loop state exprs =
+                match state, exprs with
+                | None, fn :: arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
+                | None, _ -> failwith "should never happen"
+                | Some fn, arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
+                | Some expr, [] -> expr
+            let calls = loop None result
+            preturn calls
+
+do parseExprRef := parseSingleOrCall
 
 let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
     match runParserOnString parser ParserState.New "" input with

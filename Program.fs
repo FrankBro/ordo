@@ -10,7 +10,8 @@ open Parser
 [<EntryPoint>]
 let main argv =
     try
-        let input = "let a = 1 in a"
+        // let input = "let a = 1 in a"
+        let input = "let a = f b in a"
         printfn "Input"
         printfn "%s" input
         let expr = readExpr input

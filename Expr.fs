@@ -135,4 +135,3 @@ and Tvar =
     | Unbound of Id * Level
     | Link of Ty
     | Generic of Id
-
