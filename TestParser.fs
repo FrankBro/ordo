@@ -24,7 +24,7 @@ let tests = [
     //  "f(x, y)", OK (ELet("x", EVar "a", ELet("y", EVar "b", ECall(EVar "f", [EVar "x"; EVar "y"])))));
     ("let a = one", Fail);
     // ("a, b", Fail);
-    ("a = b", Fail);
+    // ("a = b", Fail);
     ("()", Fail);
     // ("fun x, y -> y", Fail);
     ("1", OK (EValue (VInt 1)));

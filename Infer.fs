@@ -137,4 +137,6 @@ and inferValue env level = function
         TArrow (paramTy, returnTy)
 
 let infer expr =
+    resetId ()
     inferExpr Map.empty 0 expr
+    |> generalize

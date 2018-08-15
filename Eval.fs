@@ -13,10 +13,7 @@ let rec evalExpr env (expr: Expr) : Value =
         evalExpr env bodyExpr
 
 and evalCall env (fnExpr: Expr) (argExpr: Expr) : Value =
-    let fnValue =
-        match fnExpr with
-        | EVar name -> Map.find name env
-        | _ -> failwith "Call first arg is not a variable"
+    let fnValue = evalExpr env fnExpr
     match fnValue with
     | VFun (argName, bodyExpr) ->
         let initialEnv = env

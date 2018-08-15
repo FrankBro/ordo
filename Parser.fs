@@ -131,9 +131,6 @@ let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
     match runParserOnString parser ParserState.New "" input with
     | ParserResult.Success (result, state, pos) -> result
     | ParserResult.Failure (se, e, state) -> 
-        printfn "se: %O" se
-        printfn "e: %O" e
-        printfn "state: %O" state
         failwith "Parser error" 
 let inline readExpr input = readOrThrow parseExpr input
 let inline readExprList input : Expr list =

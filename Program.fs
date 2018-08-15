@@ -7,11 +7,8 @@ open Expr
 open Infer
 open Parser
 
-[<EntryPoint>]
-let main argv =
+let test input =
     try
-        // let input = "let a = 1 in a"
-        let input = "let a = f b in a"
         printfn "Input"
         printfn "%s" input
         let expr = readExpr input
@@ -32,5 +29,11 @@ let main argv =
     with e ->
         printfn "Exception"
         printfn "%O" e
+
+[<EntryPoint>]
+let main argv =
+    // let input = "let a = 1 in a"
+    // let input = "let a = f b in a"
+    // test input
 
     0 // return an integer exit code

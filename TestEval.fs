@@ -23,7 +23,7 @@ let tests = [
     ("-3.14", OK (VFloat (-3.14)));
     ("1.", OK (VFloat 1.));
     ("let a = 1 in a", OK (VInt 1));
-    ("let f = fun a -> a in f(1)", OK (VInt 1));
+    ("let f = fun a -> a in f 1", OK (VInt 1));
 ]
 
 type TestEval (output: ITestOutputHelper) =

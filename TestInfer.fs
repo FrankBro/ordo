@@ -23,9 +23,9 @@ let gen (c: char) = tvar (Generic (int c - 97))
 let tests = [
     ("x", error "variable x not found");
     ("let x = x in x", error "variable x not found");
-    ("let x = fun y -> y in x", OK (TArrow(gen 'a', gen 'a')));
+    ("let x = fun y -> y in x", OK (TArrow(gen 'b', gen 'b')));
     ("fun x -> x", OK (TArrow (gen 'a', gen 'a')));
-    ("fun x -> let y = fun z -> z in y", OK (TArrow (gen 'a', TArrow (gen 'b', gen 'b'))));
+    ("fun x -> let y = fun z -> z in y", OK (TArrow (gen 'a', TArrow (gen 'c', gen 'c'))));
     ("fun x -> let y = x in y", OK (TArrow (gen 'a', gen 'a')));
     // ("fun x -> let y = let z = x(fun x -> x) in z in y", OK "forall[a b] ((a -> a) -> b) -> b");
     // ("fun x -> fun y -> let x = x(y) in x(y)", OK "forall[a b] (a -> a -> b) -> a -> b");
@@ -46,7 +46,7 @@ let tests = [
 
 type TestInfer (output: ITestOutputHelper) =
 
-    //[<Fact>]
+    [<Fact>]
     member x.TestInfer () =
         tests
         |> List.iter (fun (input, expected) ->
@@ -62,6 +62,13 @@ type TestInfer (output: ITestOutputHelper) =
                     Fail None
             if result <> expected then
                 output.WriteLine(sprintf "TestInfer: %s failed" input)
+                match result with
+                | OK result ->
+                    output.WriteLine(sprintf "Result: %s" (string result))
+                | _ -> output.WriteLine("Result: Fail")
+                match expected with
+                | OK expected ->
+                    output.WriteLine(sprintf "Expected: %s" (string expected))
+                | _ -> output.WriteLine("Expected: Fail")
             Assert.StrictEqual(expected, result)
         )
-
