@@ -83,10 +83,10 @@ let parseFun : Parser<Value> =
 
 let parseValue : Parser<Expr> =
     choice [
-        parseBool <!> "parseBool"
-        attempt parseFloat <!> "parseFloat"
-        parseInt <!> "parseInt"
-        parseFun <!> "parseFun"
+        parseBool
+        attempt parseFloat
+        parseInt 
+        parseFun 
     ]
     |>> EValue
 
@@ -97,7 +97,7 @@ let parseParen =
     between (str "(" >>. ws) (str ")" >>. ws) (parseExpr .>> ws)
 
 let parseLet = 
-    let p1 = (str "let" >>. ws1) >>. (identifier <!> "identifier") .>> ws
+    let p1 = (str "let" >>. ws1) >>. identifier .>> ws
             .>> updateUserState (fun u -> { u with LetState = LetDone })
     let p2 = (str "=" >>. ws) >>. parseExpr .>> ws 
             .>> updateUserState (fun u -> { u with LetState = EqualDone })
@@ -109,14 +109,14 @@ let parseLet =
 let parseCall =
     let parseNotCall =
         choice [
-            parseParen <!> "parseParen"
-            parseValue <!> "parseValue"
-            parseLet <!> "parseLet"
-            parseVar <!> "parseVar"
+            parseParen
+            parseValue
+            parseLet
+            attempt parseVar
         ]
-    chainl1 parseNotCall (ws1 |>> (fun _ f a -> ECall(f, a)))
+    chainl1 parseNotCall (ws1 |>> (fun _ f a -> printfn "DEBUG: %O, %O" f a; ECall(f, a)))
 
-do parseExprRef := parseCall <!> "parseCall"
+do parseExprRef := parseCall
 
 let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
     match runParserOnString parser ParserState.New "" input with
