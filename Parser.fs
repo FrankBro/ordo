@@ -102,19 +102,29 @@ let parseLet =
     let p3 = (str "in" >>. ws1) >>. parseExpr .>> ws
     pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
 
+let parseVariant =
+    (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
+    |>> EVariant
+
+let parseMatch =
+    let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
+    let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCaseList
+    pipe2 p1 p2 (fun expr (cases, last)  -> ECase(expr, cases, last))
+
 let parseNotCall =
     choice [
         parseParen
         parseValue
         parseLet
         attempt parseVar
+        parseVariant
     ]
 
 let parseSingleOrCall  =
     many1 (parseNotCall .>> ws)
-    >>= fun result ->
+    |>> fun result ->
         match result with
-        | [one] -> preturn one
+        | [one] -> one
         | _ -> 
             let rec loop state exprs =
                 match state, exprs with
@@ -123,7 +133,7 @@ let parseSingleOrCall  =
                 | Some fn, arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
                 | Some expr, [] -> expr
             let calls = loop None result
-            preturn calls
+            calls
 
 do parseExprRef := parseSingleOrCall
 
@@ -136,3 +146,64 @@ let inline readExpr input = readOrThrow parseExpr input
 let inline readExprList input : Expr list =
     let parser = (sepEndBy parseExpr ws)
     readOrThrow parser input
+
+let parseRecordEmpty = 
+    (str "{" .>> ws) .>> (str "}" .>> ws) 
+    |>> fun _ -> ERecordEmpty
+
+let exprRecordExtend labelExprList restExpr =
+    let labelExprMap =
+        (Map.empty, labelExprList)
+        ||> List.fold (fun labelExprMap (label, expr) ->
+            let exprList =
+                labelExprMap
+                |> Map.tryFind label
+                |> Option.map (fun exprs -> expr :: exprs)
+                |> Option.defaultValue [expr]
+            Map.add label exprList labelExprMap
+        )
+    ERecordExtend(labelExprMap, restExpr)
+
+let parseRecordExtend =
+    let p1 = (str "{" .>> ws) >>. (parseRecordLabels .>> ws)
+    let p2 = (str "|" .>> ws) >>. (parseExpr .>> ws) .>> (str "}" .>> ws)
+    pipe2 p1 p2 exprRecordExtend
+
+let parseRecordInit =
+    (str "{" .>> ws) >>. (parseRecordLabels .>> ws) .>> (str "}" .>> ws)
+    |>> fun x -> exprRecordExtend x ERecordEmpty
+
+let parseRecordRestrict =
+    let p1 = (str "{" .>> ws) >>. (parseExpr .>> ws)  
+    let p2 = (str "-" .>> ws) >>. (identifier .>> ws) .>> (str "}" .>> ws)
+    pipe2 p1 p2 (fun expr label -> ERecordRestrict (expr, label))
+
+let parseRecordSelect =
+    (parseExpr .>> ws) .>>. (str "." >>. ws >>. identifier)
+    |>> ERecordSelect
+
+let parseRecordLabel : Parser<string * Expr> =
+    (identifier .>> ws .>> str "=" .>> ws) .>>. (parseExpr .>> ws)
+
+let parseRecordLabels : Parser<(string * Expr) list> =
+    attempt (sepBy (parseRecordLabel .>> ws) (str "," .>> ws))
+    <|> ((parseRecordLabel .>> ws) |>> List.singleton)
+
+let parseMatchNormalCase =
+    let pa = str ":" >>. identifier .>> ws
+    let pb = identifier .>> ws 
+    let pc = str "->" .>> ws >>. parseExpr
+    pipe3 pa pb pc (fun label var expr -> (label, var, expr))
+
+let parseMatchDefaultCase =
+    let pa = identifier .>> ws
+    let pb = str "->" .>> ws >>. parseExpr
+    pipe2 pa pb (fun var expr -> (var, expr))
+
+let parseMatchCase : Parser<_> =
+    parseMatchNormalCase
+    <|> parseMatchDefaultCase
+
+let parseMatchCases =
+    attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
+    <|> ((parseMatchCase .>> ws) |>> List.singleton)
