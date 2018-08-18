@@ -11,13 +11,6 @@ type Value =
     | VInt of int
     | VFloat of float
     | VFun of Name * Expr
-with
-    static member ToStringRaw (x: Value) =
-        match x with
-        | VBool b -> sprintf "VBool %b" b
-        | VInt i -> sprintf "VInt %d" i
-        | VFloat f -> sprintf "VFloat %f" f
-        | VFun (name, expr) -> sprintf "VFun (%s, %s)" name (Expr.ToStringRaw expr)
 
 and Expr =
     | EValue of Value
@@ -30,13 +23,6 @@ and Expr =
     | ERecordEmpty
     | EVariant of Name * Expr
     | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
-with
-    static member ToStringRaw (x: Expr) =
-        match x with
-        | EValue v -> sprintf "EValue %s" (Value.ToStringRaw v)
-        | EVar name -> sprintf "EVar %s" name
-        | ECall (a, b) -> sprintf "ECall (%s, %s)" (Expr.ToStringRaw a) (Expr.ToStringRaw b)
-        | ELet (name, value, body) -> sprintf "ELet (%s, %s, %s" name (Expr.ToStringRaw value) (Expr.ToStringRaw body)
 
 type Id = int
 type Level = int
@@ -50,20 +36,6 @@ type Ty =
     | TVariant of Row
     | TRowEmpty
     | TRowExtend of Map<string, Ty list> * Row
-with
-    static member ToStringRaw (x: Ty) =
-        match x with
-        | TConst name -> sprintf "TConst %s" name
-        | TApp (ty, args) ->
-            let argsString =
-                args
-                |> List.map Ty.ToStringRaw
-                |> String.concat ", "
-            sprintf "TApp (%s, [%s])" (Ty.ToStringRaw ty) argsString
-        | TArrow (a, b) -> sprintf "TArrow (%s, %s)" (Ty.ToStringRaw a) (Ty.ToStringRaw b)
-        | TVar {contents = Unbound (id, level)} -> sprintf "TVar (Unbound (%d, %d))" id level
-        | TVar {contents = Link ty} -> sprintf "TVar (Link %s)" (Ty.ToStringRaw ty)
-        | TVar {contents = Generic id} -> sprintf "TVar (Generic %d)" id
 
 and Row = Ty
 

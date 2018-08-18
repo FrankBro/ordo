@@ -26,9 +26,9 @@ type Parser<'t> = Parser<'t, ParserState>
 
 let (<!>) (p: Parser<_>) label : Parser<_> =
     fun stream ->
-        printfn "%A: Entering %s" stream.Position label
+        // printfn "%A: Entering %s" stream.Position label
         let reply = p stream
-        printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
+        // printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
         reply
 
 let ws = spaces
@@ -106,48 +106,46 @@ let parseVariant =
     (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
     |>> EVariant
 
+let parseMatchNormalCase =
+    let pa = str ":" >>. identifier .>> ws
+    let pb = identifier .>> ws 
+    let pc = str "->" .>> ws >>. parseExpr
+    pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
+
+let parseMatchDefaultCase =
+    let pa = identifier .>> ws
+    let pb = str "->" .>> ws >>. parseExpr
+    pipe2 pa pb (fun var expr -> (None, var, expr))
+
+let parseMatchCase : Parser<string option * string * Expr> =
+    parseMatchNormalCase
+    <|> parseMatchDefaultCase
+
+let parseMatchCases =
+    attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
+    <|> ((parseMatchCase .>> ws) |>> List.singleton)
+
 let parseMatch =
     let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
-    let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCaseList
-    pipe2 p1 p2 (fun expr (cases, last)  -> ECase(expr, cases, last))
+    let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCases
+    pipe2 p1 p2 (fun expr cases  -> 
+        let normals =
+            cases 
+            |> List.choose (fun (oLabel, var, expr) -> 
+                oLabel
+                |> Option.map (fun label -> label, var, expr)
+            )
+        let oDefault =
+            cases
+            |> List.tryPick (fun (oLabel, var, expr) ->
+                match oLabel with
+                | None -> Some (var, expr)
+                | Some _ -> None
+            )
+        ECase(expr, normals, oDefault)
+    )
 
-let parseNotCall =
-    choice [
-        parseParen
-        parseValue
-        parseLet
-        attempt parseVar
-        parseVariant
-    ]
-
-let parseSingleOrCall  =
-    many1 (parseNotCall .>> ws)
-    |>> fun result ->
-        match result with
-        | [one] -> one
-        | _ -> 
-            let rec loop state exprs =
-                match state, exprs with
-                | None, fn :: arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
-                | None, _ -> failwith "should never happen"
-                | Some fn, arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
-                | Some expr, [] -> expr
-            let calls = loop None result
-            calls
-
-do parseExprRef := parseSingleOrCall
-
-let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
-    match runParserOnString parser ParserState.New "" input with
-    | ParserResult.Success (result, state, pos) -> result
-    | ParserResult.Failure (se, e, state) -> 
-        failwith "Parser error" 
-let inline readExpr input = readOrThrow parseExpr input
-let inline readExprList input : Expr list =
-    let parser = (sepEndBy parseExpr ws)
-    readOrThrow parser input
-
-let parseRecordEmpty = 
+let parseRecordEmpty : Parser<Expr> = 
     (str "{" .>> ws) .>> (str "}" .>> ws) 
     |>> fun _ -> ERecordEmpty
 
@@ -163,6 +161,13 @@ let exprRecordExtend labelExprList restExpr =
             Map.add label exprList labelExprMap
         )
     ERecordExtend(labelExprMap, restExpr)
+
+let parseRecordLabel : Parser<string * Expr> =
+    (identifier .>> ws .>> str "=" .>> ws) .>>. (parseExpr .>> ws)
+
+let parseRecordLabels : Parser<(string * Expr) list> =
+    attempt (sepBy (parseRecordLabel .>> ws) (str "," .>> ws))
+    <|> ((parseRecordLabel .>> ws) |>> List.singleton)
 
 let parseRecordExtend =
     let p1 = (str "{" .>> ws) >>. (parseRecordLabels .>> ws)
@@ -182,28 +187,45 @@ let parseRecordSelect =
     (parseExpr .>> ws) .>>. (str "." >>. ws >>. identifier)
     |>> ERecordSelect
 
-let parseRecordLabel : Parser<string * Expr> =
-    (identifier .>> ws .>> str "=" .>> ws) .>>. (parseExpr .>> ws)
+let parseNotCallOrRecordSelect =
+    choice [
+        parseParen <!> "parseParen"
+        parseValue <!> "parseValue"
+        parseLet <!> "parseLet"
+        attempt parseVar <!> "parseVar"
+        parseVariant <!> "parseVariant"
+        parseMatch <!> "parseMatch"
+        parseRecordEmpty <!> "parseRecordEmpty"
+        parseRecordExtend <!> "parseRecordExtend"
+        parseRecordInit <!> "parseRecordInit"
+        parseRecordRestrict <!> "parseRecordRestrict"
+    ]
 
-let parseRecordLabels : Parser<(string * Expr) list> =
-    attempt (sepBy (parseRecordLabel .>> ws) (str "," .>> ws))
-    <|> ((parseRecordLabel .>> ws) |>> List.singleton)
+let parseAnything  =
+    many1 (parseNotCallOrRecordSelect .>> ws)
+    >>= fun result ->
+        match result with
+        | [one] ->
+            attempt (str "." >>. ws >>. identifier) |>> fun field -> ERecordSelect (one, field)
+            <|> preturn one
+        | _ -> 
+            let rec loop state exprs =
+                match state, exprs with
+                | None, fn :: arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
+                | None, _ -> failwith "should never happen"
+                | Some fn, arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
+                | Some expr, [] -> expr
+            let calls = loop None result
+            preturn calls
 
-let parseMatchNormalCase =
-    let pa = str ":" >>. identifier .>> ws
-    let pb = identifier .>> ws 
-    let pc = str "->" .>> ws >>. parseExpr
-    pipe3 pa pb pc (fun label var expr -> (label, var, expr))
+do parseExprRef := parseAnything
 
-let parseMatchDefaultCase =
-    let pa = identifier .>> ws
-    let pb = str "->" .>> ws >>. parseExpr
-    pipe2 pa pb (fun var expr -> (var, expr))
-
-let parseMatchCase : Parser<_> =
-    parseMatchNormalCase
-    <|> parseMatchDefaultCase
-
-let parseMatchCases =
-    attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
-    <|> ((parseMatchCase .>> ws) |>> List.singleton)
+let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
+    match runParserOnString parser ParserState.New "" input with
+    | ParserResult.Success (result, state, pos) -> result
+    | ParserResult.Failure (se, e, state) -> 
+        failwith "Parser error" 
+let inline readExpr input = readOrThrow parseExpr input
+let inline readExprList input : Expr list =
+    let parser = (sepEndBy parseExpr ws)
+    readOrThrow parser input

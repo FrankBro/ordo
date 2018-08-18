@@ -15,17 +15,17 @@ let test input =
         printfn "Expr"
         printfn "%O" expr
         printfn "Raw expr"
-        printfn "%s" (Expr.ToStringRaw expr)
+        printfn "%s" (stringOfExpr expr)
         printfn "Type"
         let ty = infer expr
         printfn "%O" ty
         printfn "Raw type"
-        printfn "%s" (Ty.ToStringRaw ty)
+        printfn "%s" (stringOfTy ty)
         printfn "Value"
         let value = eval expr
         printfn "%O" value
         printfn "Raw value"
-        printfn "%s" (Value.ToStringRaw value)
+        printfn "%s" (stringOfValue value)
     with e ->
         printfn "Exception"
         printfn "%O" e
@@ -34,6 +34,7 @@ let test input =
 let main argv =
     // let input = "let a = 1 in a"
     // let input = "let a = f b in a"
-    // test input
+    let input = "x"
+    test input
 
     0 // return an integer exit code
