@@ -32,9 +32,7 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    // let input = "let a = 1 in a"
-    // let input = "let a = f b in a"
-    let input = "x"
+    let input = "{ m - a }"
     test input
 
     0 // return an integer exit code

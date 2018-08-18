@@ -26,9 +26,9 @@ type Parser<'t> = Parser<'t, ParserState>
 
 let (<!>) (p: Parser<_>) label : Parser<_> =
     fun stream ->
-        // printfn "%A: Entering %s" stream.Position label
+        printfn "%A: Entering %s" stream.Position label
         let reply = p stream
-        // printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
+        printfn "%A: Leaving %s (%A)" stream.Position label reply.Status
         reply
 
 let ws = spaces
@@ -179,7 +179,7 @@ let parseRecordInit =
     |>> fun x -> exprRecordExtend x ERecordEmpty
 
 let parseRecordRestrict =
-    let p1 = (str "{" .>> ws) >>. (parseExpr .>> ws)  
+    let p1 = (str "{" .>> ws) >>. (parseExpr .>> ws)
     let p2 = (str "-" .>> ws) >>. (identifier .>> ws) .>> (str "}" .>> ws)
     pipe2 p1 p2 (fun expr label -> ERecordRestrict (expr, label))
 
@@ -189,16 +189,16 @@ let parseRecordSelect =
 
 let parseNotCallOrRecordSelect =
     choice [
-        parseParen <!> "parseParen"
-        parseValue <!> "parseValue"
-        parseLet <!> "parseLet"
-        attempt parseVar <!> "parseVar"
-        parseVariant <!> "parseVariant"
-        parseMatch <!> "parseMatch"
-        parseRecordEmpty <!> "parseRecordEmpty"
-        parseRecordExtend <!> "parseRecordExtend"
-        parseRecordInit <!> "parseRecordInit"
-        parseRecordRestrict <!> "parseRecordRestrict"
+        parseParen
+        attempt parseValue
+        parseLet
+        attempt parseVar
+        parseVariant
+        parseMatch
+        attempt parseRecordEmpty
+        attempt parseRecordExtend
+        attempt parseRecordInit
+        attempt parseRecordRestrict
     ]
 
 let parseAnything  =
