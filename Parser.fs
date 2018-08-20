@@ -6,6 +6,7 @@ open FParsec.CharParsers
 open FParsec.Primitives
 
 open Expr
+open Infer
 open Util 
 
 type LetState =
@@ -229,3 +230,74 @@ let inline readExpr input = readOrThrow parseExpr input
 let inline readExprList input : Expr list =
     let parser = (sepEndBy parseExpr ws)
     readOrThrow parser input
+
+let parseTy, parseTyRef = createParserForwardedToRef ()
+
+let identifierWs = identifier .>> ws
+let parseTyWs = parseTy .>> ws
+let strWs s = str s .>> ws
+let parseTyListWs = sepBy parseTyWs (strWs ",")
+
+let parseTConst =
+    identifierWs |>> TConst
+
+let parseTApp : Parser<Ty> =
+    parseTyWs .>> strWs "[" .>>. parseTyListWs .>> strWs "]"
+    |>> TApp
+
+let parseTArrow : Parser<Ty> =
+    parseTyWs .>> strWs "->" .>>. parseTyWs
+    |>> TArrow
+
+let nameToIdMap = ref Map.empty
+
+let nameToId s : Ty =
+    let m = !nameToIdMap
+    m 
+    |> Map.tryFind s 
+    |> Option.defaultWith (fun () ->
+        let id = newGenVar ()
+        nameToIdMap := Map.add s id m
+        id
+    )
+
+let parseTVar : Parser<Ty> =
+    strWs "'" >>. identifierWs
+    |>> nameToId
+
+let parseTEmptyRecord : Parser<Ty> =
+    strWs "{" .>> strWs "}"
+    |>> fun _ -> TRecord TRowEmpty
+
+let parseTRowFields : Parser<(string * Ty) list> =
+    let field = identifierWs .>>. parseTyWs
+    sepBy1 field (strWs ",")
+
+let parseTRecord : Parser<Ty> =
+    strWs "{" >>. parseTRowFields .>> strWs "}"
+    |>> fun fields ->
+        let fixedFields =
+            fields
+            |> Map.ofList
+            |> Map.map (fun _ -> List.singleton)
+        TRowExtend (fixedFields, TRowEmpty)
+
+let parseTExtendRecord : Parser<Ty> =
+    strWs "{" >>. parseTRowFields .>> strWs "|" .>>. parseTyWs .>> strWs "}"
+    |>> fun (fields, record) ->
+        let fixedFields =
+            fields
+            |> Map.ofList
+            |> Map.map (fun _ -> List.singleton)
+        TRowExtend (fixedFields, record)
+
+let parseTEmptyVariant : Parser<Ty> =
+    strWs "[" .>> strWs "]"
+    |>> fun _ -> TVariant TRowEmpty
+
+let parseTIdentVariant : Parser<Ty> =
+    strWs "[" >>. identifierWs .>> strWs "]"
+    |>> fun ident -> TVariant (TConst ident)
+
+let parseTVariant : Parser<Ty> =
+    strWs "[" >>. 
