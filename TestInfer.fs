@@ -45,13 +45,13 @@ let tests = [
     (* records *)
     ("{}", OK (TRecord TRowEmpty));
     ("{}.x", error "row does not contain label x");
-    ("{a = 1}", OK (TRecord (TRowExtend (Map.singleton "a" [TConst "int"], TRowEmpty))));
+    ("{a = 1}", OK (TRecord (TRowExtend ("a", TConst "int", TRowEmpty))));
     // ("{a = one, b = true}", OK "{a : int, b : bool}");
     // ("{b = true, a = one}", OK "{b : bool, a : int}");
     // ("{a = one, b = true}.a", OK "int");
     // ("{a = one, b = true}.b", OK "bool");
     // ("{a = one, b = true}.c", error "row does not contain label c");
-    ("{f = fun x -> x}", OK (TRecord (TRowExtend (Map.singleton "f" [TArrow (gen 'a', gen 'a')], TRowEmpty))))
+    ("{f = fun x -> x}", OK (TRecord (TRowExtend ("f", TArrow (gen 'a', gen 'a'), TRowEmpty))))
     // ("let r = {a = id, b = succ} in choose(r.a, r.b)", OK "int -> int");
     // ("let r = {a = id, b = fun x -> x} in choose(r.a, r.b)", OK "forall[a] a -> a");
     // ("choose({a = one}, {})", fail);
@@ -98,7 +98,7 @@ let tests = [
     // ("fun r -> {x = r | r}", OK "forall[a] {a} -> {x : {a} | a}");
 
     // (* variants *)
-    (":x 1", OK (TVariant (TRowExtend (Map.singleton "x" [TConst "int"], gen 'a'))))
+    // (":x 1", OK (TVariant (TRowExtend (Map.singleton "x" [TConst "int"], gen 'a'))))
     // ("choose(choose(:x one, :Y true), choose(:X half, :y nil))",
     // 	OK "forall[a b] [X : float, Y : bool, x : int, y : list[a] | b]");
     // ("choose(:X one, :X true)", error "cannot unify types int and bool");

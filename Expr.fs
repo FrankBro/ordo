@@ -18,11 +18,11 @@ and Expr =
     | ECall of Expr * Expr
     | ELet of Name * Expr * Expr
     | ERecordSelect of Expr * Name
-    | ERecordExtend of Map<String, Expr list> * Expr
+    | ERecordExtend of Name * Expr * Expr
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
-    | EVariant of Name * Expr
-    | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
+    // | EVariant of Name * Expr
+    // | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
 
 type Id = int
 type Level = int
@@ -33,9 +33,9 @@ type Ty =
     | TArrow of Ty * Ty
     | TVar of Tvar ref
     | TRecord of Row
-    | TVariant of Row
+    // | TVariant of Row
     | TRowEmpty
-    | TRowExtend of Map<string, Ty list> * Row
+    | TRowExtend of Name * Ty * Row
 
 and Row = Ty
 
@@ -43,53 +43,6 @@ and Tvar =
     | Unbound of Id * Level
     | Link of Ty
     | Generic of Id
-
-let rec realTy = function
-    | TVar {contents = Link ty} -> realTy ty
-    | ty -> ty
-
-let mergeLabels labels1 labels2 =
-    let keys =
-        List.append
-            (Map.toList labels1 |> List.map fst)
-            (Map.toList labels2 |> List.map fst)
-        |> Set.ofList
-    (Map.empty, keys)
-    ||> Set.fold (fun state key ->
-        match Map.tryFind key labels1, Map.tryFind key labels2 with
-        | None, None -> state
-        | Some ty1, None ->
-            state
-            |> Map.add key ty1
-        | None, Some ty2 ->
-            state
-            |> Map.add key ty2
-        | Some ty1, Some ty2 ->
-            state
-            |> Map.add key (List.append ty1 ty2)
-    )
-
-let rec matchRowTy = function
-    | TRowExtend (labelTyMap, restTy) ->
-        match matchRowTy restTy with
-        | restLabelTyMap, restTy when Map.isEmpty restLabelTyMap ->
-            (labelTyMap, restTy)
-        | restLabelTyMap, restTy ->
-            (mergeLabels labelTyMap restLabelTyMap, restTy)
-    | TVar {contents = Link ty} -> matchRowTy ty
-    | TVar _ as var -> Map.empty, var
-    | TRowEmpty -> Map.empty, TRowEmpty
-    | ty -> raise (Failure "not a row")
-
-let addDistinctLabels labelElMap labelElList =
-    (labelElMap, labelElList)
-    ||> List.fold (fun labelElMap (label, el) ->
-        assert (not (Map.containsKey label labelElMap))
-        Map.add label el labelElMap
-    )
-
-let labelMapFromList labelElList =
-    addDistinctLabels Map.empty labelElList
 
 let stringOfValue (x: Value) : string =
     let rec f isSimple = function
@@ -122,37 +75,29 @@ let stringOfExpr (x: Expr) : string =
         | ERecordEmpty -> "{}"
         | ERecordSelect (recordExpr, label) -> f true recordExpr + "." + label
         | ERecordRestrict (recordExpr, label) -> "{" + f false recordExpr + " - " + label + "}"
-        | ERecordExtend (labelExprMap, restExpr) ->
-            let labelExprStr =
-                labelExprMap
-                |> Map.toList
-                |> List.map (fun (label, exprList) ->
-                    exprList
-                    |> List.map (fun expr -> label + " = " + f false expr)
-                    |> String.concat ", "
-                )
-                |> String.concat ", "
-            let restExprStr =
-                match restExpr with
-                | ERecordEmpty -> ""
-                | expr -> " | " + f false expr
-            "{" + labelExprStr + restExprStr + "}"
-        | EVariant (label, value) ->
-            let variantStr = ":" + label + " " + f true value 
-            if isSimple then "(" + variantStr + ")" else variantStr
-        | ECase (expr, cases, maybeDefaultCase) ->
-            let caseStrList = 
-                cases
-                |> List.map (fun (label, varName, expr) ->
-                    "| :" + label + " " + varName + " -> " + f false expr
-                )
-            let allCasesStr =
-                match caseStrList, maybeDefaultCase with
-                | [], Some (varName, expr) -> varName + " -> " + f false expr
-                | casesStrList, None -> String.concat "" caseStrList
-                | casesStrList, Some (varName, expr) ->
-                    String.concat "" casesStrList + " | " + varName + " -> " + f false expr
-            "match " + f false expr + " { " + allCasesStr + " } "
+        | ERecordExtend (name, valueExpr, restExpr) ->
+            let rec g str = function
+                | ERecordEmpty -> str
+                | ERecordExtend (label, valueExpr, restExpr) ->
+                    g (str + ", " + label + " = " + f false valueExpr) restExpr
+                | otherExpr -> str + " | " + f false otherExpr
+            "{" + g (name + " = " + f false valueExpr) restExpr + "}"
+        // | EVariant (label, value) ->
+        //     let variantStr = ":" + label + " " + f true value 
+        //     if isSimple then "(" + variantStr + ")" else variantStr
+        // | ECase (expr, cases, maybeDefaultCase) ->
+        //     let caseStrList = 
+        //         cases
+        //         |> List.map (fun (label, varName, expr) ->
+        //             "| :" + label + " " + varName + " -> " + f false expr
+        //         )
+        //     let allCasesStr =
+        //         match caseStrList, maybeDefaultCase with
+        //         | [], Some (varName, expr) -> varName + " -> " + f false expr
+        //         | casesStrList, None -> String.concat "" caseStrList
+        //         | casesStrList, Some (varName, expr) ->
+        //             String.concat "" casesStrList + " | " + varName + " -> " + f false expr
+        //     "match " + f false expr + " { " + allCasesStr + " } "
     f false x
 
 let stringOfTy (x: Ty) : string =
@@ -189,25 +134,16 @@ let stringOfTy (x: Ty) : string =
         | TVar {contents = Unbound(id, _)} -> "_" + string id
         | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
-        | TVariant rowTy -> "[" + f false rowTy + "]"
+        // | TVariant rowTy -> "[" + f false rowTy + "]"
         | TRowEmpty -> ""
-        | TRowExtend _ as rowTy ->
-            let labelTyMap, restTy = matchRowTy rowTy
-            let labelTyStr =
-                labelTyMap
-                |> Map.toList
-                |> List.map (fun (label, tyList) ->
-                    tyList
-                    |> List.map (fun ty -> label + " : " + f false ty)
-                    |> String.concat ", "
-                )
-                |> String.concat ", "
-            let restTyStr =
-                match realTy restTy with
-                | TRowEmpty -> ""
-                | TRowExtend _ -> failwith ""
-                | otherTy -> " | " + f false otherTy
-            labelTyStr + restTyStr
+        | TRowExtend (label, ty, rowTy) ->
+            let rec g str = function
+                | TRowEmpty -> str
+                | TRowExtend (label, ty, rowTy) ->
+                    g (str + ", " + label + " : " + f false ty) rowTy
+                | TVar {contents = Link ty} -> g str ty
+                | otherTy -> str + " | " + f false otherTy
+            g (label + " : " + f false ty) rowTy
     let tyStr = f false x
     if count > 0 then
         let varNames = 

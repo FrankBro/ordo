@@ -103,65 +103,56 @@ let parseLet =
     let p3 = (str "in" >>. ws1) >>. parseExpr .>> ws
     pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
 
-let parseVariant =
-    (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
-    |>> EVariant
+// let parseVariant =
+//     (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
+//     |>> EVariant
 
-let parseMatchNormalCase =
-    let pa = str ":" >>. identifier .>> ws
-    let pb = identifier .>> ws 
-    let pc = str "->" .>> ws >>. parseExpr
-    pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
+// let parseMatchNormalCase =
+//     let pa = str ":" >>. identifier .>> ws
+//     let pb = identifier .>> ws 
+//     let pc = str "->" .>> ws >>. parseExpr
+//     pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
 
-let parseMatchDefaultCase =
-    let pa = identifier .>> ws
-    let pb = str "->" .>> ws >>. parseExpr
-    pipe2 pa pb (fun var expr -> (None, var, expr))
+// let parseMatchDefaultCase =
+//     let pa = identifier .>> ws
+//     let pb = str "->" .>> ws >>. parseExpr
+//     pipe2 pa pb (fun var expr -> (None, var, expr))
 
-let parseMatchCase : Parser<string option * string * Expr> =
-    parseMatchNormalCase
-    <|> parseMatchDefaultCase
+// let parseMatchCase : Parser<string option * string * Expr> =
+//     parseMatchNormalCase
+//     <|> parseMatchDefaultCase
 
-let parseMatchCases =
-    attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
-    <|> ((parseMatchCase .>> ws) |>> List.singleton)
+// let parseMatchCases =
+//     attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
+//     <|> ((parseMatchCase .>> ws) |>> List.singleton)
 
-let parseMatch =
-    let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
-    let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCases
-    pipe2 p1 p2 (fun expr cases  -> 
-        let normals =
-            cases 
-            |> List.choose (fun (oLabel, var, expr) -> 
-                oLabel
-                |> Option.map (fun label -> label, var, expr)
-            )
-        let oDefault =
-            cases
-            |> List.tryPick (fun (oLabel, var, expr) ->
-                match oLabel with
-                | None -> Some (var, expr)
-                | Some _ -> None
-            )
-        ECase(expr, normals, oDefault)
-    )
+// let parseMatch =
+//     let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
+//     let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCases
+//     pipe2 p1 p2 (fun expr cases  -> 
+//         let normals =
+//             cases 
+//             |> List.choose (fun (oLabel, var, expr) -> 
+//                 oLabel
+//                 |> Option.map (fun label -> label, var, expr)
+//             )
+//         let oDefault =
+//             cases
+//             |> List.tryPick (fun (oLabel, var, expr) ->
+//                 match oLabel with
+//                 | None -> Some (var, expr)
+//                 | Some _ -> None
+//             )
+//         ECase(expr, normals, oDefault)
+//     )
 
 let parseRecordEmpty : Parser<Expr> = 
     (str "{" .>> ws) .>> (str "}" .>> ws) 
     |>> fun _ -> ERecordEmpty
 
-let exprRecordExtend labelExprList restExpr =
-    let labelExprMap =
-        (Map.empty, labelExprList)
-        ||> List.fold (fun labelExprMap (label, expr) ->
-            let exprList =
-                labelExprMap
-                |> Map.tryFind label
-                |> Option.map (fun exprs -> expr :: exprs)
-                |> Option.defaultValue [expr]
-            Map.add label exprList labelExprMap
-        )
-    ERecordExtend(labelExprMap, restExpr)
+let exprRecordExtend labelExprList record =
+    (record, labelExprList)
+    ||> List.fold (fun record (label, expr) -> ERecordExtend (label, expr, record))
 
 let parseRecordLabel : Parser<string * Expr> =
     (identifier .>> ws .>> str "=" .>> ws) .>>. (parseExpr .>> ws)
@@ -194,8 +185,8 @@ let parseNotCallOrRecordSelect =
         attempt parseValue
         parseLet
         attempt parseVar
-        parseVariant
-        parseMatch
+        // parseVariant
+        // parseMatch
         attempt parseRecordEmpty
         attempt parseRecordExtend
         attempt parseRecordInit
@@ -273,31 +264,20 @@ let parseTRowFields : Parser<(string * Ty) list> =
     let field = identifierWs .>>. parseTyWs
     sepBy1 field (strWs ",")
 
-let parseTRecord : Parser<Ty> =
-    strWs "{" >>. parseTRowFields .>> strWs "}"
-    |>> fun fields ->
-        let fixedFields =
-            fields
-            |> Map.ofList
-            |> Map.map (fun _ -> List.singleton)
-        TRowExtend (fixedFields, TRowEmpty)
+// let parseTRecord : Parser<Ty> =
+//     strWs "{" >>. parseTRowFields .>> strWs "}"
+//     |>> fun fields ->
+//         let fixedFields =
+//             fields
+//             |> Map.ofList
+//             |> Map.map (fun _ -> List.singleton)
+//         TRowExtend (fixedFields, TRowEmpty)
 
-let parseTExtendRecord : Parser<Ty> =
-    strWs "{" >>. parseTRowFields .>> strWs "|" .>>. parseTyWs .>> strWs "}"
-    |>> fun (fields, record) ->
-        let fixedFields =
-            fields
-            |> Map.ofList
-            |> Map.map (fun _ -> List.singleton)
-        TRowExtend (fixedFields, record)
-
-let parseTEmptyVariant : Parser<Ty> =
-    strWs "[" .>> strWs "]"
-    |>> fun _ -> TVariant TRowEmpty
-
-let parseTIdentVariant : Parser<Ty> =
-    strWs "[" >>. identifierWs .>> strWs "]"
-    |>> fun ident -> TVariant (TConst ident)
-
-let parseTVariant : Parser<Ty> =
-    strWs "[" >>. 
+// let parseTExtendRecord : Parser<Ty> =
+//     strWs "{" >>. parseTRowFields .>> strWs "|" .>>. parseTyWs .>> strWs "}"
+//     |>> fun (fields, record) ->
+//         let fixedFields =
+//             fields
+//             |> Map.ofList
+//             |> Map.map (fun _ -> List.singleton)
+//         TRowExtend (fixedFields, record)

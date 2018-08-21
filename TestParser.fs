@@ -12,8 +12,6 @@ type Result =
     | OK of Expr
     | Fail
 
-let record labelExprList record = ERecordExtend(Map.ofList labelExprList, record)
-
 let tests = [
     ("", Fail);
     ("a", OK (EVar "a"));
@@ -45,18 +43,18 @@ let tests = [
     ("{m - a}", OK (ERecordRestrict(EVar "m", "a")));
     ("{m - a", Fail);
     // ("m - a", Fail); THIS SHOULD FAIL BUT RETURNS EVar "m"
-    ("{a = x}", OK (record [("a", [EVar "x"])] ERecordEmpty));
+    ("{a = x}", OK (ERecordExtend ("a", EVar "x", ERecordEmpty)))
     ("{a = x", Fail);
-    ("{a=x, b = y}", OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] ERecordEmpty));
-    ("{b = y ,a=x}", OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] ERecordEmpty));
-    ("{a=x,h=w,d=y,b=q,g=z,c=t,e=s,f=r}",
-        OK (record [("a", [EVar "x"]); ("b", [EVar "q"]); ("c", [EVar "t"]); ("d", [EVar "y"]);
-    ("e", [EVar "s"]); ("f", [EVar "r"]); ("g", [EVar "z"]); ("h", [EVar "w"])] ERecordEmpty));
-    ("{a = x|m}", OK (record [("a", [EVar "x"])] (EVar "m")));
+    ("{a=x, b = y}", OK (ERecordExtend ("a", EVar "x", ERecordExtend ("b", EVar "y", ERecordEmpty))))
+    ("{b = y ,a=x}", OK (ERecordExtend ("b", EVar "y", ERecordExtend ("a", EVar "y", ERecordEmpty))))
+    // ("{a=x,h=w,d=y,b=q,g=z,c=t,e=s,f=r}",
+    //     OK (record [("a", [EVar "x"]); ("b", [EVar "q"]); ("c", [EVar "t"]); ("d", [EVar "y"]);
+    // ("e", [EVar "s"]); ("f", [EVar "r"]); ("g", [EVar "z"]); ("h", [EVar "w"])] ERecordEmpty));
+    ("{a = x|m}", OK (ERecordExtend ("a", EVar "x", (EVar "m"))))
     ("{a | m}", Fail);
-    ("{ a = x, b = y | m}", OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] (EVar "m")));
-    ("{ a = x, b = y | {m - a} }",
-        OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] (ERecordRestrict(EVar "m", "a"))));
+    // ("{ a = x, b = y | m}", OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] (EVar "m")));
+    // ("{ a = x, b = y | {m - a} }",
+    //     OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] (ERecordRestrict(EVar "m", "a"))));
     ("{ b = y | m - a }", Fail);
 ]
 
