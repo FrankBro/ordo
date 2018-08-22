@@ -27,13 +27,13 @@ let tests = [
     // ("a = b", Fail);
     ("()", Fail);
     // ("fun x, y -> y", Fail);
-    ("1", OK (EValue (VInt 1)));
-    ("-1", OK (EValue (VInt (-1))));
-    ("true", OK (EValue (VBool true)));
-    ("false", OK (EValue (VBool false)));
-    ("3.14", OK (EValue (VFloat 3.14)));
-    ("-3.14", OK (EValue (VFloat (-3.14))));
-    ("1.", OK (EValue (VFloat 1.)));
+    ("1", OK (EInt 1));
+    ("-1", OK (EInt -1));
+    ("true", OK (EBool true));
+    ("false", OK (EBool false));
+    ("3.14", OK (EFloat 3.14));
+    ("-3.14", OK (EFloat -3.14));
+    ("1.", OK (EFloat 1.0));
     // ("let f = fun a -> a in f(1)", 
     //     OK (ELet("f", EValue (VFun(["a"], EVar "a")), ECall(EVar "f", [EValue (VInt 1)]))));
     ("{}", OK ERecordEmpty);

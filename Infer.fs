@@ -149,7 +149,9 @@ let rec matchFunTy = function
     | _ -> raise (ErrorException FunctionExpected)
 
 let rec inferExpr env level = function
-    | EValue value -> inferValue env level value
+    | EBool _ -> TConst "bool"
+    | EInt _ -> TConst "int"
+    | EFloat _ -> TConst "float"
     | EVar name ->
         env
         |> Map.tryFind name
@@ -166,6 +168,11 @@ let rec inferExpr env level = function
             matchFunTy (inferExpr env level fnExpr)
         unify paramTy (inferExpr env level argExpr)
         returnTy
+    | EFun (param, bodyExpr) ->
+        let paramTy = newVar level
+        let fnEnv = Map.add param paramTy env
+        let returnTy = inferExpr fnEnv level bodyExpr
+        TArrow (paramTy, returnTy)
     | ERecordEmpty -> TRecord TRowEmpty
     | ERecordSelect (recordExpr, label) ->
         let restRowTy = newVar level
@@ -220,16 +227,6 @@ let rec inferExpr env level = function
 //         let otherCasesRow = inferCases env level returnTy restRowTy otherCases
 //         TRowExtend (Map.singleton label [variantTy], otherCasesRow)
    
-and inferValue env level = function
-    | VBool _ -> TConst "bool"
-    | VInt _ -> TConst "int"
-    | VFloat _ -> TConst "float"
-    | VFun (param, bodyExpr) ->
-        let paramTy = newVar level
-        let fnEnv = Map.add param paramTy env
-        let returnTy = inferExpr fnEnv level bodyExpr
-        TArrow (paramTy, returnTy)
-
 let infer expr =
     resetId ()
     inferExpr Map.empty 0 expr

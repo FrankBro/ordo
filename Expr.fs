@@ -6,16 +6,13 @@ open Util
 
 type Name = String
 
-type Value =
-    | VBool of bool
-    | VInt of int
-    | VFloat of float
-    | VFun of Name * Expr
-
-and Expr =
-    | EValue of Value
+type Expr =
+    | EBool of bool
+    | EInt of int
+    | EFloat of float
     | EVar of Name
     | ECall of Expr * Expr
+    | EFun of Name * Expr
     | ELet of Name * Expr * Expr
     | ERecordSelect of Expr * Name
     | ERecordExtend of Name * Expr * Expr
@@ -44,27 +41,22 @@ and Tvar =
     | Link of Ty
     | Generic of Id
 
-let stringOfValue (x: Value) : string =
-    let rec f isSimple = function
-        | VBool bool -> sprintf "%b" bool
-        | VInt int -> sprintf "%d" int
-        | VFloat float -> sprintf "%f" float
-        | VFun (param, bodyExpr) ->
-            let funStr = 
-                sprintf "fun %s -> %s" 
-                    param
-                    (string bodyExpr)
-            if isSimple then "(" + funStr + ")" else funStr
-    f false x
-    
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
-        | EValue value -> string value
+        | EBool bool -> sprintf "%b" bool
+        | EInt int -> sprintf "%d" int
+        | EFloat float -> sprintf "%f" float
         | EVar name -> name
         | ECall (fnExpr, argExpr) ->
             let fnStr = f true fnExpr
             let argStr = f false argExpr
             sprintf "%s %s" fnStr argStr
+        | EFun (param, bodyExpr) ->
+            let funStr = 
+                sprintf "fun %s -> %s" 
+                    param
+                    (f false bodyExpr)
+            if isSimple then "(" + funStr + ")" else funStr
         | ELet (varName, valueExpr, bodyExpr) ->
             let letStr =
                 sprintf "let %s = %s in %s"

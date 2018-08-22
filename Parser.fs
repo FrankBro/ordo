@@ -48,11 +48,11 @@ let identifier : Parser<string> =
         else
             preturn s
 
-let parseBool : Parser<Value> =
-    (stringReturn "true" (VBool true))
-    <|> (stringReturn "false" (VBool false))
+let parseBool : Parser<Expr> =
+    (stringReturn "true" (EBool true))
+    <|> (stringReturn "false" (EBool false))
 
-let parseInt : Parser<Value> =    
+let parseInt : Parser<Expr> =    
     let pa = opt (str "-")
     let pb = many1 digit |>> (Array.ofList >> String)
     pipe2 pa pb (fun sign whole ->
@@ -62,9 +62,9 @@ let parseInt : Parser<Value> =
         else
             number
     )
-    |>> VInt
+    |>> EInt
 
-let parseFloat : Parser<Value> =
+let parseFloat : Parser<Expr> =
     let pa = opt (str "-")
     let pb = many1 digit |>> (Array.ofList >> String)
     let pc = str "." >>. many digit |>> (Array.ofList >> String)
@@ -75,21 +75,12 @@ let parseFloat : Parser<Value> =
         else
             number
     ) 
-    |>> VFloat
+    |>> EFloat
 
-let parseFun : Parser<Value> =
+let parseFun : Parser<Expr> =
     let p1 = (str "fun" >>. ws1) >>. identifier .>> ws
     let p2 = (str "->" >>. ws) >>. parseExpr .>> ws
-    (p1 .>>. p2) |>> VFun
-
-let parseValue : Parser<Expr> =
-    choice [
-        parseBool
-        attempt parseFloat
-        parseInt 
-        parseFun 
-    ]
-    |>> EValue
+    (p1 .>>. p2) |>> EFun
 
 let parseVar = 
     identifier |>> EVar
@@ -182,7 +173,10 @@ let parseRecordSelect =
 let parseNotCallOrRecordSelect =
     choice [
         parseParen
-        attempt parseValue
+        parseBool
+        attempt parseFloat
+        attempt parseInt 
+        parseFun 
         parseLet
         attempt parseVar
         // parseVariant
