@@ -1,5 +1,6 @@
 module Infer
 
+open Error
 open Expr
 open Util
 
@@ -15,16 +16,13 @@ let resetId () = currentId := 0
 let newVar level = TVar (ref (Unbound(nextId (), level)))
 let newGenVar () = TVar (ref (Generic(nextId ())))
 
-exception Error of string
-let error msg = raise (Error msg)
-
 let occursCheckAdjustLevels tvarId tvarLevel ty =
     let rec f = function
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic _ } -> assert false
         | TVar ({contents = Unbound (otherId, otherLevel)} as otherTvar) ->
             if otherId = tvarId then
-                error "recursive types"
+                raise (ErrorException RecursiveTypes)
             else
                 if otherLevel > tvarLevel then
                     otherTvar := Unbound(otherId, tvarLevel)
@@ -72,16 +70,15 @@ let rec unify ty1 ty2 =
             | _ -> None
         let restRow2 = rewriteRow row2 label1 fieldTy1
         match restRow1TVarRefOption with
-        | Some {contents = Link _} -> error "recursive row types"
+        | Some {contents = Link _} -> raise (ErrorException RecursiveRowTypes)
         | _ -> ()
         unify restRow1 restRow2
     | _, _ -> 
-        sprintf "cannot unify types %O and %O" ty1 ty2
-        |> error 
+        raise (ErrorException (UnifyFail (ty1, ty2)))
 
 and rewriteRow (row2: Ty) label1 fieldTy1 =
     match row2 with
-    | TRowEmpty -> error ("row does not contain label " + label1)
+    | TRowEmpty -> raise (ErrorException (RowMissingLabel label1))
     | TRowExtend (label2, fieldTy2, restRow2) when label2 = label1 ->
         unify fieldTy1 fieldTy2
         restRow2
@@ -93,7 +90,7 @@ and rewriteRow (row2: Ty) label1 fieldTy1 =
         let ty2 = TRowExtend (label1, fieldTy1, restRow2)
         tvar := Link ty2
         restRow2
-    | _ -> error "row type expected"
+    | _ -> raise (ErrorException RowTypeExpected)
 
 let rec generalizeTy level = function
     | TVar {contents = Unbound(id, otherLevel)} when otherLevel > level ->  
@@ -149,7 +146,7 @@ let rec matchFunTy = function
         let returnTy = newVar level
         tvar := Link (TArrow(paramTy, returnTy))
         paramTy, returnTy
-    | _ -> error "expected a function"
+    | _ -> raise (ErrorException FunctionExpected)
 
 let rec inferExpr env level = function
     | EValue value -> inferValue env level value
@@ -158,8 +155,7 @@ let rec inferExpr env level = function
         |> Map.tryFind name
         |> Option.map (instantiate level)
         |> Option.defaultWith (fun () ->
-            sprintf "variable %s not found" name
-            |> error
+            raise (ErrorException (VariableNotFound name))
         )
     | ELet (varName, valueExpr, bodyExpr) ->
         let varTy = inferExpr env (level + 1) valueExpr

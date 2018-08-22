@@ -6,23 +6,23 @@ open System.IO
 open Xunit
 open Xunit.Abstractions
 
+open Error
 open Expr
 open Infer
 open Util
 
 type Result =
     | OK of Ty
-    | Fail of string option
-
-let fail = Fail None
-let error msg = Fail (Some msg)
+    | Fail of InferError option
 
 let tvar var = TVar {contents = var}
 let gen (c: char) = tvar (Generic (int c - 97))
 
+let fail x = Fail (Some x)
+
 let tests = [
-    ("x", error "variable x not found");
-    ("let x = x in x", error "variable x not found");
+    ("x", fail (VariableNotFound "x"));
+    ("let x = x in x", fail (VariableNotFound "x"));
     ("let x = fun y -> y in x", OK (TArrow(gen 'b', gen 'b')));
     ("fun x -> x", OK (TArrow (gen 'a', gen 'a')));
     ("fun x -> let y = fun z -> z in y", OK (TArrow (gen 'a', TArrow (gen 'c', gen 'c'))));
@@ -44,20 +44,20 @@ let tests = [
     // ("let apply_curry = fun f -> fun x -> f(x) in apply_curry", OK "forall[a b] (a -> b) -> a -> b");
     (* records *)
     ("{}", OK (TRecord TRowEmpty));
-    ("{}.x", error "row does not contain label x");
+    ("{}.x", Fail None); // UnifyFail
     ("{a = 1}", OK (TRecord (TRowExtend ("a", TConst "int", TRowEmpty))));
     // ("{a = one, b = true}", OK "{a : int, b : bool}");
     // ("{b = true, a = one}", OK "{b : bool, a : int}");
     // ("{a = one, b = true}.a", OK "int");
     // ("{a = one, b = true}.b", OK "bool");
     // ("{a = one, b = true}.c", error "row does not contain label c");
-    ("{f = fun x -> x}", OK (TRecord (TRowExtend ("f", TArrow (gen 'a', gen 'a'), TRowEmpty))))
+    ("{f = fun x -> x}", OK (TRecord (TRowExtend ("f", TArrow (gen 'c', gen 'c'), TRowEmpty))))
     // ("let r = {a = id, b = succ} in choose(r.a, r.b)", OK "int -> int");
     // ("let r = {a = id, b = fun x -> x} in choose(r.a, r.b)", OK "forall[a] a -> a");
     // ("choose({a = one}, {})", fail);
     // ("{ x = zero | { y = one | {} } }", OK "{x : int, y : int}");
     // ("choose({ x = zero | { y = one | {} } }, {x = one, y = zero})", OK "{x : int, y : int}");
-    ("{{} - x}", error "row does not contain label x");
+    ("{{} - x}", Fail None); // UnifyFail
     // ("{{x = one, y = zero} - x}", OK "{y : int}");
     // ("{ x = true | {x = one}}", OK "{x : bool, x : int}");
     // ("let a = {} in {b = one | a}", OK "{b : int}");
@@ -137,8 +137,11 @@ type TestInfer (output: ITestOutputHelper) =
                     |> infer
                     |> OK
                 with 
-                | Infer.Error msg ->
-                    Fail (Some msg)
+                | ErrorException (UnifyFail _) ->
+                    // A mess to make match
+                    Fail None
+                | ErrorException error ->
+                    Fail (Some error)
                 | e ->
                     Fail None
             if result <> expected then

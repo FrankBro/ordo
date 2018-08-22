@@ -45,8 +45,8 @@ let tests = [
     // ("m - a", Fail); THIS SHOULD FAIL BUT RETURNS EVar "m"
     ("{a = x}", OK (ERecordExtend ("a", EVar "x", ERecordEmpty)))
     ("{a = x", Fail);
-    ("{a=x, b = y}", OK (ERecordExtend ("a", EVar "x", ERecordExtend ("b", EVar "y", ERecordEmpty))))
-    ("{b = y ,a=x}", OK (ERecordExtend ("b", EVar "y", ERecordExtend ("a", EVar "y", ERecordEmpty))))
+    ("{a=x, b = y}", OK (ERecordExtend ("b", EVar "y", ERecordExtend ("a", EVar "x", ERecordEmpty))))
+    ("{b = y ,a=x}", OK (ERecordExtend ("a", EVar "x", ERecordExtend ("b", EVar "y", ERecordEmpty))))
     // ("{a=x,h=w,d=y,b=q,g=z,c=t,e=s,f=r}",
     //     OK (record [("a", [EVar "x"]); ("b", [EVar "q"]); ("c", [EVar "t"]); ("d", [EVar "y"]);
     // ("e", [EVar "s"]); ("f", [EVar "r"]); ("g", [EVar "z"]); ("h", [EVar "w"])] ERecordEmpty));
