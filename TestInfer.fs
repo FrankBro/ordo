@@ -98,7 +98,7 @@ let tests = [
     // ("fun r -> {x = r | r}", OK "forall[a] {a} -> {x : {a} | a}");
 
     // (* variants *)
-    // (":x 1", OK (TVariant (TRowExtend (Map.singleton "x" [TConst "int"], gen 'a'))))
+    (":x 1", OK (TVariant (TRowExtend ("x", TConst "int", gen 'a'))))
     // ("choose(choose(:x one, :Y true), choose(:X half, :y nil))",
     // 	OK "forall[a b] [X : float, Y : bool, x : int, y : list[a] | b]");
     // ("choose(:X one, :X true)", error "cannot unify types int and bool");

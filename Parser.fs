@@ -94,9 +94,9 @@ let parseLet =
     let p3 = (str "in" >>. ws1) >>. parseExpr .>> ws
     pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
 
-// let parseVariant =
-//     (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
-//     |>> EVariant
+let parseVariant =
+    (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
+    |>> EVariant
 
 // let parseMatchNormalCase =
 //     let pa = str ":" >>. identifier .>> ws
@@ -179,7 +179,7 @@ let parseNotCallOrRecordSelect =
         parseFun 
         parseLet
         attempt parseVar
-        // parseVariant
+        parseVariant
         // parseMatch
         attempt parseRecordEmpty
         attempt parseRecordExtend

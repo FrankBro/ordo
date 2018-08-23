@@ -35,7 +35,7 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
             f paramTy
             f returnTy
         | TRecord row -> f row
-        // | TVariant row -> f row
+        | TVariant row -> f row
         | TRowExtend (label, fieldTy, row) ->
             f fieldTy
             f row
@@ -61,7 +61,7 @@ let rec unify ty1 ty2 =
         occursCheckAdjustLevels id level ty
         tvar := Link ty
     | TRecord row1, TRecord row2 -> unify row1 row2
-    // | TVariant row1, TVariant row2 -> unify row1 row2
+    | TVariant row1, TVariant row2 -> unify row1 row2
     | TRowEmpty, TRowEmpty -> ()
     | TRowExtend (label1, fieldTy1, restRow1), (TRowExtend _ as row2) -> 
         let restRow1TVarRefOption =
@@ -101,7 +101,7 @@ let rec generalizeTy level = function
         TArrow (generalizeTy level paramTy, generalizeTy level returnTy)
     | TVar {contents = Link ty} -> generalizeTy level ty
     | TRecord row -> TRecord (generalizeTy level row)
-    // | TVariant row -> TVariant (generalizeTy level row)
+    | TVariant row -> TVariant (generalizeTy level row)
     | TRowExtend (label, fieldTy, row) ->
         TRowExtend (label, generalizeTy level fieldTy, generalizeTy level row)
     | TVar {contents = Generic _ }
@@ -132,7 +132,7 @@ let instantiate level ty =
         | TArrow (paramTy, returnTy) ->
             TArrow (f paramTy, f returnTy)
         | TRecord row -> TRecord (f row)
-        // | TVariant row -> TVariant (f row)
+        | TVariant row -> TVariant (f row)
         | TRowEmpty -> ty
         | TRowExtend (label, fieldTy, row) ->
             TRowExtend (label, f fieldTy, f row)
@@ -197,13 +197,13 @@ let rec inferExpr env level = function
         unify param1Ty (inferExpr env level expr)
         unify param2Ty (inferExpr env level recordExpr)
         returnTy
-    // | EVariant (label, expr) ->
-    //     let restRowTy = newVar level
-    //     let variantTy = newVar level
-    //     let param_ty = variantTy in
-    //     let return_ty = TVariant (TRowExtend(Map.singleton label [variantTy], restRowTy))
-    //     unify param_ty (inferExpr env level expr)
-    //     return_ty
+    | EVariant (label, expr) ->
+        let restRowTy = newVar level
+        let variantTy = newVar level
+        let param_ty = variantTy in
+        let return_ty = TVariant (TRowExtend (label, variantTy, restRowTy))
+        unify param_ty (inferExpr env level expr)
+        return_ty
     // | ECase (expr, cases, None) ->
     //     let returnTy = newVar level
     //     let exprTy = inferExpr env level expr

@@ -8,6 +8,7 @@ type Value =
     | VFloat of float
     | VFun of Name * Expr
     | VRecord of Map<Name, Value>
+    | VVariant of Name * Value
 
 (*
 type Env = {
@@ -44,6 +45,9 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         let env = Map.add name value env
         evalExpr env bodyExpr
     | ERecordEmpty  -> VRecord Map.empty
+    | EVariant (label, expr) ->
+        let value = evalExpr env expr
+        VVariant (label, value)
     | ERecordExtend (name, valueExpr, recordExpr) ->
         let recordValue = evalExpr env recordExpr
         match recordValue with
@@ -76,14 +80,17 @@ let eval expr : Value =
     evalExpr Map.empty expr
 
 let rec stringOfValue value =
-    match value with
-    | VBool b -> string b
-    | VInt i -> string i
-    | VFloat f -> string f
-    | VFun _ -> "<Lambda>"
-    | VRecord fields ->
-        fields
-        |> Map.toList
-        |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
-        |> String.concat ", "
-        |> sprintf "{ %s }"
+    let rec f isSimple value =
+        match value with
+        | VBool b -> string b
+        | VInt i -> string i
+        | VFloat f -> string f
+        | VFun _ -> "<Lambda>"
+        | VRecord fields ->
+            fields
+            |> Map.toList
+            |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
+            |> String.concat ", "
+            |> sprintf "{ %s }"
+        | VVariant (label, value) -> sprintf ":%s %s" label (stringOfValue value)
+    f false value

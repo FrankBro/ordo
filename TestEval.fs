@@ -31,6 +31,7 @@ let tests = [
     ("{ a = 1 | { b = 2 } }", OK (record ["a", VInt 1; "b", VInt 2]))
     ("{ { a = 1 } - a }", OK (VRecord Map.empty))
     ("{ a = 1 }.a", OK (VInt 1))
+    (":a 1", OK (VVariant ("a", VInt 1)))
 ]
 
 type TestEval (output: ITestOutputHelper) =

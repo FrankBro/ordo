@@ -18,7 +18,7 @@ type Expr =
     | ERecordExtend of Name * Expr * Expr
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
-    // | EVariant of Name * Expr
+    | EVariant of Name * Expr
     // | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
 
 type Id = int
@@ -30,7 +30,7 @@ type Ty =
     | TArrow of Ty * Ty
     | TVar of Tvar ref
     | TRecord of Row
-    // | TVariant of Row
+    | TVariant of Row
     | TRowEmpty
     | TRowExtend of Name * Ty * Row
 
@@ -65,6 +65,7 @@ let stringOfExpr (x: Expr) : string =
                     (f false bodyExpr)
             if isSimple then "(" + letStr + ")" else letStr
         | ERecordEmpty -> "{}"
+        | EVariant (label, expr) -> sprintf ":%s %s" label (f false expr)
         | ERecordSelect (recordExpr, label) -> f true recordExpr + "." + label
         | ERecordRestrict (recordExpr, label) -> "{" + f false recordExpr + " - " + label + "}"
         | ERecordExtend (name, valueExpr, restExpr) ->
@@ -126,6 +127,7 @@ let stringOfTy (x: Ty) : string =
         | TVar {contents = Unbound(id, _)} -> "_" + string id
         | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
+        | TVariant rowTy -> "<" + f false rowTy + ">"
         // | TVariant rowTy -> "[" + f false rowTy + "]"
         | TRowEmpty -> ""
         | TRowExtend (label, ty, rowTy) ->

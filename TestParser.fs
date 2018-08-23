@@ -56,6 +56,8 @@ let tests = [
     // ("{ a = x, b = y | {m - a} }",
     //     OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] (ERecordRestrict(EVar "m", "a"))));
     ("{ b = y | m - a }", Fail);
+    (":a x", OK (EVariant ("a", EVar "x")))
+    (":f (fun a -> a)", OK (EVariant ("f", EFun ("a", EVar "a"))))
 ]
 
 type TestParser (output: ITestOutputHelper) =
