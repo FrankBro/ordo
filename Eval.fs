@@ -6,43 +6,84 @@ type Value =
     | VBool of bool
     | VInt of int
     | VFloat of float
-    | VFun
+    | VFun of Name * Expr
     | VRecord of Map<Name, Value>
 
-let rec evalExpr env (expr: Expr) : Expr =
+(*
+type Env = {
+    Vars: 
+}
+with
+    static member Empty = {
+
+    }
+*)
+
+let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
-    | EBool _ 
-    | EInt _
-    | EFloat _
-    | EFun _ -> expr
-    | EVar name -> evalExpr env (Map.find name env)
-    | ECall (fnExpr, argExpr) -> evalCall env fnExpr argExpr
+    | EBool b -> VBool b
+    | EInt i -> VInt i
+    | EFloat f -> VFloat f
+    | EFun (name, expr) -> VFun (name, expr)
+    | EVar name -> 
+        Map.tryFind name env
+        |> Option.defaultWith (fun () ->
+            failwithf "can't find variable"
+        )
+    | ECall (fnExpr, argExpr) -> 
+        let fnValue = evalExpr env fnExpr
+        match fnValue with
+        | VFun (argName, bodyExpr) ->
+            let initialEnv = env
+            let argValue = evalExpr initialEnv argExpr
+            let fnEnv = Map.add argName argValue env
+            evalExpr fnEnv bodyExpr
+        | _ -> failwithf "fn_value was not a fun, it was a %O" fnExpr
     | ELet (name, valueExpr, bodyExpr) ->
         let value = evalExpr env valueExpr
         let env = Map.add name value env
         evalExpr env bodyExpr
-
-and evalCall env (fnExpr: Expr) (argExpr: Expr) =
-    let evaled = evalExpr env fnExpr
-    match evaled with
-    | EFun (argName, bodyExpr) ->
-        let initialEnv = env
-        let argValue = evalExpr initialEnv argExpr
-        let fnEnv = Map.add argName argValue env
-        evalExpr fnEnv bodyExpr
-    | _ -> failwithf "fn_value was not a fun, it was a %O" fnExpr
+    | ERecordEmpty  -> VRecord Map.empty
+    | ERecordExtend (name, valueExpr, recordExpr) ->
+        let recordValue = evalExpr env recordExpr
+        match recordValue with
+        | VRecord fields ->
+            let valueValue = evalExpr env valueExpr
+            fields
+            |> Map.add name valueValue
+            |> VRecord
+        | _ -> failwithf "trying to extend a non-record"
+    | ERecordRestrict (recordExpr, name) ->
+        let recordValue = evalExpr env recordExpr
+        match recordValue with
+        | VRecord fields ->
+            fields
+            |> Map.remove name
+            |> VRecord
+        | _ -> failwithf "trying to restrict a non-record"
+    | ERecordSelect (recordExpr, label) -> 
+        let recordValue = evalExpr env recordExpr
+        match recordValue with
+        | VRecord fields ->
+            fields
+            |> Map.tryFind label
+            |> Option.defaultWith (fun () ->
+                failwithf "trying to select a field we can't find"
+            )
+        | _ -> failwithf "trying to select a non-record"
 
 let eval expr : Value =
-    let result = evalExpr Map.empty expr
-    match result with
-    | EBool b -> VBool b
-    | EInt i -> VInt i
-    | EFloat f -> VFloat f
-    | EFun _ -> VFun 
+    evalExpr Map.empty expr
 
-let stringOfValue value =
+let rec stringOfValue value =
     match value with
     | VBool b -> string b
     | VInt i -> string i
     | VFloat f -> string f
-    | VFun -> "<Lambda>"
+    | VFun _ -> "<Lambda>"
+    | VRecord fields ->
+        fields
+        |> Map.toList
+        |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
+        |> String.concat ", "
+        |> sprintf "{ %s }"

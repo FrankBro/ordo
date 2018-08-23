@@ -32,7 +32,6 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    let input = ("let f = fun a -> a in f 1")
+    let input = "{ a = 1 | {{ a = 2 } - a } }"
     test input
-
     0 // return an integer exit code

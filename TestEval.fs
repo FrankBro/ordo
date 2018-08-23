@@ -14,6 +14,8 @@ type Result =
     | OK of Value
     | Fail
 
+let record fields = VRecord (Map.ofList fields)
+
 let tests = [
     ("1", OK (VInt 1));
     ("-1", OK (VInt (-1)));
@@ -24,6 +26,11 @@ let tests = [
     ("1.", OK (VFloat 1.));
     ("let a = 1 in a", OK (VInt 1));
     ("let f = fun a -> a in f 1", OK (VInt 1));
+    ("{}", OK (VRecord Map.empty))
+    ("{ a = 1 }", OK (record ["a", VInt 1]))
+    ("{ a = 1 | { b = 2 } }", OK (record ["a", VInt 1; "b", VInt 2]))
+    ("{ { a = 1 } - a }", OK (VRecord Map.empty))
+    ("{ a = 1 }.a", OK (VInt 1))
 ]
 
 type TestEval (output: ITestOutputHelper) =
