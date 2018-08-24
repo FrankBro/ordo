@@ -32,6 +32,8 @@ let tests = [
     ("{ { a = 1 } - a }", OK (VRecord Map.empty))
     ("{ a = 1 }.a", OK (VInt 1))
     (":a 1", OK (VVariant ("a", VInt 1)))
+    ("match :x 1 { :x i -> i | :y i -> i }", OK (VInt 1))
+    ("match :x 1 { :y i -> i | otherwise -> 0 }", OK (VInt 0))
 ]
 
 type TestEval (output: ITestOutputHelper) =
@@ -46,6 +48,7 @@ type TestEval (output: ITestOutputHelper) =
                     |> eval
                     |> OK
                 with e ->
+                    output.WriteLine(sprintf "Unknown exception: %O" e)
                     Fail
             if result <> expected then
                 output.WriteLine(sprintf "TestEval: %s failed" input)

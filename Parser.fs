@@ -38,7 +38,7 @@ let str s = pstring s
 
 let parseExpr, parseExprRef = createParserForwardedToRef ()
 
-let reserved = [ "let"; "in"; "fun" ]
+let reserved = [ "let"; "in"; "fun"; "match" ]
 
 let identifier : Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -98,44 +98,44 @@ let parseVariant =
     (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
     |>> EVariant
 
-// let parseMatchNormalCase =
-//     let pa = str ":" >>. identifier .>> ws
-//     let pb = identifier .>> ws 
-//     let pc = str "->" .>> ws >>. parseExpr
-//     pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
+let parseMatchNormalCase =
+    let pa = str ":" >>. identifier .>> ws
+    let pb = identifier .>> ws 
+    let pc = str "->" .>> ws >>. parseExpr
+    pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
 
-// let parseMatchDefaultCase =
-//     let pa = identifier .>> ws
-//     let pb = str "->" .>> ws >>. parseExpr
-//     pipe2 pa pb (fun var expr -> (None, var, expr))
+let parseMatchDefaultCase =
+    let pa = identifier .>> ws
+    let pb = str "->" .>> ws >>. parseExpr
+    pipe2 pa pb (fun var expr -> (None, var, expr))
 
-// let parseMatchCase : Parser<string option * string * Expr> =
-//     parseMatchNormalCase
-//     <|> parseMatchDefaultCase
+let parseMatchCase : Parser<string option * string * Expr> =
+    parseMatchNormalCase
+    <|> parseMatchDefaultCase
 
-// let parseMatchCases =
-//     attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
-//     <|> ((parseMatchCase .>> ws) |>> List.singleton)
+let parseMatchCases =
+    attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
+    <|> ((parseMatchCase .>> ws) |>> List.singleton)
 
-// let parseMatch =
-//     let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
-//     let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCases
-//     pipe2 p1 p2 (fun expr cases  -> 
-//         let normals =
-//             cases 
-//             |> List.choose (fun (oLabel, var, expr) -> 
-//                 oLabel
-//                 |> Option.map (fun label -> label, var, expr)
-//             )
-//         let oDefault =
-//             cases
-//             |> List.tryPick (fun (oLabel, var, expr) ->
-//                 match oLabel with
-//                 | None -> Some (var, expr)
-//                 | Some _ -> None
-//             )
-//         ECase(expr, normals, oDefault)
-//     )
+let parseMatch =
+    let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
+    let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCases
+    pipe2 p1 p2 (fun expr cases  -> 
+        let normals =
+            cases 
+            |> List.choose (fun (oLabel, var, expr) -> 
+                oLabel
+                |> Option.map (fun label -> label, var, expr)
+            )
+        let oDefault =
+            cases
+            |> List.tryPick (fun (oLabel, var, expr) ->
+                match oLabel with
+                | None -> Some (var, expr)
+                | Some _ -> None
+            )
+        ECase(expr, normals, oDefault)
+    )
 
 let parseRecordEmpty : Parser<Expr> = 
     (str "{" .>> ws) .>> (str "}" .>> ws) 
@@ -180,7 +180,7 @@ let parseNotCallOrRecordSelect =
         parseLet
         attempt parseVar
         parseVariant
-        // parseMatch
+        parseMatch
         attempt parseRecordEmpty
         attempt parseRecordExtend
         attempt parseRecordInit

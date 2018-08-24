@@ -99,6 +99,7 @@ let tests = [
 
     // (* variants *)
     (":x 1", OK (TVariant (TRowExtend ("x", TConst "int", gen 'a'))))
+    ("match :x 1 { :x i -> i | :y i -> 1 }", OK (TConst "int"))
     // ("choose(choose(:x one, :Y true), choose(:X half, :y nil))",
     // 	OK "forall[a b] [X : float, Y : bool, x : int, y : list[a] | b]");
     // ("choose(:X one, :X true)", error "cannot unify types int and bool");
@@ -143,6 +144,7 @@ type TestInfer (output: ITestOutputHelper) =
                 | ErrorException error ->
                     Fail (Some error)
                 | e ->
+                    output.WriteLine(sprintf "Unknown exception: %O" e)
                     Fail None
             if result <> expected then
                 output.WriteLine(sprintf "TestInfer: %s failed" input)

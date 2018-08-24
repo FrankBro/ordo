@@ -58,6 +58,17 @@ let tests = [
     ("{ b = y | m - a }", Fail);
     (":a x", OK (EVariant ("a", EVar "x")))
     (":f (fun a -> a)", OK (EVariant ("f", EFun ("a", EVar "a"))))
+    ("match :a 1 { :a b -> 1 | :c d -> 2 }", 
+        OK (ECase ((EVariant ("a", EInt 1))
+                , [ "a", "b", EInt 1;
+                    "c", "d", EInt 2 ]
+                , None
+        )))
+    ("match :a 1 { :a b -> 1 | otherwise -> 2 }",
+        OK (ECase ((EVariant ("a", EInt 1))
+                , ["a", "b", EInt 1]
+                , Some ("otherwise", EInt 2)
+        )))
 ]
 
 type TestParser (output: ITestOutputHelper) =

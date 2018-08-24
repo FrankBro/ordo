@@ -19,7 +19,7 @@ type Expr =
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
     | EVariant of Name * Expr
-    // | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
+    | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
 
 type Id = int
 type Level = int
@@ -65,7 +65,9 @@ let stringOfExpr (x: Expr) : string =
                     (f false bodyExpr)
             if isSimple then "(" + letStr + ")" else letStr
         | ERecordEmpty -> "{}"
-        | EVariant (label, expr) -> sprintf ":%s %s" label (f false expr)
+        | EVariant (label, value) ->
+            let variantStr = ":" + label + " " + f true value 
+            if isSimple then "(" + variantStr + ")" else variantStr
         | ERecordSelect (recordExpr, label) -> f true recordExpr + "." + label
         | ERecordRestrict (recordExpr, label) -> "{" + f false recordExpr + " - " + label + "}"
         | ERecordExtend (name, valueExpr, restExpr) ->
@@ -75,22 +77,19 @@ let stringOfExpr (x: Expr) : string =
                     g (str + ", " + label + " = " + f false valueExpr) restExpr
                 | otherExpr -> str + " | " + f false otherExpr
             "{" + g (name + " = " + f false valueExpr) restExpr + "}"
-        // | EVariant (label, value) ->
-        //     let variantStr = ":" + label + " " + f true value 
-        //     if isSimple then "(" + variantStr + ")" else variantStr
-        // | ECase (expr, cases, maybeDefaultCase) ->
-        //     let caseStrList = 
-        //         cases
-        //         |> List.map (fun (label, varName, expr) ->
-        //             "| :" + label + " " + varName + " -> " + f false expr
-        //         )
-        //     let allCasesStr =
-        //         match caseStrList, maybeDefaultCase with
-        //         | [], Some (varName, expr) -> varName + " -> " + f false expr
-        //         | casesStrList, None -> String.concat "" caseStrList
-        //         | casesStrList, Some (varName, expr) ->
-        //             String.concat "" casesStrList + " | " + varName + " -> " + f false expr
-        //     "match " + f false expr + " { " + allCasesStr + " } "
+        | ECase (expr, cases, maybeDefaultCase) ->
+            let caseStrList = 
+                cases
+                |> List.map (fun (label, varName, expr) ->
+                    "| :" + label + " " + varName + " -> " + f false expr
+                )
+            let allCasesStr =
+                match caseStrList, maybeDefaultCase with
+                | [], Some (varName, expr) -> varName + " -> " + f false expr
+                | casesStrList, None -> String.concat "" caseStrList
+                | casesStrList, Some (varName, expr) ->
+                    String.concat "" casesStrList + " | " + varName + " -> " + f false expr
+            "match " + f false expr + " { " + allCasesStr + " } "
     f false x
 
 let stringOfTy (x: Ty) : string =
@@ -128,7 +127,6 @@ let stringOfTy (x: Ty) : string =
         | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
         | TVariant rowTy -> "<" + f false rowTy + ">"
-        // | TVariant rowTy -> "[" + f false rowTy + "]"
         | TRowEmpty -> ""
         | TRowExtend (label, ty, rowTy) ->
             let rec g str = function

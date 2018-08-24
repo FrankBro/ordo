@@ -8,4 +8,9 @@ module Map =
         Map.empty
         |> Map.add k v
 
+module Option =
+    let bindNone f = function
+        | None -> f ()
+        | Some _ -> None
+
 let (|>!) x f = f x; x

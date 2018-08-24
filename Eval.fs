@@ -1,6 +1,7 @@
 module Eval
 
 open Expr
+open Util
 
 type Value =
     | VBool of bool
@@ -10,15 +11,21 @@ type Value =
     | VRecord of Map<Name, Value>
     | VVariant of Name * Value
 
-(*
-type Env = {
-    Vars: 
-}
-with
-    static member Empty = {
-
-    }
-*)
+let rec stringOfValue value =
+    let rec f isSimple value =
+        match value with
+        | VBool b -> string b
+        | VInt i -> string i
+        | VFloat f -> string f
+        | VFun _ -> "<Lambda>"
+        | VRecord fields ->
+            fields
+            |> Map.toList
+            |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
+            |> String.concat ", "
+            |> sprintf "{ %s }"
+        | VVariant (label, value) -> sprintf ":%s %s" label (stringOfValue value)
+    f false value
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
@@ -75,22 +82,24 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                 failwithf "trying to select a field we can't find"
             )
         | _ -> failwithf "trying to select a non-record"
+    | ECase (valueExpr, cases, oDefault) ->
+        let valueValue = evalExpr env valueExpr
+        match valueValue with
+        | VVariant (label, value) ->
+            let var, expr =
+                cases
+                |> List.tryFind (fun (caseLabel, _, _) -> caseLabel = label)
+                |> Option.map (fun (_, var, expr) -> var, expr)
+                |> Option.defaultWith (fun () ->
+                    oDefault
+                    |> Option.defaultWith (fun () ->
+                        failwithf "can't match that value"
+                    )
+                )
+            let initialEnv = env
+            let fnEnv = Map.add var value env
+            evalExpr fnEnv expr
+        | _ -> failwithf "trying to match a non-variant"
 
 let eval expr : Value =
     evalExpr Map.empty expr
-
-let rec stringOfValue value =
-    let rec f isSimple value =
-        match value with
-        | VBool b -> string b
-        | VInt i -> string i
-        | VFloat f -> string f
-        | VFun _ -> "<Lambda>"
-        | VRecord fields ->
-            fields
-            |> Map.toList
-            |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
-            |> String.concat ", "
-            |> sprintf "{ %s }"
-        | VVariant (label, value) -> sprintf ":%s %s" label (stringOfValue value)
-    f false value

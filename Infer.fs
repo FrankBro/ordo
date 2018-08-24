@@ -204,28 +204,28 @@ let rec inferExpr env level = function
         let return_ty = TVariant (TRowExtend (label, variantTy, restRowTy))
         unify param_ty (inferExpr env level expr)
         return_ty
-    // | ECase (expr, cases, None) ->
-    //     let returnTy = newVar level
-    //     let exprTy = inferExpr env level expr
-    //     let casesRow = inferCases env level returnTy TRowEmpty cases
-    //     unify exprTy (TVariant casesRow)
-    //     returnTy
-    // | ECase (expr, cases, Some (defaultVarName, defaultExpr)) ->
-    //     let defaultVariantTy = newVar level
-    //     let returnTy = inferExpr (Map.add defaultVarName (TVariant defaultVariantTy) env) level defaultExpr
-    //     let exprTy = inferExpr env level expr
-    //     let casesRow = inferCases env level returnTy defaultVariantTy cases
-    //     unify exprTy (TVariant casesRow)
-    //     returnTy
+    | ECase (expr, cases, None) ->
+        let returnTy = newVar level
+        let exprTy = inferExpr env level expr
+        let casesRow = inferCases env level returnTy TRowEmpty cases
+        unify exprTy (TVariant casesRow)
+        returnTy
+    | ECase (expr, cases, Some (defaultVarName, defaultExpr)) ->
+        let defaultVariantTy = newVar level
+        let returnTy = inferExpr (Map.add defaultVarName (TVariant defaultVariantTy) env) level defaultExpr
+        let exprTy = inferExpr env level expr
+        let casesRow = inferCases env level returnTy defaultVariantTy cases
+        unify exprTy (TVariant casesRow)
+        returnTy
 
-// and inferCases env level returnTy restRowTy cases =
-//     match cases with
-//     | [] -> restRowTy
-//     | (label, varName, expr) :: otherCases ->
-//         let variantTy = newVar level
-//         unify returnTy (inferExpr (Map.add varName variantTy env) level expr)
-//         let otherCasesRow = inferCases env level returnTy restRowTy otherCases
-//         TRowExtend (Map.singleton label [variantTy], otherCasesRow)
+and inferCases env level returnTy restRowTy cases =
+    match cases with
+    | [] -> restRowTy
+    | (label, varName, expr) :: otherCases ->
+        let variantTy = newVar level
+        unify returnTy (inferExpr (Map.add varName variantTy env) level expr)
+        let otherCasesRow = inferCases env level returnTy restRowTy otherCases
+        TRowExtend (label, variantTy, otherCasesRow)
    
 let infer expr =
     resetId ()
