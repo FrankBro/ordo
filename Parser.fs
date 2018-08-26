@@ -5,6 +5,7 @@ open System
 open FParsec.CharParsers
 open FParsec.Primitives
 
+open Error
 open Expr
 open Infer
 open Util 
@@ -35,18 +36,22 @@ let (<!>) (p: Parser<_>) label : Parser<_> =
 let ws = spaces
 let ws1 = spaces1
 let str s = pstring s
+let strWs s = str s .>> ws
+let strWs1 s = str s .>> ws1
 
 let parseExpr, parseExprRef = createParserForwardedToRef ()
+let parseExprWs = parseExpr .>> ws
 
 let reserved = [ "let"; "in"; "fun"; "match" ]
 
-let identifier : Parser<string> =
+let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
     >>= fun s ->
         if reserved |> List.exists ((=) s) then 
             fail "reserved"
         else
             preturn s
+let identWs = ident .>> ws
 
 let parseBool : Parser<Expr> =
     (stringReturn "true" (EBool true))
@@ -78,35 +83,35 @@ let parseFloat : Parser<Expr> =
     |>> EFloat
 
 let parseFun : Parser<Expr> =
-    let p1 = (str "fun" >>. ws1) >>. identifier .>> ws
-    let p2 = (str "->" >>. ws) >>. parseExpr .>> ws
+    let p1 = strWs1 "fun" >>. identWs
+    let p2 = strWs "->" >>. parseExprWs
     (p1 .>>. p2) |>> EFun
 
 let parseVar = 
-    identifier |>> EVar
+    ident |>> EVar
 
 let parseParen = 
-    between (str "(" >>. ws) (str ")" >>. ws) (parseExpr .>> ws)
+    between (strWs "(") (strWs ")") parseExprWs
 
 let parseLet = 
-    let p1 = (str "let" >>. ws1) >>. identifier .>> ws
-    let p2 = (str "=" >>. ws) >>. parseExpr .>> ws 
-    let p3 = (str "in" >>. ws1) >>. parseExpr .>> ws
+    let p1 = strWs1 "let" >>. identWs
+    let p2 = strWs "=" >>. parseExprWs
+    let p3 = strWs1 "in" >>. parseExprWs
     pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
 
 let parseVariant =
-    (str ":" .>> ws) >>. (identifier .>> ws) .>>. (parseExpr .>> ws) 
+    strWs ":" >>. identWs .>>. parseExprWs
     |>> EVariant
 
 let parseMatchNormalCase =
-    let pa = str ":" >>. identifier .>> ws
-    let pb = identifier .>> ws 
-    let pc = str "->" .>> ws >>. parseExpr
+    let pa = strWs ":" >>. identWs
+    let pb = identWs
+    let pc = strWs "->" >>. parseExprWs
     pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
 
 let parseMatchDefaultCase =
-    let pa = identifier .>> ws
-    let pb = str "->" .>> ws >>. parseExpr
+    let pa = identWs
+    let pb = strWs "->" >>. parseExprWs
     pipe2 pa pb (fun var expr -> (None, var, expr))
 
 let parseMatchCase : Parser<string option * string * Expr> =
@@ -114,12 +119,12 @@ let parseMatchCase : Parser<string option * string * Expr> =
     <|> parseMatchDefaultCase
 
 let parseMatchCases =
-    attempt (sepBy (parseMatchCase .>> ws) (str "|" .>> ws))
-    <|> ((parseMatchCase .>> ws) |>> List.singleton)
+    attempt (sepBy parseMatchCase (strWs "|"))
+    <|> (parseMatchCase |>> List.singleton)
 
 let parseMatch =
-    let p1 = (str "match" .>> ws) >>. (parseExpr .>> ws)
-    let p2 = between (str "{" .>> ws) (str "}" .>> ws) parseMatchCases
+    let p1 = strWs "match" >>. parseExprWs
+    let p2 = between (strWs "{") (strWs "}") parseMatchCases
     pipe2 p1 p2 (fun expr cases  -> 
         let normals =
             cases 
@@ -138,7 +143,7 @@ let parseMatch =
     )
 
 let parseRecordEmpty : Parser<Expr> = 
-    (str "{" .>> ws) .>> (str "}" .>> ws) 
+    strWs "{" .>> strWs "}"
     |>> fun _ -> ERecordEmpty
 
 let exprRecordExtend labelExprList record =
@@ -146,28 +151,28 @@ let exprRecordExtend labelExprList record =
     ||> List.fold (fun record (label, expr) -> ERecordExtend (label, expr, record))
 
 let parseRecordLabel : Parser<string * Expr> =
-    (identifier .>> ws .>> str "=" .>> ws) .>>. (parseExpr .>> ws)
+    identWs .>> strWs "=" .>>. parseExprWs
 
 let parseRecordLabels : Parser<(string * Expr) list> =
-    attempt (sepBy (parseRecordLabel .>> ws) (str "," .>> ws))
-    <|> ((parseRecordLabel .>> ws) |>> List.singleton)
+    attempt (sepBy parseRecordLabel (strWs ","))
+    <|> (parseRecordLabel |>> List.singleton)
 
 let parseRecordExtend =
-    let p1 = (str "{" .>> ws) >>. (parseRecordLabels .>> ws)
-    let p2 = (str "|" .>> ws) >>. (parseExpr .>> ws) .>> (str "}" .>> ws)
+    let p1 = strWs "{" >>. (parseRecordLabels .>> ws)
+    let p2 = strWs "|" >>. parseExprWs .>> strWs "}"
     pipe2 p1 p2 exprRecordExtend
 
 let parseRecordInit =
-    (str "{" .>> ws) >>. (parseRecordLabels .>> ws) .>> (str "}" .>> ws)
+    strWs "{" >>. (parseRecordLabels .>> ws) .>> strWs "}"
     |>> fun x -> exprRecordExtend x ERecordEmpty
 
 let parseRecordRestrict =
-    let p1 = (str "{" .>> ws) >>. (parseExpr .>> ws)
-    let p2 = (str "-" .>> ws) >>. (identifier .>> ws) .>> (str "}" .>> ws)
+    let p1 = strWs "{" >>. parseExprWs
+    let p2 = strWs "-" >>. identWs .>> strWs "}"
     pipe2 p1 p2 (fun expr label -> ERecordRestrict (expr, label))
 
 let parseRecordSelect =
-    (parseExpr .>> ws) .>>. (str "." >>. ws >>. identifier)
+    parseExprWs .>>. (strWs "." >>. identWs)
     |>> ERecordSelect
 
 let parseNotCallOrRecordSelect =
@@ -192,13 +197,13 @@ let parseAnything  =
     >>= fun result ->
         match result with
         | [one] ->
-            attempt (str "." >>. ws >>. identifier) |>> fun field -> ERecordSelect (one, field)
+            attempt (strWs "." >>. identWs) |>> fun field -> ERecordSelect (one, field)
             <|> preturn one
         | _ -> 
             let rec loop state exprs =
                 match state, exprs with
                 | None, fn :: arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
-                | None, _ -> failwith "should never happen"
+                | None, _ -> raise (parserError FunctionCallNoArg)
                 | Some fn, arg :: exprs -> loop (Some (ECall (fn, arg))) exprs
                 | Some expr, [] -> expr
             let calls = loop None result
@@ -218,13 +223,11 @@ let inline readExprList input : Expr list =
 
 let parseTy, parseTyRef = createParserForwardedToRef ()
 
-let identifierWs = identifier .>> ws
 let parseTyWs = parseTy .>> ws
-let strWs s = str s .>> ws
 let parseTyListWs = sepBy parseTyWs (strWs ",")
 
 let parseTConst =
-    identifierWs |>> TConst
+    identWs |>> TConst
 
 let parseTApp : Parser<Ty> =
     parseTyWs .>> strWs "[" .>>. parseTyListWs .>> strWs "]"
@@ -247,7 +250,7 @@ let nameToId s : Ty =
     )
 
 let parseTVar : Parser<Ty> =
-    strWs "'" >>. identifierWs
+    strWs "'" >>. identWs
     |>> nameToId
 
 let parseTEmptyRecord : Parser<Ty> =
@@ -255,7 +258,7 @@ let parseTEmptyRecord : Parser<Ty> =
     |>> fun _ -> TRecord TRowEmpty
 
 let parseTRowFields : Parser<(string * Ty) list> =
-    let field = identifierWs .>>. parseTyWs
+    let field = identWs .>>. parseTyWs
     sepBy1 field (strWs ",")
 
 // let parseTRecord : Parser<Ty> =

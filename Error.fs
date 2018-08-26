@@ -6,6 +6,9 @@ type GenericError =
     | VariableNotFound of Name
     | FieldNotFound of Name
 
+type ParserError =
+    | FunctionCallNoArg
+
 type InferError =
     | RecursiveTypes
     | RecursiveRowTypes
@@ -21,12 +24,13 @@ type EvalError =
 
 type OrdoError =
     | Generic of GenericError
+    | Parser of ParserError
     | Infer of InferError
     | Eval of EvalError
 
 exception ErrorException of OrdoError
 
 let genericError g = ErrorException (Generic g)
+let parserError p = ErrorException (Parser p)
 let inferError i = ErrorException (Infer i)
 let evalError e = ErrorException (Eval e)
-
