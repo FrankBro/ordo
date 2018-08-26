@@ -22,7 +22,7 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TVar {contents = Generic _ } -> assert false
         | TVar ({contents = Unbound (otherId, otherLevel)} as otherTvar) ->
             if otherId = tvarId then
-                raise (ErrorException RecursiveTypes)
+                raise (inferError RecursiveTypes)
             else
                 if otherLevel > tvarLevel then
                     otherTvar := Unbound(otherId, tvarLevel)
@@ -70,15 +70,15 @@ let rec unify ty1 ty2 =
             | _ -> None
         let restRow2 = rewriteRow row2 label1 fieldTy1
         match restRow1TVarRefOption with
-        | Some {contents = Link _} -> raise (ErrorException RecursiveRowTypes)
+        | Some {contents = Link _} -> raise (inferError RecursiveRowTypes)
         | _ -> ()
         unify restRow1 restRow2
     | _, _ -> 
-        raise (ErrorException (UnifyFail (ty1, ty2)))
+        raise (inferError (UnifyFail (ty1, ty2)))
 
 and rewriteRow (row2: Ty) label1 fieldTy1 =
     match row2 with
-    | TRowEmpty -> raise (ErrorException (RowMissingLabel label1))
+    | TRowEmpty -> raise (genericError (FieldNotFound label1))
     | TRowExtend (label2, fieldTy2, restRow2) when label2 = label1 ->
         unify fieldTy1 fieldTy2
         restRow2
@@ -90,7 +90,7 @@ and rewriteRow (row2: Ty) label1 fieldTy1 =
         let ty2 = TRowExtend (label1, fieldTy1, restRow2)
         tvar := Link ty2
         restRow2
-    | _ -> raise (ErrorException RowTypeExpected)
+    | _ -> raise (inferError RowTypeExpected)
 
 let rec generalizeTy level = function
     | TVar {contents = Unbound(id, otherLevel)} when otherLevel > level ->  
@@ -146,7 +146,7 @@ let rec matchFunTy = function
         let returnTy = newVar level
         tvar := Link (TArrow(paramTy, returnTy))
         paramTy, returnTy
-    | _ -> raise (ErrorException FunctionExpected)
+    | _ -> raise (inferError FunctionExpected)
 
 let rec inferExpr env level = function
     | EBool _ -> TConst "bool"
@@ -157,7 +157,7 @@ let rec inferExpr env level = function
         |> Map.tryFind name
         |> Option.map (instantiate level)
         |> Option.defaultWith (fun () ->
-            raise (ErrorException (VariableNotFound name))
+            raise (genericError (VariableNotFound name))
         )
     | ELet (varName, valueExpr, bodyExpr) ->
         let varTy = inferExpr env (level + 1) valueExpr

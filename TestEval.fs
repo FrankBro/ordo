@@ -7,14 +7,17 @@ open Xunit
 open Xunit.Abstractions
 
 open Eval
+open Error
 open Expr
 open Util
 
 type Result =
     | OK of Value
-    | Fail
+    | Fail of OrdoError option
 
 let record fields = VRecord (Map.ofList fields)
+
+let fail e = Fail (Some e)
 
 let tests = [
     ("1", OK (VInt 1));
@@ -47,9 +50,12 @@ type TestEval (output: ITestOutputHelper) =
                     Parser.readExpr input
                     |> eval
                     |> OK
-                with e ->
+                with 
+                | ErrorException e ->
+                    Fail (Some e)
+                | e ->
                     output.WriteLine(sprintf "Unknown exception: %O" e)
-                    Fail
+                    Fail None
             if result <> expected then
                 output.WriteLine(sprintf "TestEval: %s failed" input)
             Assert.StrictEqual(expected, result)

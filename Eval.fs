@@ -1,5 +1,6 @@
 module Eval
 
+open Error
 open Expr
 open Util
 
@@ -36,7 +37,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     | EVar name -> 
         Map.tryFind name env
         |> Option.defaultWith (fun () ->
-            failwithf "can't find variable"
+            raise (genericError (VariableNotFound name))
         )
     | ECall (fnExpr, argExpr) -> 
         let fnValue = evalExpr env fnExpr
@@ -46,7 +47,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             let argValue = evalExpr initialEnv argExpr
             let fnEnv = Map.add argName argValue env
             evalExpr fnEnv bodyExpr
-        | _ -> failwithf "fn_value was not a fun, it was a %O" fnExpr
+        | _ -> raise (evalError (NotAFunction fnExpr))
     | ELet (name, valueExpr, bodyExpr) ->
         let value = evalExpr env valueExpr
         let env = Map.add name value env
@@ -63,7 +64,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             fields
             |> Map.add name valueValue
             |> VRecord
-        | _ -> failwithf "trying to extend a non-record"
+        | _ -> raise (evalError (NotARecord recordExpr))
     | ERecordRestrict (recordExpr, name) ->
         let recordValue = evalExpr env recordExpr
         match recordValue with
@@ -71,7 +72,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             fields
             |> Map.remove name
             |> VRecord
-        | _ -> failwithf "trying to restrict a non-record"
+        | _ -> raise (evalError (NotARecord recordExpr))
     | ERecordSelect (recordExpr, label) -> 
         let recordValue = evalExpr env recordExpr
         match recordValue with
@@ -79,9 +80,9 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             fields
             |> Map.tryFind label
             |> Option.defaultWith (fun () ->
-                failwithf "trying to select a field we can't find"
+                raise (genericError (FieldNotFound label))
             )
-        | _ -> failwithf "trying to select a non-record"
+        | _ -> raise (evalError (NotARecord recordExpr))
     | ECase (valueExpr, cases, oDefault) ->
         let valueValue = evalExpr env valueExpr
         match valueValue with
@@ -93,13 +94,14 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                 |> Option.defaultWith (fun () ->
                     oDefault
                     |> Option.defaultWith (fun () ->
-                        failwithf "can't match that value"
+                        raise (evalError (MissingMatchCase valueExpr))
                     )
                 )
             let initialEnv = env
             let fnEnv = Map.add var value env
             evalExpr fnEnv expr
-        | _ -> failwithf "trying to match a non-variant"
+        | _ -> 
+            raise (evalError (NotAVariant valueExpr))
 
 let eval expr : Value =
     evalExpr Map.empty expr

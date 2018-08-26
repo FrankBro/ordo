@@ -13,7 +13,7 @@ open Util
 
 type Result =
     | OK of Ty
-    | Fail of InferError option
+    | Fail of OrdoError option
 
 let tvar var = TVar {contents = var}
 let gen (c: char) = tvar (Generic (int c - 97))
@@ -21,8 +21,8 @@ let gen (c: char) = tvar (Generic (int c - 97))
 let fail x = Fail (Some x)
 
 let tests = [
-    ("x", fail (VariableNotFound "x"));
-    ("let x = x in x", fail (VariableNotFound "x"));
+    ("x", fail (OrdoError.Generic (VariableNotFound "x")))
+    ("let x = x in x", fail (OrdoError.Generic (VariableNotFound "x")))
     ("let x = fun y -> y in x", OK (TArrow(gen 'b', gen 'b')));
     ("fun x -> x", OK (TArrow (gen 'a', gen 'a')));
     ("fun x -> let y = fun z -> z in y", OK (TArrow (gen 'a', TArrow (gen 'c', gen 'c'))));
@@ -138,7 +138,7 @@ type TestInfer (output: ITestOutputHelper) =
                     |> infer
                     |> OK
                 with 
-                | ErrorException (UnifyFail _) ->
+                | ErrorException (Infer (UnifyFail _)) ->
                     // A mess to make match
                     Fail None
                 | ErrorException error ->
