@@ -69,6 +69,7 @@ let tests = [
                 , ["a", "b", EInt 1]
                 , Some ("otherwise", EInt 2)
         )))
+    ("if true then false else true", OK (EIfThenElse (EBool true, EBool false, EBool true)))
 ]
 
 type TestParser (output: ITestOutputHelper) =

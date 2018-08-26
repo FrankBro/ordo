@@ -20,6 +20,7 @@ type Expr =
     | ERecordEmpty
     | EVariant of Name * Expr
     | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
+    | EIfThenElse of Expr * Expr * Expr
 
 type Id = int
 type Level = int
@@ -90,6 +91,11 @@ let stringOfExpr (x: Expr) : string =
                 | casesStrList, Some (varName, expr) ->
                     String.concat "" casesStrList + " | " + varName + " -> " + f false expr
             "match " + f false expr + " { " + allCasesStr + " } "
+        | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
+            let a = f false ifExpr
+            let b = f false thenExpr
+            let c = f false elseExpr
+            sprintf "if %s then %s else %s" a b c
     f false x
 
 let stringOfTy (x: Ty) : string =

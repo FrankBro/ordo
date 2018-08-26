@@ -102,6 +102,13 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             evalExpr fnEnv expr
         | _ -> 
             raise (evalError (NotAVariant valueExpr))
+    | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
+        let ifValue = evalExpr env ifExpr
+        match ifValue with
+        | VBool true -> evalExpr env thenExpr
+        | VBool false -> evalExpr env elseExpr
+        | _ -> 
+            raise (genericError IfValueNotBoolean )
 
 let eval expr : Value =
     evalExpr Map.empty expr

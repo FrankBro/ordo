@@ -37,6 +37,8 @@ let tests = [
     (":a 1", OK (VVariant ("a", VInt 1)))
     ("match :x 1 { :x i -> i | :y i -> i }", OK (VInt 1))
     ("match :x 1 { :y i -> i | otherwise -> 0 }", OK (VInt 0))
+    ("if true then 1 else 0", OK (VInt 1))
+    ("if 1 then 1 else 0", fail (OrdoError.Generic IfValueNotBoolean))
 ]
 
 type TestEval (output: ITestOutputHelper) =

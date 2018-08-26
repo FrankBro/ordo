@@ -5,6 +5,7 @@ open Expr
 type GenericError =
     | VariableNotFound of Name
     | FieldNotFound of Name
+    | IfValueNotBoolean
 
 type ParserError =
     | FunctionCallNoArg
@@ -34,3 +35,4 @@ let genericError g = ErrorException (Generic g)
 let parserError p = ErrorException (Parser p)
 let inferError i = ErrorException (Infer i)
 let evalError e = ErrorException (Eval e)
+

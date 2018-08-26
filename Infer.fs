@@ -148,10 +148,14 @@ let rec matchFunTy = function
         paramTy, returnTy
     | _ -> raise (inferError FunctionExpected)
 
+let boolTy = TConst "bool"
+let intTy = TConst "int"
+let floatTy = TConst "float"
+
 let rec inferExpr env level = function
-    | EBool _ -> TConst "bool"
-    | EInt _ -> TConst "int"
-    | EFloat _ -> TConst "float"
+    | EBool _ -> boolTy
+    | EInt _ -> intTy
+    | EFloat _ -> floatTy
     | EVar name ->
         env
         |> Map.tryFind name
@@ -168,6 +172,14 @@ let rec inferExpr env level = function
             matchFunTy (inferExpr env level fnExpr)
         unify paramTy (inferExpr env level argExpr)
         returnTy
+    | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
+        let a = inferExpr env (level + 1) ifExpr
+        let b = inferExpr env (level + 1) thenExpr
+        let c = inferExpr env (level + 1) elseExpr
+        if a <> boolTy then
+            raise (genericError IfValueNotBoolean)
+        unify b c
+        c
     | EFun (param, bodyExpr) ->
         let paramTy = newVar level
         let fnEnv = Map.add param paramTy env

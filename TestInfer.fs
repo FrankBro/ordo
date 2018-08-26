@@ -124,6 +124,8 @@ let tests = [
     // ("let count1 = fun count -> fun x -> " ^
     //  " match x {:Cons a -> plus(one, count(a.tail)) | :Nil _ -> zero} in " ^
     //  "fix(count1)", error "recursive types");
+    ("if true then 1 else 0", OK (TConst "int"))
+    ("if 1 then 1 else 0", fail (OrdoError.Generic IfValueNotBoolean))
 ]
 
 type TestInfer (output: ITestOutputHelper) =

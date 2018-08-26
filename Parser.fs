@@ -42,7 +42,7 @@ let strWs1 s = str s .>> ws1
 let parseExpr, parseExprRef = createParserForwardedToRef ()
 let parseExprWs = parseExpr .>> ws
 
-let reserved = [ "let"; "in"; "fun"; "match" ]
+let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -175,6 +175,12 @@ let parseRecordSelect =
     parseExprWs .>>. (strWs "." >>. identWs)
     |>> ERecordSelect
 
+let parseIfThenElse =
+    let p1 = strWs1 "if" >>. parseExprWs
+    let p2 = strWs1 "then" >>. parseExprWs
+    let p3 = strWs1 "else" >>. parseExprWs
+    pipe3 p1 p2 p3 (fun ifExpr thenExpr elseExpr -> EIfThenElse (ifExpr, thenExpr, elseExpr))
+
 let parseNotCallOrRecordSelect =
     choice [
         parseParen
@@ -190,6 +196,7 @@ let parseNotCallOrRecordSelect =
         attempt parseRecordExtend
         attempt parseRecordInit
         attempt parseRecordRestrict
+        attempt parseIfThenElse
     ]
 
 let parseAnything  =
