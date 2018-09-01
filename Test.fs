@@ -256,3 +256,11 @@ let ``Record pattern`` () =
         (POk (ELet (eRecord ["a", EVar "a"], eRecord ["a", EInt 1], EVar "a")))
         (IOk (TConst "int"))
         (EOk (VInt 1))
+
+[<Fact>]
+let ``More complex record pattern`` () =
+    test
+        "let { a = a | r } = { b = 2, a = 1 } in r.b"
+        (POk (ELet (ERecordExtend ("a", EVar "a", EVar "r"), eRecord ["b", EInt 2; "a", EInt 1], ERecordSelect (EVar "r", "b"))))
+        (IOk (TConst "int"))
+        (EOk (VInt 2))
