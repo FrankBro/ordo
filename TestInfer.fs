@@ -23,9 +23,9 @@ let fail x = Fail (Some x)
 let tests = [
     ("x", fail (OrdoError.Generic (VariableNotFound "x")))
     ("let x = x in x", fail (OrdoError.Generic (VariableNotFound "x")))
-    ("let x = fun y -> y in x", OK (TArrow(gen 'b', gen 'b')));
+    ("let x = fun y -> y in x", OK (TArrow(gen 'a', gen 'a')));
     ("fun x -> x", OK (TArrow (gen 'a', gen 'a')));
-    ("fun x -> let y = fun z -> z in y", OK (TArrow (gen 'a', TArrow (gen 'c', gen 'c'))));
+    ("fun x -> let y = fun z -> z in y", OK (TArrow (gen 'a', TArrow (gen 'b', gen 'b'))));
     ("fun x -> let y = x in y", OK (TArrow (gen 'a', gen 'a')));
     // ("fun x -> let y = let z = x(fun x -> x) in z in y", OK "forall[a b] ((a -> a) -> b) -> b");
     // ("fun x -> fun y -> let x = x(y) in x(y)", OK "forall[a b] (a -> a -> b) -> a -> b");
