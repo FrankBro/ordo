@@ -28,7 +28,7 @@ let test input =
         printfn "Raw value"
         printfn "%s" (stringOfValue value)
     with 
-    | ErrorException e ->
+    | OrdoException e ->
         printfn "Exception"
         printfn "%O" e
     | e ->

@@ -32,10 +32,10 @@ type OrdoError =
     | Infer of InferError
     | Eval of EvalError
 
-exception ErrorException of OrdoError
+exception OrdoException of OrdoError
 
-let genericError g = ErrorException (Generic g)
-let parserError p = ErrorException (Parser p)
-let inferError i = ErrorException (Infer i)
-let evalError e = ErrorException (Eval e)
+let genericError g = OrdoException (Generic g)
+let parserError p = OrdoException (Parser p)
+let inferError i = OrdoException (Infer i)
+let evalError e = OrdoException (Eval e)
 

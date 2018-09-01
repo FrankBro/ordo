@@ -126,6 +126,7 @@ let tests = [
     //  "fix(count1)", error "recursive types");
     ("if true then 1 else 0", OK (TConst "int"))
     ("if 1 then 1 else 0", fail (OrdoError.Generic IfValueNotBoolean))
+    ("let { a = a } = { a = 1 } in a", OK (TConst "int"))
 ]
 
 type TestInfer (output: ITestOutputHelper) =
@@ -140,10 +141,10 @@ type TestInfer (output: ITestOutputHelper) =
                     |> infer
                     |> OK
                 with 
-                | ErrorException (Infer (UnifyFail _)) ->
+                | OrdoException (Infer (UnifyFail _)) ->
                     // A mess to make match
                     Fail None
-                | ErrorException error ->
+                | OrdoException error ->
                     Fail (Some error)
                 | e ->
                     output.WriteLine(sprintf "Unknown exception: %O" e)

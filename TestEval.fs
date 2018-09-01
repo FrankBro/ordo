@@ -39,6 +39,7 @@ let tests = [
     ("match :x 1 { :y i -> i | otherwise -> 0 }", OK (VInt 0))
     ("if true then 1 else 0", OK (VInt 1))
     ("if 1 then 1 else 0", fail (OrdoError.Generic IfValueNotBoolean))
+    ("let { a = a } = { a = 1 } in a", OK (VInt 1))
 ]
 
 type TestEval (output: ITestOutputHelper) =
@@ -53,7 +54,7 @@ type TestEval (output: ITestOutputHelper) =
                     |> eval
                     |> OK
                 with 
-                | ErrorException e ->
+                | OrdoException e ->
                     Fail (Some e)
                 | e ->
                     output.WriteLine(sprintf "Unknown exception: %O" e)
