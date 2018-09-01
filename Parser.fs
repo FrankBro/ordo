@@ -42,6 +42,9 @@ let strWs1 s = str s .>> ws1
 let parseExpr, parseExprRef = createParserForwardedToRef ()
 let parseExprWs = parseExpr .>> ws
 
+let parsePattern, parsePatternRef = createParserForwardedToRef ()
+let parsePatternWs = parsePattern .>> ws
+
 let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false" ]
 
 let ident: Parser<string> =
@@ -83,21 +86,21 @@ let parseFloat : Parser<Expr> =
     |>> EFloat
 
 let parseFun : Parser<Expr> =
-    let p1 = strWs1 "fun" >>. identWs
+    let p1 = strWs1 "fun" >>. parsePatternWs
     let p2 = strWs "->" >>. parseExprWs
     (p1 .>>. p2) |>> EFun
 
 let parseVar = 
-    ident |>> EVar
+    identWs |>> EVar
 
-let parseParen = 
-    between (strWs "(") (strWs ")") parseExprWs
+let parseParen element = 
+    between (strWs "(") (strWs ")") element
 
 let parseLet = 
-    let p1 = strWs1 "let" >>. identWs
+    let p1 = strWs1 "let" >>. parsePatternWs
     let p2 = strWs "=" >>. parseExprWs
     let p3 = strWs1 "in" >>. parseExprWs
-    pipe3 p1 p2 p3 (fun var value body -> ELet (var, value, body))
+    pipe3 p1 p2 p3 (fun pattern value body -> ELet (pattern, value, body))
 
 let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs
@@ -150,20 +153,20 @@ let exprRecordExtend labelExprList record =
     (record, labelExprList)
     ||> List.fold (fun record (label, expr) -> ERecordExtend (label, expr, record))
 
-let parseRecordLabel : Parser<string * Expr> =
-    identWs .>> strWs "=" .>>. parseExprWs
+let parseRecordLabel content : Parser<string * Expr> =
+    identWs .>> strWs "=" .>>. content
 
-let parseRecordLabels : Parser<(string * Expr) list> =
-    attempt (sepBy parseRecordLabel (strWs ","))
-    <|> (parseRecordLabel |>> List.singleton)
+let parseRecordLabels content : Parser<(string * Expr) list> =
+    attempt (sepBy (parseRecordLabel content) (strWs ","))
+    <|> (parseRecordLabel content|>> List.singleton)
 
-let parseRecordExtend =
-    let p1 = strWs "{" >>. (parseRecordLabels .>> ws)
+let parseRecordExtend content =
+    let p1 = strWs "{" >>. (parseRecordLabels content .>> ws)
     let p2 = strWs "|" >>. parseExprWs .>> strWs "}"
     pipe2 p1 p2 exprRecordExtend
 
-let parseRecordInit =
-    strWs "{" >>. (parseRecordLabels .>> ws) .>> strWs "}"
+let parseRecordInit content =
+    strWs "{" >>. (parseRecordLabels content .>> ws) .>> strWs "}"
     |>> fun x -> exprRecordExtend x ERecordEmpty
 
 let parseRecordRestrict =
@@ -181,9 +184,18 @@ let parseIfThenElse =
     let p3 = strWs1 "else" >>. parseExprWs
     pipe3 p1 p2 p3 (fun ifExpr thenExpr elseExpr -> EIfThenElse (ifExpr, thenExpr, elseExpr))
 
+do parsePatternRef :=
+    choice [
+        parseParen parsePatternWs
+        attempt parseVar
+        attempt parseRecordEmpty
+        attempt (parseRecordExtend parsePatternWs)
+        attempt (parseRecordInit parsePatternWs)
+    ]
+
 let parseNotCallOrRecordSelect =
     choice [
-        parseParen
+        parseParen parseExprWs
         parseBool
         attempt parseFloat
         attempt parseInt 
@@ -193,8 +205,8 @@ let parseNotCallOrRecordSelect =
         parseVariant
         parseMatch
         attempt parseRecordEmpty
-        attempt parseRecordExtend
-        attempt parseRecordInit
+        attempt (parseRecordExtend parseExprWs)
+        attempt (parseRecordInit parseExprWs)
         attempt parseRecordRestrict
         attempt parseIfThenElse
     ]

@@ -2,38 +2,15 @@ module Eval
 
 open Error
 open Expr
+open Pattern
 open Util
-
-type Value =
-    | VBool of bool
-    | VInt of int
-    | VFloat of float
-    | VFun of Name * Expr
-    | VRecord of Map<Name, Value>
-    | VVariant of Name * Value
-
-let rec stringOfValue value =
-    let rec f isSimple value =
-        match value with
-        | VBool b -> string b
-        | VInt i -> string i
-        | VFloat f -> string f
-        | VFun _ -> "<Lambda>"
-        | VRecord fields ->
-            fields
-            |> Map.toList
-            |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
-            |> String.concat ", "
-            |> sprintf "{ %s }"
-        | VVariant (label, value) -> sprintf ":%s %s" label (stringOfValue value)
-    f false value
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
     | EBool b -> VBool b
     | EInt i -> VInt i
     | EFloat f -> VFloat f
-    | EFun (name, expr) -> VFun (name, expr)
+    | EFun (pattern, expr) -> VFun (pattern, expr)
     | EVar name -> 
         Map.tryFind name env
         |> Option.defaultWith (fun () ->
@@ -42,15 +19,15 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     | ECall (fnExpr, argExpr) -> 
         let fnValue = evalExpr env fnExpr
         match fnValue with
-        | VFun (argName, bodyExpr) ->
+        | VFun (pattern, bodyExpr) ->
             let initialEnv = env
             let argValue = evalExpr initialEnv argExpr
-            let fnEnv = Map.add argName argValue env
+            let fnEnv = consumePattern env pattern argValue
             evalExpr fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
-    | ELet (name, valueExpr, bodyExpr) ->
+    | ELet (pattern, valueExpr, bodyExpr) ->
         let value = evalExpr env valueExpr
-        let env = Map.add name value env
+        let env = consumePattern env pattern value
         evalExpr env bodyExpr
     | ERecordEmpty  -> VRecord Map.empty
     | EVariant (label, expr) ->
@@ -64,7 +41,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             fields
             |> Map.add name valueValue
             |> VRecord
-        | _ -> raise (evalError (NotARecord recordExpr))
+        | _ -> raise (genericError (NotARecordExpr recordExpr))
     | ERecordRestrict (recordExpr, name) ->
         let recordValue = evalExpr env recordExpr
         match recordValue with
@@ -72,7 +49,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             fields
             |> Map.remove name
             |> VRecord
-        | _ -> raise (evalError (NotARecord recordExpr))
+        | _ -> raise (genericError (NotARecordExpr recordExpr))
     | ERecordSelect (recordExpr, label) -> 
         let recordValue = evalExpr env recordExpr
         match recordValue with
@@ -82,7 +59,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             |> Option.defaultWith (fun () ->
                 raise (genericError (FieldNotFound label))
             )
-        | _ -> raise (evalError (NotARecord recordExpr))
+        | _ -> raise (genericError (NotARecordExpr recordExpr))
     | ECase (valueExpr, cases, oDefault) ->
         let valueValue = evalExpr env valueExpr
         match valueValue with
@@ -109,6 +86,31 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VBool false -> evalExpr env elseExpr
         | _ -> 
             raise (genericError IfValueNotBoolean )
+        
+and consumePattern (env: Map<string, Value>) pattern (value: Value) =
+    let rec loop env pattern (value: Value) =
+        match pattern with
+        | EVar var -> Map.add var value env
+        | ERecordEmpty -> env
+        | ERecordExtend (label, EVar var, record) ->
+            match value with
+            | VRecord fields ->
+                let field = 
+                    fields
+                    |> Map.tryFind label
+                    |> Option.defaultWith (fun () ->
+                        raise (genericError (FieldNotFound label))
+                    )
+                let remainingFields =
+                    fields
+                    |> Map.remove label
+                let env = Map.add var field env 
+                loop env record (VRecord remainingFields)
+            | _ ->
+                raise (genericError (NotARecordValue value))
+        | _ -> 
+            raise (genericError (InvalidPattern pattern))
+    loop env pattern value
 
 let eval expr : Value =
     evalExpr Map.empty expr

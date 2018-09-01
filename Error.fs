@@ -6,6 +6,10 @@ type GenericError =
     | VariableNotFound of Name
     | FieldNotFound of Name
     | IfValueNotBoolean
+    | InvalidPattern of Expr
+    | NotARecordExpr of Expr
+    | NotARecordTy of Ty
+    | NotARecordValue of Value
 
 type ParserError =
     | FunctionCallNoArg
@@ -19,7 +23,6 @@ type InferError =
 
 type EvalError =
     | NotAFunction of Expr
-    | NotARecord of Expr
     | NotAVariant of Expr
     | MissingMatchCase of Expr
 

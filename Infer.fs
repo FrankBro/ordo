@@ -2,6 +2,7 @@ module Infer
 
 open Error
 open Expr
+open Pattern
 open Util
 
 let currentId = ref 0
@@ -163,10 +164,11 @@ let rec inferExpr env level = function
         |> Option.defaultWith (fun () ->
             raise (genericError (VariableNotFound name))
         )
-    | ELet (varName, valueExpr, bodyExpr) ->
+    | ELet (pattern, valueExpr, bodyExpr) ->
         let varTy = inferExpr env (level + 1) valueExpr
         let generalizedTy = generalizeTy level varTy
-        inferExpr (Map.add varName generalizedTy env) level bodyExpr
+        let bodyEnv = consumePattern env pattern varTy
+        inferExpr bodyEnv level bodyExpr
     | ECall (fnExpr, argExpr) ->
         let paramTy, returnTy =
             matchFunTy (inferExpr env level fnExpr)
@@ -180,9 +182,9 @@ let rec inferExpr env level = function
             raise (genericError IfValueNotBoolean)
         unify b c
         c
-    | EFun (param, bodyExpr) ->
+    | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
-        let fnEnv = Map.add param paramTy env
+        let fnEnv = consumePattern env pattern paramTy
         let returnTy = inferExpr fnEnv level bodyExpr
         TArrow (paramTy, returnTy)
     | ERecordEmpty -> TRecord TRowEmpty
@@ -238,6 +240,20 @@ and inferCases env level returnTy restRowTy cases =
         unify returnTy (inferExpr (Map.add varName variantTy env) level expr)
         let otherCasesRow = inferCases env level returnTy restRowTy otherCases
         TRowExtend (label, variantTy, otherCasesRow)
+
+and consumePattern env pattern valueTy =
+    let rec loop env pattern valueTy =
+        match pattern with
+        | EVar var -> Map.add var valueTy env
+        | ERecordEmpty -> env
+        | ERecordExtend (label, EVar name, record) ->
+            let fieldTy = getRecordLabelType label valueTy
+            let newValueTy = removeRecordLabelTy label valueTy
+            let env = Map.add label fieldTy env
+            loop env record newValueTy
+        | _ -> 
+            raise (genericError (InvalidPattern pattern))
+    loop env pattern valueTy
    
 let infer expr =
     resetId ()

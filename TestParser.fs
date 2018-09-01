@@ -57,7 +57,7 @@ let tests = [
     //     OK (record [("a", [EVar "x"]); ("b", [EVar "y"])] (ERecordRestrict(EVar "m", "a"))));
     ("{ b = y | m - a }", Fail);
     (":a x", OK (EVariant ("a", EVar "x")))
-    (":f (fun a -> a)", OK (EVariant ("f", EFun ("a", EVar "a"))))
+    (":f (fun a -> a)", OK (EVariant ("f", EFun (EVar "a", EVar "a"))))
     ("match :a 1 { :a b -> 1 | :c d -> 2 }", 
         OK (ECase ((EVariant ("a", EInt 1))
                 , [ "a", "b", EInt 1;

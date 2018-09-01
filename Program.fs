@@ -2,6 +2,7 @@
 
 open System
 
+open Error
 open Eval
 open Expr
 open Infer
@@ -26,12 +27,17 @@ let test input =
         printfn "%O" value
         printfn "Raw value"
         printfn "%s" (stringOfValue value)
-    with e ->
+    with 
+    | ErrorException e ->
+        printfn "Exception"
+        printfn "%O" e
+    | e ->
         printfn "Exception"
         printfn "%O" e
 
 [<EntryPoint>]
 let main argv =
-    let input = "match :x 1 { :x i -> i | :y i -> i }"
+    // let input = "match :x 1 { :x i -> i | :y i -> i }"
+    let input = "let { b = b, a = a | r } = { a = 1, c = 2, b = 3 } in a"
     test input
     0 // return an integer exit code

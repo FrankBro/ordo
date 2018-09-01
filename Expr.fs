@@ -12,8 +12,8 @@ type Expr =
     | EFloat of float
     | EVar of Name
     | ECall of Expr * Expr
-    | EFun of Name * Expr
-    | ELet of Name * Expr * Expr
+    | EFun of Pattern * Expr
+    | ELet of Pattern * Expr * Expr
     | ERecordSelect of Expr * Name
     | ERecordExtend of Name * Expr * Expr
     | ERecordRestrict of Expr * Name
@@ -21,6 +21,25 @@ type Expr =
     | EVariant of Name * Expr
     | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
     | EIfThenElse of Expr * Expr * Expr
+with
+    override x.ToString () =
+        match x with
+        | EBool b -> sprintf "EBool %b" b
+        | EInt i -> sprintf "EInt %d" i
+        | EFloat f -> sprintf "EFloat %f" f
+        | EVar name -> sprintf "EVar %s" name
+        | ECall (a, b) -> sprintf "ECall (%O, %O)" a b
+        | EFun (a, b) -> sprintf "EFun (%O, %O)" a b
+        | ELet (a, b, c) -> sprintf "ELet (%O, %O, %O)" a b c
+        | ERecordSelect (a, name) -> sprintf "ERecordSelect (%O, %s)" a name
+        | ERecordExtend (label, a, b) -> sprintf "ERecordExtend (%s, %O, %O)" label a b
+        | ERecordRestrict (a, label) -> sprintf "ERecordRestrict (%O, %s)" a label
+        | ERecordEmpty -> "ERecordEmpty"
+        | EVariant (label, a) -> sprintf "EVariant (%s, %O)" label a
+        | ECase _ -> "ECase"
+        | EIfThenElse (a, b, c) -> sprintf "EIfThenElse (%O, %O, %O)" a b c
+
+and Pattern = Expr
 
 type Id = int
 type Level = int
@@ -34,6 +53,17 @@ type Ty =
     | TVariant of Row
     | TRowEmpty
     | TRowExtend of Name * Ty * Row
+with
+    override x.ToString () =
+        match x with
+        | TConst name -> sprintf "TConst %s" name
+        | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
+        | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
+        | TVar a -> sprintf "TVar %O" (!a)
+        | TRecord a -> sprintf "TRecord %O" a
+        | TVariant a -> sprintf "TVariant %O" a
+        | TRowEmpty -> "TRowEmpty"
+        | TRowExtend (name, a, b) -> sprintf "TRowExtend (%s, %O, %O)" name a b
 
 and Row = Ty
 
@@ -41,6 +71,20 @@ and Tvar =
     | Unbound of Id * Level
     | Link of Ty
     | Generic of Id
+with
+    override x.ToString () =
+        match x with
+        | Unbound (id, level) -> sprintf "Unbound (%d, %d)" id level
+        | Link a -> sprintf "Link %O" a
+        | Generic id -> sprintf "Generic %d" id
+
+type Value =
+    | VBool of bool
+    | VInt of int
+    | VFloat of float
+    | VFun of Pattern * Expr
+    | VRecord of Map<Name, Value>
+    | VVariant of Name * Value
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
@@ -52,16 +96,16 @@ let stringOfExpr (x: Expr) : string =
             let fnStr = f true fnExpr
             let argStr = f false argExpr
             sprintf "%s %s" fnStr argStr
-        | EFun (param, bodyExpr) ->
+        | EFun (pattern, bodyExpr) ->
             let funStr = 
                 sprintf "fun %s -> %s" 
-                    param
+                    (f false pattern)
                     (f false bodyExpr)
             if isSimple then "(" + funStr + ")" else funStr
-        | ELet (varName, valueExpr, bodyExpr) ->
+        | ELet (pattern, valueExpr, bodyExpr) ->
             let letStr =
                 sprintf "let %s = %s in %s"
-                    varName
+                    (f false pattern)
                     (f false valueExpr)
                     (f false bodyExpr)
             if isSimple then "(" + letStr + ")" else letStr
@@ -154,3 +198,19 @@ let stringOfTy (x: Ty) : string =
         "forall[" + args + "] " + tyStr
     else
         tyStr
+
+let rec stringOfValue value =
+    let rec f isSimple value =
+        match value with
+        | VBool b -> string b
+        | VInt i -> string i
+        | VFloat f -> string f
+        | VFun _ -> "<Lambda>"
+        | VRecord fields ->
+            fields
+            |> Map.toList
+            |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
+            |> String.concat ", "
+            |> sprintf "{ %s }"
+        | VVariant (label, value) -> sprintf ":%s %s" label (stringOfValue value)
+    f false value
