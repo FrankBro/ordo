@@ -245,6 +245,14 @@ let ``If then else`` () =
 let ``If value must be bool`` () =
     test
         "if 1 then 1 else 0"
-        (POk (EIfThenElse (EBool true, EInt 1, EInt 0)))
+        (POk (EIfThenElse (EInt 1, EInt 1, EInt 0)))
         (IFail (g IfValueNotBoolean))
         (EFail (g IfValueNotBoolean))
+
+[<Fact>]
+let ``Record pattern`` () =
+    test
+        "let { a = a } = { a = 1 } in a"
+        (POk (ELet (eRecord ["a", EVar "a"], eRecord ["a", EInt 1], EVar "a")))
+        (IOk (TConst "int"))
+        (EOk (VInt 1))
