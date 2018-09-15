@@ -108,17 +108,17 @@ let parseVariant =
 
 let parseMatchNormalCase =
     let pa = strWs ":" >>. identWs
-    let pb = identWs
+    let pb = parsePatternWs
     let pc = strWs "->" >>. parseExprWs
     pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
 
 let parseMatchDefaultCase =
-    let pa = identWs
+    let pa = parsePatternWs
     let pb = strWs "->" >>. parseExprWs
     pipe2 pa pb (fun var expr -> (None, var, expr))
 
-let parseMatchCase : Parser<string option * string * Expr> =
-    parseMatchNormalCase
+let parseMatchCase : Parser<string option * Pattern * Expr> =
+    parseMatchNormalCase 
     <|> parseMatchDefaultCase
 
 let parseMatchCases =
@@ -131,15 +131,15 @@ let parseMatch =
     pipe2 p1 p2 (fun expr cases  -> 
         let normals =
             cases 
-            |> List.choose (fun (oLabel, var, expr) -> 
+            |> List.choose (fun (oLabel, pattern, expr) -> 
                 oLabel
-                |> Option.map (fun label -> label, var, expr)
+                |> Option.map (fun label -> label, pattern, expr)
             )
         let oDefault =
             cases
-            |> List.tryPick (fun (oLabel, var, expr) ->
+            |> List.tryPick (fun (oLabel, pattern, expr) ->
                 match oLabel with
-                | None -> Some (var, expr)
+                | None -> Some (pattern, expr)
                 | Some _ -> None
             )
         ECase(expr, normals, oDefault)

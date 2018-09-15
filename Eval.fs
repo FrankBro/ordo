@@ -4,6 +4,7 @@ open Error
 open Expr
 open Pattern
 open Util
+open Infer
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
@@ -64,10 +65,10 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         let valueValue = evalExpr env valueExpr
         match valueValue with
         | VVariant (label, value) ->
-            let var, expr =
+            let pattern, expr =
                 cases
                 |> List.tryFind (fun (caseLabel, _, _) -> caseLabel = label)
-                |> Option.map (fun (_, var, expr) -> var, expr)
+                |> Option.map (fun (_, pattern, expr) -> pattern, expr)
                 |> Option.defaultWith (fun () ->
                     oDefault
                     |> Option.defaultWith (fun () ->
@@ -75,7 +76,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                     )
                 )
             let initialEnv = env
-            let fnEnv = Map.add var value env
+            let fnEnv = consumePattern env pattern value
             evalExpr fnEnv expr
         | _ -> 
             raise (evalError (NotAVariant valueExpr))

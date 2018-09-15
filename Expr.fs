@@ -19,7 +19,7 @@ type Expr =
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
     | EVariant of Name * Expr
-    | ECase of Expr * (Name * Name * Expr) list * (Name * Expr) option
+    | ECase of Expr * (Name * Pattern * Expr) list * (Pattern * Expr) option
     | EIfThenElse of Expr * Expr * Expr
 with
     override x.ToString () =
@@ -125,15 +125,15 @@ let stringOfExpr (x: Expr) : string =
         | ECase (expr, cases, maybeDefaultCase) ->
             let caseStrList = 
                 cases
-                |> List.map (fun (label, varName, expr) ->
-                    "| :" + label + " " + varName + " -> " + f false expr
+                |> List.map (fun (label, pattern, expr) ->
+                    "| :" + label + " " + f false pattern + " -> " + f false expr
                 )
             let allCasesStr =
                 match caseStrList, maybeDefaultCase with
-                | [], Some (varName, expr) -> varName + " -> " + f false expr
+                | [], Some (pattern, expr) -> f false pattern + " -> " + f false expr
                 | casesStrList, None -> String.concat "" caseStrList
-                | casesStrList, Some (varName, expr) ->
-                    String.concat "" casesStrList + " | " + varName + " -> " + f false expr
+                | casesStrList, Some (pattern, expr) ->
+                    String.concat "" casesStrList + " | " + f false pattern + " -> " + f false expr
             "match " + f false expr + " { " + allCasesStr + " } "
         | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
             let a = f false ifExpr

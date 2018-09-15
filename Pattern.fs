@@ -20,6 +20,7 @@ let getRecordLabelExpr label expr =
 
 let getRecordLabelType label ty =
     let rec loop ty =
+        printfn "DEBUG: ty = %O" ty
         match ty with
         | TRowEmpty ->
             raise (genericError (FieldNotFound label))
@@ -54,6 +55,7 @@ let removeRecordLabelExpr label expr =
 
 let recordToRecordMapTy ty =
     let rec loop acc ty =
+        printfn "DEBUG: ty = %O" ty
         match ty with
         | TRowEmpty -> acc
         | TRowExtend (label, ty, record) ->
@@ -77,3 +79,14 @@ let removeRecordLabelTy label ty : Ty =
     recordToRecordMapTy ty
     |> Map.remove label
     |> recordMapToRecordTy
+
+let recordToMapExpr expr =
+    let rec loop acc expr =
+        match expr with
+        | ERecordEmpty -> acc
+        | ERecordExtend (label, EVar name, record) ->
+            let acc = Map.add label name acc
+            loop acc record
+        | _ ->
+            raise (genericError (InvalidPattern expr))
+    loop Map.empty expr
