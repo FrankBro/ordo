@@ -260,6 +260,14 @@ let ``Record pattern`` () =
         (EOk (VInt 1))
 
 [<Fact>]
+let ``Record pattern multiple unordered fields`` () =
+    test
+        "let { a = a, b = b } = { b = 2, a = 1 } in a"
+        (POk (ELet (eRecord ["a", EVar "a"; "b", EVar "b"], eRecord ["b", EInt 2; "a", EInt 1], EVar "a")))
+        (IOk (TConst "int"))
+        (EOk (VInt 1))
+
+[<Fact>]
 let ``More complex record pattern`` () =
     test
         "let { a = a | r } = { b = 2, a = 1 } in r.b"
