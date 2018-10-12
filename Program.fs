@@ -37,7 +37,6 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    // let input = "match :x 1 { :x i -> i | :y i -> i }"
-    let input = "let { b = b, a = a | r } = { a = 1, c = 2, b = 3 } in a"
+    let input = "let f = fun { a = a } -> a in f { a = 1 }"
     test input
     0 // return an integer exit code

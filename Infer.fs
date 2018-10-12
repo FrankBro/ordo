@@ -20,7 +20,10 @@ let newGenVar () = TVar (ref (Generic(nextId ())))
 let occursCheckAdjustLevels tvarId tvarLevel ty =
     let rec f = function
         | TVar {contents = Link ty} -> f ty
-        | TVar {contents = Generic _ } -> assert false
+        | TVar {contents = Generic _ } -> 
+            ()
+            // why did this have to fail before introducing pattern matching?
+            //failwithf "occursCheckAdjustLevels with Generic"
         | TVar ({contents = Unbound (otherId, otherLevel)} as otherTvar) ->
             if otherId = tvarId then
                 raise (inferError RecursiveTypes)
@@ -56,7 +59,7 @@ let rec unify ty1 ty2 =
     | TVar {contents = Link ty1}, ty2
     | ty1, TVar {contents = Link ty2} -> unify ty1 ty2
     | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} when id1 = id2 ->
-        assert false // There is only a single instance of a particular type variable
+        failwithf "unify with the same type variable" // There is only a single instance of a particular type variable
     | TVar ({contents = Unbound(id, level)} as tvar), ty
     | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
         occursCheckAdjustLevels id level ty
@@ -167,12 +170,14 @@ let rec inferExpr env level = function
     | ELet (pattern, valueExpr, bodyExpr) ->
         let varTy = inferExpr env (level + 1) valueExpr
         let generalizedTy = generalizeTy level varTy
-        let bodyEnv = consumePattern env pattern varTy
+        let patternTy, bodyEnv = inferPattern env level pattern
+        unify patternTy generalizedTy
         inferExpr bodyEnv level bodyExpr
     | ECall (fnExpr, argExpr) ->
         let paramTy, returnTy =
             matchFunTy (inferExpr env level fnExpr)
-        unify paramTy (inferExpr env level argExpr)
+        let argTy = inferExpr env level argExpr
+        unify paramTy argTy
         returnTy
     | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
         let a = inferExpr env (level + 1) ifExpr
@@ -184,7 +189,8 @@ let rec inferExpr env level = function
         c
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
-        let fnEnv = consumePattern env pattern paramTy
+        let patternTy, fnEnv = inferPattern env level pattern
+        unify patternTy paramTy
         let returnTy = inferExpr fnEnv level bodyExpr
         TArrow (paramTy, returnTy)
     | ERecordEmpty -> TRecord TRowEmpty
@@ -214,19 +220,22 @@ let rec inferExpr env level = function
     | EVariant (label, expr) ->
         let restRowTy = newVar level
         let variantTy = newVar level
-        let param_ty = variantTy in
-        let return_ty = TVariant (TRowExtend (label, variantTy, restRowTy))
-        unify param_ty (inferExpr env level expr)
-        return_ty
+        let paramTy = variantTy in
+        let returnTy = TVariant (TRowExtend (label, variantTy, restRowTy))
+        unify paramTy (inferExpr env level expr)
+        returnTy
     | ECase (expr, cases, None) ->
         let returnTy = newVar level
         let exprTy = inferExpr env level expr
         let casesRow = inferCases env level returnTy TRowEmpty cases
         unify exprTy (TVariant casesRow)
         returnTy
-    | ECase (expr, cases, Some (defaultVarName, defaultExpr)) ->
+    | ECase (expr, cases, Some (pattern, defaultExpr)) ->
         let defaultVariantTy = newVar level
-        let returnTy = inferExpr (Map.add defaultVarName (TVariant defaultVariantTy) env) level defaultExpr
+        let valueTy = TVariant defaultVariantTy
+        let (EVar name) = pattern
+        let env = Map.add name valueTy env
+        let returnTy = inferExpr env level defaultExpr
         let exprTy = inferExpr env level expr
         let casesRow = inferCases env level returnTy defaultVariantTy cases
         unify exprTy (TVariant casesRow)
@@ -235,26 +244,46 @@ let rec inferExpr env level = function
 and inferCases env level returnTy restRowTy cases =
     match cases with
     | [] -> restRowTy
-    | (label, varName, expr) :: otherCases ->
+    | (label, pattern, expr) :: otherCases ->
         let variantTy = newVar level
-        unify returnTy (inferExpr (Map.add varName variantTy env) level expr)
+        let (EVar name) = pattern
+        let env = Map.add name variantTy env
+        unify returnTy (inferExpr env level expr)
         let otherCasesRow = inferCases env level returnTy restRowTy otherCases
         TRowExtend (label, variantTy, otherCasesRow)
 
-and consumePattern env pattern valueTy =
-    let rec loop env pattern valueTy =
+and inferPattern env level pattern =
+    let rec loop env pattern =
         match pattern with
-        | EVar var -> Map.add var valueTy env
-        | ERecordEmpty -> env
-        | ERecordExtend (label, EVar name, record) ->
-            let fieldTy = getRecordLabelType label valueTy
-            let newValueTy = removeRecordLabelTy label valueTy
-            let env = Map.add label fieldTy env
-            loop env record newValueTy
-        | _ -> 
+        | EVar name ->
+            let var = newVar level
+            let env = Map.add name var env
+            (var, env)
+        | ERecordExtend (label, expr, rest) ->
+            let restRowTy = newVar level
+            let fieldTy = newVar level
+            let param1Ty = fieldTy
+            let param2Ty = TRecord restRowTy
+            let returnTy = TRecord (TRowExtend (label, fieldTy, restRowTy))
+            let infer1Ty, env = inferPattern env level expr
+            let infer2Ty, env = inferPattern env level rest
+            unify param1Ty infer1Ty
+            unify param2Ty infer2Ty
+            returnTy, env
+        | ERecordEmpty -> 
+            TRecord TRowEmpty, env
+        | EVariant (label, expr) ->
+            let restRowTy = newVar level
+            let variantTy = newVar level
+            let paramTy = variantTy
+            let returnTy = TVariant (TRowExtend (label, variantTy, restRowTy))
+            let inferTy, env = inferPattern env level expr
+            unify paramTy inferTy
+            (returnTy, env)
+        | _ ->
             raise (genericError (InvalidPattern pattern))
-    loop env pattern valueTy
-   
+    loop env pattern
+
 let infer expr =
     resetId ()
     inferExpr Map.empty 0 expr

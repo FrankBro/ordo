@@ -221,7 +221,7 @@ let ``Variant`` () =
 let ``Match variant`` () =
     test
         "match :a 1 { :a a -> 1 | :y a -> 2 }"
-        (POk (ECase ((EVariant ("a", EInt 1)), ["a", "a", EInt 1;"y", "a", EInt 2], None)))
+        (POk (ECase ((EVariant ("a", EInt 1)), ["a", EVar "a", EInt 1;"y", EVar "a", EInt 2], None)))
         (IOk (TConst "int"))
         (EOk (VInt 1))
 
@@ -229,7 +229,7 @@ let ``Match variant`` () =
 let ``Match open variant`` () =
     test
         "match :b 1 { :a a -> 1 | otherwise -> 2 }"
-        (POk (ECase ((EVariant ("b", EInt 1)), ["a", "a", EInt 1], Some ("otherwise", EInt 2))))
+        (POk (ECase ((EVariant ("b", EInt 1)), ["a", EVar "a", EInt 1], Some (EVar "otherwise", EInt 2))))
         (IOk (TConst "int"))
         (EOk (VInt 2))
 
@@ -264,3 +264,31 @@ let ``More complex record pattern`` () =
         (POk (ELet (ERecordExtend ("a", EVar "a", EVar "r"), eRecord ["b", EInt 2; "a", EInt 1], ERecordSelect (EVar "r", "b"))))
         (IOk (TConst "int"))
         (EOk (VInt 2))
+
+let gen id = TVar {contents = Generic id}
+
+[<Fact>]
+let ``Record pattern in lambda`` () =
+    test
+        "let f = fun { a = a } -> a in f { a = 1 }"
+        (POk (ELet (EVar "f", EFun (ERecordExtend ("a", EVar "a", ERecordEmpty), EVar "a"), ECall (EVar "f", ERecordExtend ("a", EInt 1, ERecordEmpty)))))
+        (IOk (TConst "int"))
+        (EOk (VInt 1))
+
+[<Fact>]
+let ``Imbricked records`` () =
+    test
+        "let { a = { b = b } } = { a = { b = 2 } } in b"
+        (POk (ELet (ERecordExtend ("a", ERecordExtend ("b", EVar "b", ERecordEmpty), ERecordEmpty), 
+                    ERecordExtend ("a", ERecordExtend ("b", EInt 2, ERecordEmpty), ERecordEmpty),
+                    EVar "b")))
+        (IOk (TConst "int"))
+        (EOk (VInt 2))
+
+// [<Fact>]
+// let ``Record pattern in match`` () =
+//     test
+//         "match :a { a = 1 } { :a { a = a } -> a }"
+//         (POk (ECase ((EVariant ("a", eRecord ["a", EInt 1])), ["a", eRecord ["a", EVar "a"], EVar "a"], None)))
+//         (IOk (TConst "int"))
+//         (EOk (VInt 1))
