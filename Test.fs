@@ -262,10 +262,10 @@ let ``Record pattern`` () =
 [<Fact>]
 let ``Record pattern multiple unordered fields`` () =
     test
-        "let { a = a, b = b } = { b = 2, a = 1 } in a"
-        (POk (ELet (eRecord ["a", EVar "a"; "b", EVar "b"], eRecord ["b", EInt 2; "a", EInt 1], EVar "a")))
+        "let { a = a, b = b } = { b = 2, a = 1 } in a + b"
+        (POk (ELet (eRecord ["a", EVar "a"; "b", EVar "b"], eRecord ["b", EInt 2; "a", EInt 1], EBinOp (EVar "a", Plus, EVar "b"))))
         (IOk (TConst "int"))
-        (EOk (VInt 1))
+        (EOk (VInt 3))
 
 [<Fact>]
 let ``Record patterns dont need all the fields`` () =
