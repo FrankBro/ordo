@@ -3,6 +3,17 @@ module Pattern
 open Error
 open Expr
 
+// How to match somethng like this:
+// case x of { Foo { a = Bar b }} -> 1 | otherwise -> 0 }
+//
+// This file will be used to translate patterns into more expressions. Some examples:
+// let { a = a, b = b | rest } = { a = 1, b = 2, c = 3 } in a
+// let temp1 = { a = 1, b = 2, c = 3 } in let a = temp1.a in let b = temp1.b in let rest = temp1\a\b in a
+//
+// For value matching, the pattern expression will need to be enhanced to have an extra condition expression to be executed
+// case Foo { a = 1, b = 2 } of { Foo { a = 1, b = b } -> b, Foo _ -> 0 }
+// case Foo { a = 1, b = 2 } of { Foo temp1 when temp1.a = 1 } -> let b = temp1.b in b, Foo _ -> 0 }
+
 let getRecordLabelExpr label expr =
     let rec loop expr =
         match expr with

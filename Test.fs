@@ -265,11 +265,23 @@ let ``More complex record pattern`` () =
         (IOk (TConst "int"))
         (EOk (VInt 2))
 
+let gen id = TVar {contents = Generic id}
+
 [<Fact>]
-let ``Record pattern in match`` () =
+let ``Record pattern in lambda`` () =
     test
-        "match :a { a = 1 } { :a { a = a } -> a }"
-        (POk (ECase ((EVariant ("a", eRecord ["a", EInt 1])), ["a", eRecord ["a", EVar "a"], EVar "a"], None)))
-        (IOk (TConst "int"))
+        "let f = fun { a = a } -> a in f { a = 1 }"
+        (POk (ELet (EVar "f", EFun (ERecordExtend ("a", EVar "a", ERecordEmpty), EVar "a"), ECall (EVar "f", ERecordExtend ("a", EInt 1, ERecordEmpty)))))
+        (IOk (gen 0))
         (EOk (VInt 1))
+
+// "let { a = { b = b } } = { a = { b = 2 } } in b"
+
+// [<Fact>]
+// let ``Record pattern in match`` () =
+//     test
+//         "match :a { a = 1 } { :a { a = a } -> a }"
+//         (POk (ECase ((EVariant ("a", eRecord ["a", EInt 1])), ["a", eRecord ["a", EVar "a"], EVar "a"], None)))
+//         (IOk (TConst "int"))
+//         (EOk (VInt 1))
 
