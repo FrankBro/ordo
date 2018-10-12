@@ -2,7 +2,6 @@ module Eval
 
 open Error
 open Expr
-open Pattern
 open Util
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =

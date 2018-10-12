@@ -2,7 +2,6 @@ module Infer
 
 open Error
 open Expr
-open Pattern
 open Util
 
 let currentId = ref 0
