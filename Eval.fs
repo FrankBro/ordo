@@ -4,7 +4,6 @@ open Error
 open Expr
 open Pattern
 open Util
-open Infer
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
