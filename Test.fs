@@ -53,6 +53,8 @@ let test input parserExpected inferExpected evalExpected =
     Assert.StrictEqual(evalExpected, evalResult)
 
 let g e = OrdoError.Generic e
+let e e = OrdoError.Eval e
+let i e = OrdoError.Infer e
 
 let eRecord xs =
     (ERecordEmpty, xs)
@@ -284,6 +286,23 @@ let ``Imbricked records`` () =
                     EVar "b")))
         (IOk (TConst "int"))
         (EOk (VInt 2))
+
+[<Fact>]
+let ``Variant pattern`` () =
+    test
+        "let :a a = :a 1 in a"
+        (POk (ELet (EVariant ("a", EVar "a"), EVariant ("a", EInt 1), EVar "a")))
+        (IOk (TConst "int"))
+        (EOk (VInt 1))
+
+// TODO This probably should infer correctly, even if it makes little sense, should be generic
+[<Fact>]
+let ``Bad variant pattern`` () =
+    test
+        "let :b b = :a 1 in b"
+        (POk (ELet (EVariant ("b", EVar "b"), EVariant ("a", EInt 1), EVar "b")))
+        (IFail (i RowTypeExpected))
+        (EFail (e (BadVariantPattern ("b", "a"))))
 
 // [<Fact>]
 // let ``Record pattern in match`` () =

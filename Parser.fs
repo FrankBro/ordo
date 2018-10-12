@@ -187,6 +187,7 @@ let parseIfThenElse =
 do parsePatternRef :=
     choice [
         parseParen parsePatternWs
+        parseVariant
         attempt parseVar
         attempt parseRecordEmpty
         attempt (parseRecordExtend parsePatternWs)

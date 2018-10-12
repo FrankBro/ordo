@@ -10,6 +10,7 @@ type GenericError =
     | NotARecordExpr of Expr
     | NotARecordTy of Ty
     | NotARecordValue of Value
+    | NotAVariantValue of Value
 
 type ParserError =
     | FunctionCallNoArg
@@ -25,6 +26,7 @@ type EvalError =
     | NotAFunction of Expr
     | NotAVariant of Expr
     | MissingMatchCase of Expr
+    | BadVariantPattern of Name * Name
 
 type OrdoError =
     | Generic of GenericError
@@ -38,4 +40,3 @@ let genericError g = OrdoException (Generic g)
 let parserError p = OrdoException (Parser p)
 let inferError i = OrdoException (Infer i)
 let evalError e = OrdoException (Eval e)
-

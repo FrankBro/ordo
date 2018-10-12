@@ -108,6 +108,15 @@ and evalPattern (env: Map<string, Value>) pattern (value: Value) =
                 loop env record (VRecord remainingFields)
             | _ ->
                 raise (genericError (NotARecordValue value))
+        | EVariant (label, expr) ->
+            match value with
+            | VVariant (name, value) when label = name ->
+                let env = evalPattern env expr value
+                env
+            | VVariant (name, _) ->
+                raise (evalError (BadVariantPattern (label, name)))
+            | _ ->
+                raise (genericError (NotAVariantValue value))
         | _ -> 
             raise (genericError (InvalidPattern pattern))
     loop env pattern value
