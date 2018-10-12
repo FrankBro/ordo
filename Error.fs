@@ -27,6 +27,7 @@ type EvalError =
     | NotAVariant of Expr
     | MissingMatchCase of Expr
     | BadVariantPattern of Name * Name
+    | BadBinOp
 
 type OrdoError =
     | Generic of GenericError

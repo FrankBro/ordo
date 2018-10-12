@@ -268,6 +268,14 @@ let ``Record pattern multiple unordered fields`` () =
         (EOk (VInt 1))
 
 [<Fact>]
+let ``Record patterns dont need all the fields`` () =
+    test
+        "let { a = a } = { a = 1, b = 2 } in a"
+        (POk (ELet (ERecordExtend ("a", EVar "a", ERecordEmpty), eRecord ["a", EInt 1; "b", EInt 2], EVar "a")))
+        (IOk (TConst "int"))
+        (EOk (VInt 1))
+
+[<Fact>]
 let ``More complex record pattern`` () =
     test
         "let { a = a | r } = { b = 2, a = 1 } in r.b"
@@ -319,6 +327,30 @@ let ``Variant pattern in lambda`` () =
         (POk (ELet (EVar "f", EFun (EVariant ("a", EVar "a"), EVar "a"), ECall (EVar "f", EVariant ("a", EInt 1)))))
         (IOk (TConst "int"))
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Plus integer`` () =
+    test
+        "1 + 2"
+        (POk (EBinOp (EInt 1, Plus, EInt 2)))
+        (IOk (TConst "int"))
+        (EOk (VInt 3))
+
+[<Fact>]
+let ``Plus float`` () =
+    test
+        "1. + 2."
+        (POk (EBinOp (EFloat 1., Plus, EFloat 2.)))
+        (IOk (TConst "float"))
+        (EOk (VFloat 3.))
+
+[<Fact>]
+let ``Binop fail`` () =
+    test
+        "1 + 2."
+        (POk (EBinOp (EInt 1, Plus, EFloat 2.)))
+        (IFail (i (UnifyFail (TConst "int", TConst "float"))))
+        (EFail (e BadBinOp))
 
 // [<Fact>]
 // let ``Record pattern in match`` () =

@@ -37,6 +37,6 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    let input = "let :b b = :a 1 in b"
+    let input = "1. + 2."
     test input
     0 // return an integer exit code

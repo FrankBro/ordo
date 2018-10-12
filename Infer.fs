@@ -187,6 +187,11 @@ let rec inferExpr env level = function
             raise (genericError IfValueNotBoolean)
         unify b c
         c
+    | EBinOp (a, _, b) ->
+        let a = inferExpr env (level + 1) a
+        let b = inferExpr env (level + 1) b
+        unify a b
+        b
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
         let patternTy, fnEnv = inferPattern env level pattern

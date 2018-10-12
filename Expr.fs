@@ -6,6 +6,13 @@ open Util
 
 type Name = String
 
+type BinOp =
+    | Plus
+with
+    override x.ToString () =
+        match x with
+        | Plus -> "Plus"
+
 type Expr =
     | EBool of bool
     | EInt of int
@@ -21,6 +28,7 @@ type Expr =
     | EVariant of Name * Expr
     | ECase of Expr * (Name * Pattern * Expr) list * (Pattern * Expr) option
     | EIfThenElse of Expr * Expr * Expr
+    | EBinOp of Expr * BinOp * Expr
 with
     override x.ToString () =
         match x with
@@ -38,6 +46,7 @@ with
         | EVariant (label, a) -> sprintf "EVariant (%s, %O)" label a
         | ECase _ -> "ECase"
         | EIfThenElse (a, b, c) -> sprintf "EIfThenElse (%O, %O, %O)" a b c
+        | EBinOp (a, op, b) -> sprintf "EBinOp (%O, %O, %O)" a op b
 
 and Pattern = Expr
 
@@ -85,6 +94,9 @@ type Value =
     | VFun of Pattern * Expr
     | VRecord of Map<Name, Value>
     | VVariant of Name * Value
+
+let stringOfBinOp = function
+    | Plus -> "+"
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
@@ -140,6 +152,11 @@ let stringOfExpr (x: Expr) : string =
             let b = f false thenExpr
             let c = f false elseExpr
             sprintf "if %s then %s else %s" a b c
+        | EBinOp (a, op, b) ->
+            let a = f false a
+            let op = stringOfBinOp op
+            let b = f false b
+            sprintf "%s %s %s" a op b
     f false x
 
 let stringOfTy (x: Ty) : string =

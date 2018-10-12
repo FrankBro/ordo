@@ -2,6 +2,7 @@ module Parser
 
 open System 
 
+open FParsec
 open FParsec.CharParsers
 open FParsec.Primitives
 
@@ -194,6 +195,15 @@ do parsePatternRef :=
         attempt (parseRecordInit parsePatternWs)
     ]
 
+// let opp = OperatorPrecedenceParser<Expr, unit, ParserState>()
+// opp.TermParser <- choice [
+//     attempt parseFloat
+//     attempt parseInt
+//     attempt parseVar
+// ]
+
+// opp.AddOperator(InfixOperator("+", ws, 1, Associativity.Left, (fun a b -> EBinOp (a, Plus, b))))
+
 let parseNotCallOrRecordSelect =
     choice [
         parseParen parseExprWs
@@ -217,8 +227,11 @@ let parseAnything  =
     >>= fun result ->
         match result with
         | [one] ->
-            attempt (strWs "." >>. identWs) |>> fun field -> ERecordSelect (one, field)
-            <|> preturn one
+            choice [
+                attempt (strWs "+" >>. parseExprWs) |>> fun two -> EBinOp (one, Plus, two)
+                attempt (strWs "." >>. identWs) |>> fun field -> ERecordSelect (one, field)
+                preturn one
+            ]
         | _ -> 
             let rec loop state exprs =
                 match state, exprs with
@@ -229,16 +242,16 @@ let parseAnything  =
             let calls = loop None result
             preturn calls
 
-do parseExprRef := parseAnything
+do parseExprRef := parseAnything 
 
 let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
     match runParserOnString parser ParserState.New "" input with
     | ParserResult.Success (result, state, pos) -> result
     | ParserResult.Failure (se, e, state) -> 
         failwith "Parser error" 
-let inline readExpr input = readOrThrow parseExpr input
+let inline readExpr input = readOrThrow (parseExpr .>> eof) input
 let inline readExprList input : Expr list =
-    let parser = (sepEndBy parseExpr ws)
+    let parser = (sepEndBy parseExpr ws) .>> eof
     readOrThrow parser input
 
 // let parseTy, parseTyRef = createParserForwardedToRef ()

@@ -86,6 +86,14 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VBool false -> evalExpr env elseExpr
         | _ -> 
             raise (genericError IfValueNotBoolean )
+    | EBinOp (a, op, b) ->
+        let a = evalExpr env a
+        let b = evalExpr env b
+        match a, op, b with
+        | VInt a, Plus, VInt b -> VInt (a + b)
+        | VFloat a, Plus, VFloat b -> VFloat (a + b)
+        | _ -> 
+            raise (evalError BadBinOp)
 
 and evalPattern (env: Map<string, Value>) pattern (value: Value) =
     let rec loop env pattern (value: Value) =
