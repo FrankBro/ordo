@@ -22,6 +22,7 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic _ } -> 
             ()
+            // why did this have to fail before introducing pattern matching?
             //failwithf "occursCheckAdjustLevels with Generic"
         | TVar ({contents = Unbound (otherId, otherLevel)} as otherTvar) ->
             if otherId = tvarId then
@@ -170,27 +171,13 @@ let rec inferExpr env level = function
         let varTy = inferExpr env (level + 1) valueExpr
         let generalizedTy = generalizeTy level varTy
         let patternTy, bodyEnv = inferPattern env level pattern
-        printfn "Let Before unify:"
-        printfn "generalizedTy = %O" generalizedTy
-        printfn "patternTy = %O" patternTy
         unify patternTy generalizedTy
-        printfn "Let After unify:"
-        printfn "generalizedTy = %O" generalizedTy
-        printfn "patternTy = %O" patternTy
         inferExpr bodyEnv level bodyExpr
     | ECall (fnExpr, argExpr) ->
         let paramTy, returnTy =
             matchFunTy (inferExpr env level fnExpr)
         let argTy = inferExpr env level argExpr
-        printfn "Call Before unify:"
-        printfn "paramTy = %O" paramTy
-        printfn "argTy = %O" argTy
-        printfn "returnTy = %O" returnTy
         unify paramTy argTy
-        printfn "Call After unify:"
-        printfn "paramTy = %O" paramTy
-        printfn "argTy = %O" argTy
-        printfn "returnTy = %O" returnTy
         returnTy
     | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
         let a = inferExpr env (level + 1) ifExpr
@@ -203,6 +190,7 @@ let rec inferExpr env level = function
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
         let patternTy, fnEnv = inferPattern env level pattern
+        unify patternTy paramTy
         let returnTy = inferExpr fnEnv level bodyExpr
         TArrow (paramTy, returnTy)
     | ERecordEmpty -> TRecord TRowEmpty

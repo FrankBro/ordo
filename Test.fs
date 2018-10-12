@@ -272,10 +272,18 @@ let ``Record pattern in lambda`` () =
     test
         "let f = fun { a = a } -> a in f { a = 1 }"
         (POk (ELet (EVar "f", EFun (ERecordExtend ("a", EVar "a", ERecordEmpty), EVar "a"), ECall (EVar "f", ERecordExtend ("a", EInt 1, ERecordEmpty)))))
-        (IOk (gen 0))
+        (IOk (TConst "int"))
         (EOk (VInt 1))
 
-// "let { a = { b = b } } = { a = { b = 2 } } in b"
+[<Fact>]
+let ``Imbricked records`` () =
+    test
+        "let { a = { b = b } } = { a = { b = 2 } } in b"
+        (POk (ELet (ERecordExtend ("a", ERecordExtend ("b", EVar "b", ERecordEmpty), ERecordEmpty), 
+                    ERecordExtend ("a", ERecordExtend ("b", EInt 2, ERecordEmpty), ERecordEmpty),
+                    EVar "b")))
+        (IOk (TConst "int"))
+        (EOk (VInt 2))
 
 // [<Fact>]
 // let ``Record pattern in match`` () =
@@ -284,4 +292,3 @@ let ``Record pattern in lambda`` () =
 //         (POk (ECase ((EVariant ("a", eRecord ["a", EInt 1])), ["a", eRecord ["a", EVar "a"], EVar "a"], None)))
 //         (IOk (TConst "int"))
 //         (EOk (VInt 1))
-

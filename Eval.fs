@@ -23,12 +23,12 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VFun (pattern, bodyExpr) ->
             let initialEnv = env
             let argValue = evalExpr initialEnv argExpr
-            let fnEnv = consumePattern env pattern argValue
+            let fnEnv = evalPattern env pattern argValue
             evalExpr fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
     | ELet (pattern, valueExpr, bodyExpr) ->
         let value = evalExpr env valueExpr
-        let env = consumePattern env pattern value
+        let env = evalPattern env pattern value
         evalExpr env bodyExpr
     | ERecordEmpty  -> VRecord Map.empty
     | EVariant (label, expr) ->
@@ -76,7 +76,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                     )
                 )
             let initialEnv = env
-            let fnEnv = consumePattern env pattern value
+            let fnEnv = evalPattern env pattern value
             evalExpr fnEnv expr
         | _ -> 
             raise (evalError (NotAVariant valueExpr))
@@ -87,13 +87,13 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VBool false -> evalExpr env elseExpr
         | _ -> 
             raise (genericError IfValueNotBoolean )
-        
-and consumePattern (env: Map<string, Value>) pattern (value: Value) =
+
+and evalPattern (env: Map<string, Value>) pattern (value: Value) =
     let rec loop env pattern (value: Value) =
         match pattern with
         | EVar var -> Map.add var value env
         | ERecordEmpty -> env
-        | ERecordExtend (label, EVar var, record) ->
+        | ERecordExtend (label, expr, record) ->
             match value with
             | VRecord fields ->
                 let field = 
@@ -102,10 +102,10 @@ and consumePattern (env: Map<string, Value>) pattern (value: Value) =
                     |> Option.defaultWith (fun () ->
                         raise (genericError (FieldNotFound label))
                     )
+                let env = evalPattern env expr field
                 let remainingFields =
                     fields
                     |> Map.remove label
-                let env = Map.add var field env 
                 loop env record (VRecord remainingFields)
             | _ ->
                 raise (genericError (NotARecordValue value))
