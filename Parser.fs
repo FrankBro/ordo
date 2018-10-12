@@ -240,45 +240,45 @@ let inline readExprList input : Expr list =
     let parser = (sepEndBy parseExpr ws)
     readOrThrow parser input
 
-let parseTy, parseTyRef = createParserForwardedToRef ()
+// let parseTy, parseTyRef = createParserForwardedToRef ()
 
-let parseTyWs = parseTy .>> ws
-let parseTyListWs = sepBy parseTyWs (strWs ",")
+// let parseTyWs = parseTy .>> ws
+// let parseTyListWs = sepBy parseTyWs (strWs ",")
 
-let parseTConst =
-    identWs |>> TConst
+// let parseTConst =
+//     identWs |>> TConst
 
-let parseTApp : Parser<Ty> =
-    parseTyWs .>> strWs "[" .>>. parseTyListWs .>> strWs "]"
-    |>> TApp
+// let parseTApp : Parser<Ty> =
+//     parseTyWs .>> strWs "[" .>>. parseTyListWs .>> strWs "]"
+//     |>> TApp
 
-let parseTArrow : Parser<Ty> =
-    parseTyWs .>> strWs "->" .>>. parseTyWs
-    |>> TArrow
+// let parseTArrow : Parser<Ty> =
+//     parseTyWs .>> strWs "->" .>>. parseTyWs
+//     |>> TArrow
 
-let nameToIdMap = ref Map.empty
+// let nameToIdMap = ref Map.empty
 
-let nameToId s : Ty =
-    let m = !nameToIdMap
-    m 
-    |> Map.tryFind s 
-    |> Option.defaultWith (fun () ->
-        let id = newGenVar ()
-        nameToIdMap := Map.add s id m
-        id
-    )
+// let nameToId s : Ty =
+//     let m = !nameToIdMap
+//     m 
+//     |> Map.tryFind s 
+//     |> Option.defaultWith (fun () ->
+//         let id = newGenVar ()
+//         nameToIdMap := Map.add s id m
+//         id
+//     )
 
-let parseTVar : Parser<Ty> =
-    strWs "'" >>. identWs
-    |>> nameToId
+// let parseTVar : Parser<Ty> =
+//     strWs "'" >>. identWs
+//     |>> nameToId
 
-let parseTEmptyRecord : Parser<Ty> =
-    strWs "{" .>> strWs "}"
-    |>> fun _ -> TRecord TRowEmpty
+// let parseTEmptyRecord : Parser<Ty> =
+//     strWs "{" .>> strWs "}"
+//     |>> fun _ -> TRecord TRowEmpty
 
-let parseTRowFields : Parser<(string * Ty) list> =
-    let field = identWs .>>. parseTyWs
-    sepBy1 field (strWs ",")
+// let parseTRowFields : Parser<(string * Ty) list> =
+//     let field = identWs .>>. parseTyWs
+//     sepBy1 field (strWs ",")
 
 // let parseTRecord : Parser<Ty> =
 //     strWs "{" >>. parseTRowFields .>> strWs "}"
