@@ -304,6 +304,14 @@ let ``Bad variant pattern`` () =
         (IFail (i RowTypeExpected))
         (EFail (e (BadVariantPattern ("b", "a"))))
 
+[<Fact>]
+let ``Variant pattern in lambda`` () =
+    test
+        "let f = fun (:a a) -> a in f (:a 1)"
+        (POk (ELet (EVar "f", EFun (EVariant ("a", EVar "a"), EVar "a"), ECall (EVar "f", EVariant ("a", EInt 1)))))
+        (IOk (TConst "int"))
+        (EOk (VInt 1))
+
 // [<Fact>]
 // let ``Record pattern in match`` () =
 //     test
