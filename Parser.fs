@@ -229,6 +229,17 @@ let parseAnything  =
         | [one] ->
             choice [
                 attempt (strWs "+" >>. parseExprWs) |>> fun two -> EBinOp (one, Plus, two)
+                attempt (strWs "-" >>. parseExprWs) |>> fun two -> EBinOp (one, Minus, two)
+                attempt (strWs "*" >>. parseExprWs) |>> fun two -> EBinOp (one, Multiply, two)
+                attempt (strWs "/" >>. parseExprWs) |>> fun two -> EBinOp (one, Divide, two)
+                attempt (strWs "&&" >>. parseExprWs) |>> fun two -> EBinOp (one, And, two)
+                attempt (strWs "||" >>. parseExprWs) |>> fun two -> EBinOp (one, Or, two)
+                attempt (strWs "=" >>. parseExprWs) |>> fun two -> EBinOp (one, Equal, two)
+                attempt (strWs "<>" >>. parseExprWs) |>> fun two -> EBinOp (one, NotEqual, two)
+                attempt (strWs ">" >>. parseExprWs) |>> fun two -> EBinOp (one, Greater, two)
+                attempt (strWs ">=" >>. parseExprWs) |>> fun two -> EBinOp (one, GreaterEqual, two)
+                attempt (strWs "<" >>. parseExprWs) |>> fun two -> EBinOp (one, Lesser, two)
+                attempt (strWs "<=" >>. parseExprWs) |>> fun two -> EBinOp (one, LesserEqual, two)
                 attempt (strWs "." >>. identWs) |>> fun field -> ERecordSelect (one, field)
                 preturn one
             ]

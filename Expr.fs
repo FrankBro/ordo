@@ -8,10 +8,32 @@ type Name = String
 
 type BinOp =
     | Plus
+    | Minus
+    | Multiply
+    | Divide
+    | And
+    | Or
+    | Equal
+    | NotEqual
+    | Greater
+    | GreaterEqual
+    | Lesser
+    | LesserEqual
 with
     override x.ToString () =
         match x with
         | Plus -> "Plus"
+        | Minus -> "Minus"
+        | Multiply -> "Multiply"
+        | Divide -> "Divide"
+        | And -> "And"
+        | Or -> "Or"
+        | Equal -> "Equal"
+        | NotEqual -> "NotEqual"
+        | Greater -> "Greater"
+        | GreaterEqual -> "GreaterEqual"
+        | Lesser -> "Lesser"
+        | LesserEqual -> "LesserEqual"
 
 type Expr =
     | EBool of bool
@@ -97,6 +119,17 @@ type Value =
 
 let stringOfBinOp = function
     | Plus -> "+"
+    | Minus -> "-"
+    | Multiply -> "*"
+    | Divide -> "/"
+    | And -> "&&"
+    | Or -> "||"
+    | Equal -> "="
+    | NotEqual -> "<>"
+    | Greater -> ">"
+    | GreaterEqual -> ">="
+    | Lesser -> "<"
+    | LesserEqual -> "<="
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function

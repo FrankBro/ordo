@@ -87,12 +87,56 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             raise (genericError IfValueNotBoolean )
     | EBinOp (a, op, b) ->
         let a = evalExpr env a
-        let b = evalExpr env b
-        match a, op, b with
-        | VInt a, Plus, VInt b -> VInt (a + b)
-        | VFloat a, Plus, VFloat b -> VFloat (a + b)
-        | _ -> 
-            raise (evalError BadBinOp)
+        match op with
+        | And ->
+            match a with
+            | VBool true ->
+                let b = evalExpr env b
+                match b with
+                | VBool b -> VBool b
+                | _ -> 
+                    raise (evalError BadBinOp)
+            | VBool false -> VBool false
+            | _ -> 
+                raise (evalError BadBinOp)
+        | Or ->
+            match a with
+            | VBool false ->
+                let b = evalExpr env b
+                match b with
+                | VBool b -> VBool b
+                | _ -> 
+                    raise (evalError BadBinOp)
+            | VBool true -> VBool true
+            | _ -> 
+                raise (evalError BadBinOp)
+        | _ ->
+            let b = evalExpr env b
+            match a, op, b with
+            | VInt a, Plus, VInt b -> VInt (a + b)
+            | VFloat a, Plus, VFloat b -> VFloat (a + b)
+            | VInt a, Minus, VInt b -> VInt (a - b)
+            | VFloat a, Minus, VFloat b -> VFloat (a - b)
+            | VInt a, Multiply, VInt b -> VInt (a * b)
+            | VFloat a, Multiply, VFloat b -> VFloat (a * b)
+            | VInt a, Divide, VInt b -> VInt (a / b)
+            | VFloat a, Divide, VFloat b -> VFloat (a / b)
+            | VBool a, Equal, VBool b -> VBool (a = b)
+            | VInt a, Equal, VInt b -> VBool (a = b)
+            | VFloat a, Equal, VFloat b -> VBool (a = b)
+            | VBool a, NotEqual, VBool b -> VBool (a <> b)
+            | VInt a, NotEqual, VInt b -> VBool (a <> b)
+            | VFloat a, NotEqual, VFloat b -> VBool (a <> b)
+            | VInt a, Greater, VInt b -> VBool (a > b)
+            | VFloat a, Greater, VFloat b -> VBool (a > b)
+            | VInt a, GreaterEqual, VInt b -> VBool (a >= b)
+            | VFloat a, GreaterEqual, VFloat b -> VBool (a >= b)
+            | VInt a, Lesser, VInt b -> VBool (a < b)
+            | VFloat a, Lesser, VFloat b -> VBool (a < b)
+            | VInt a, LesserEqual, VInt b -> VBool (a <= b)
+            | VFloat a, LesserEqual, VFloat b -> VBool (a <= b)
+            | _ -> 
+                raise (evalError BadBinOp)
 
 and evalPattern (env: Map<string, Value>) pattern (value: Value) =
     let rec loop env pattern (value: Value) =

@@ -58,7 +58,8 @@ let rec unify ty1 ty2 =
     | TVar {contents = Link ty1}, ty2
     | ty1, TVar {contents = Link ty2} -> unify ty1 ty2
     | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} when id1 = id2 ->
-        failwithf "unify with the same type variable" // There is only a single instance of a particular type variable
+        // There is only a single instance of a particular type variable
+        failwithf "unify with the same type variable" 
     | TVar ({contents = Unbound(id, level)} as tvar), ty
     | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
         occursCheckAdjustLevels id level ty
@@ -186,11 +187,14 @@ let rec inferExpr env level = function
             raise (genericError IfValueNotBoolean)
         unify b c
         c
-    | EBinOp (a, _, b) ->
+    | EBinOp (a, op, b) ->
         let a = inferExpr env (level + 1) a
         let b = inferExpr env (level + 1) b
         unify a b
-        b
+        match op with
+        | Equal | NotEqual | Greater 
+        | GreaterEqual | Lesser | LesserEqual -> TConst "bool"
+        | _ -> b
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
         let patternTy, fnEnv = inferPattern env level pattern
