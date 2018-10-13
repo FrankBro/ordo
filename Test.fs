@@ -306,7 +306,7 @@ let ``Imbricked records`` () =
 [<Fact>]
 let ``Variant pattern`` () =
     test
-        "let :a a = :a 1 in a"
+        "let (:a a) = (:a 1) in a"
         (POk (ELet (EVariant ("a", EVar "a"), EVariant ("a", EInt 1), EVar "a")))
         (IOk (TConst "int"))
         (EOk (VInt 1))
@@ -315,7 +315,7 @@ let ``Variant pattern`` () =
 [<Fact>]
 let ``Bad variant pattern`` () =
     test
-        "let :b b = :a 1 in b"
+        "let (:b b) = (:a 1) in b"
         (POk (ELet (EVariant ("b", EVar "b"), EVariant ("a", EInt 1), EVar "b")))
         (IFail (i RowTypeExpected))
         (EFail (e (BadVariantPattern ("b", "a"))))
