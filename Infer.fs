@@ -264,15 +264,20 @@ and inferPattern env level pattern =
             let env = Map.add name var env
             (var, env)
         | ERecordExtend (label, expr, rest) ->
-            let restRowTy = newVar level
             let fieldTy = newVar level
+            let restRowTy = newVar level
             let param1Ty = fieldTy
             let param2Ty = TRecord restRowTy
             let returnTy = TRecord (TRowExtend (label, fieldTy, restRowTy))
             let infer1Ty, env = inferPattern env level expr
-            let infer2Ty, env = inferPattern env level rest
             unify param1Ty infer1Ty
-            unify param2Ty infer2Ty
+            let env =
+                match rest with
+                | ERecordEmpty -> env
+                | _ ->
+                    let infer2Ty, env = inferPattern env level rest
+                    unify param2Ty infer2Ty
+                    env
             returnTy, env
         | ERecordEmpty -> 
             TRecord TRowEmpty, env
