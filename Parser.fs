@@ -172,7 +172,7 @@ let parseRecordInit content =
 
 let parseRecordRestrict =
     let p1 = strWs "{" >>. parseExprWs
-    let p2 = strWs "-" >>. identWs .>> strWs "}"
+    let p2 = strWs "\\" >>. identWs .>> strWs "}"
     pipe2 p1 p2 (fun expr label -> ERecordRestrict (expr, label))
 
 let parseRecordSelect =
