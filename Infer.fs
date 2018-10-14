@@ -156,6 +156,19 @@ let boolTy = TConst "bool"
 let intTy = TConst "int"
 let floatTy = TConst "float"
 
+let makeVariantCases cases =
+    let transformed =
+        cases
+        |> List.choose (fun (pattern, expr) ->
+            match pattern with
+            | EVariant (name, pattern) -> Some (name, pattern, expr)
+            | _ -> None
+        )
+    if List.length cases = List.length transformed then
+        Some transformed
+    else
+        None
+
 let rec inferExpr env level = function
     | EBool _ -> boolTy
     | EInt _ -> intTy
@@ -233,21 +246,28 @@ let rec inferExpr env level = function
         unify paramTy (inferExpr env level expr)
         returnTy
     | ECase (expr, cases, None) ->
-        let returnTy = newVar level
-        let exprTy = inferExpr env level expr
-        let casesRow = inferCases env level returnTy TRowEmpty cases
-        unify exprTy (TVariant casesRow)
-        returnTy
-    | ECase (expr, cases, Some (pattern, defaultExpr)) ->
-        let defaultVariantTy = newVar level
-        let valueTy = TVariant defaultVariantTy
-        let (EVar name) = pattern
-        let env = Map.add name valueTy env
-        let returnTy = inferExpr env level defaultExpr
-        let exprTy = inferExpr env level expr
-        let casesRow = inferCases env level returnTy defaultVariantTy cases
-        unify exprTy (TVariant casesRow)
-        returnTy
+        match makeVariantCases cases with
+        | Some cases ->
+            let returnTy = newVar level
+            let exprTy = inferExpr env level expr
+            let casesRow = inferCases env level returnTy TRowEmpty cases
+            unify exprTy (TVariant casesRow)
+            returnTy
+        | _ ->
+            failwith "TODO"
+    | ECase (expr, cases, Some (name, defaultExpr)) ->
+        match makeVariantCases cases with
+        | Some cases ->
+            let defaultVariantTy = newVar level
+            let valueTy = TVariant defaultVariantTy
+            let env = Map.add name valueTy env
+            let returnTy = inferExpr env level defaultExpr
+            let exprTy = inferExpr env level expr
+            let casesRow = inferCases env level returnTy defaultVariantTy cases
+            unify exprTy (TVariant casesRow)
+            returnTy
+        | _ ->
+            failwith "TODO"
 
 and inferCases env level returnTy restRowTy cases =
     match cases with

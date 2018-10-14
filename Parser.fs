@@ -107,42 +107,29 @@ let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs
     |>> EVariant
 
-let parseMatchNormalCase =
-    let pa = strWs ":" >>. identWs
-    let pb = parsePatternWs
-    let pc = strWs "->" >>. parseExprWs
-    pipe3 pa pb pc (fun label var expr -> (Some label, var, expr))
-
-let parseMatchDefaultCase =
+let parseMatchNormalCase : Parser<Pattern * Expr> =
     let pa = parsePatternWs
     let pb = strWs "->" >>. parseExprWs
-    pipe2 pa pb (fun var expr -> (None, var, expr))
+    pipe2 pa pb (fun pattern expr -> (pattern, expr))
 
-let parseMatchCase : Parser<string option * Pattern * Expr> =
-    parseMatchNormalCase 
-    <|> parseMatchDefaultCase
+let parseMatchDefaultCase : Parser<string * Expr> =
+    let pa = identWs
+    let pb = strWs "->" >>. parseExprWs
+    pipe2 pa pb (fun var expr -> (var, expr))
 
-let parseMatchCases =
-    attempt (sepBy parseMatchCase (strWs "|"))
-    <|> (parseMatchCase |>> List.singleton)
+// let parseMatchCase : Parser<string option * Pattern * Expr> =
+//     parseMatchNormalCase 
+//     <|> parseMatchDefaultCase
+
+// let parseMatchCases =
+//     attempt (sepBy parseMatchCase (strWs "|"))
+//     <|> (parseMatchCase |>> List.singleton)
 
 let parseMatch =
     let p1 = strWs "match" >>. parseExprWs
-    let p2 = between (strWs "{") (strWs "}") parseMatchCases
-    pipe2 p1 p2 (fun expr cases  -> 
-        let normals =
-            cases 
-            |> List.choose (fun (oLabel, pattern, expr) -> 
-                oLabel
-                |> Option.map (fun label -> label, pattern, expr)
-            )
-        let oDefault =
-            cases
-            |> List.tryPick (fun (oLabel, pattern, expr) ->
-                match oLabel with
-                | None -> Some (pattern, expr)
-                | Some _ -> None
-            )
+    let p2 = strWs "{" >>. (sepBy parseMatchNormalCase (strWs "|")) 
+    let p3 = opt (parseMatchDefaultCase) .>> strWs "}"
+    pipe3 p1 p2 p3 (fun expr normals oDefault -> 
         ECase(expr, normals, oDefault)
     )
 
