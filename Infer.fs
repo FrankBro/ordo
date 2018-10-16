@@ -235,7 +235,6 @@ let rec inferExpr env level = function
     | ECase (expr, cases) ->
         match tryMakeVariantCases cases with
         | Some (cases, oDefault) ->
-            printfn "variant case: %O, %O" cases oDefault
             let defTy, returnTy, env =
                 match oDefault with
                 | None -> 
