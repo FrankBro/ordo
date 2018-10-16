@@ -156,19 +156,6 @@ let boolTy = TConst "bool"
 let intTy = TConst "int"
 let floatTy = TConst "float"
 
-let makeVariantCases cases =
-    let transformed =
-        cases
-        |> List.choose (fun (pattern, expr) ->
-            match pattern with
-            | EVariant (name, pattern) -> Some (name, pattern, expr)
-            | _ -> None
-        )
-    if List.length cases = List.length transformed then
-        Some transformed
-    else
-        None
-
 let rec inferExpr env level = function
     | EBool _ -> boolTy
     | EInt _ -> intTy
@@ -245,25 +232,23 @@ let rec inferExpr env level = function
         let returnTy = TVariant (TRowExtend (label, variantTy, restRowTy))
         unify paramTy (inferExpr env level expr)
         returnTy
-    | ECase (expr, cases, None) ->
-        match makeVariantCases cases with
-        | Some cases ->
-            let returnTy = newVar level
+    | ECase (expr, cases) ->
+        match tryMakeVariantCases cases with
+        | Some (cases, oDefault) ->
+            printfn "variant case: %O, %O" cases oDefault
+            let defTy, returnTy, env =
+                match oDefault with
+                | None -> 
+                    let returnTy = newVar level
+                    TRowEmpty, returnTy, env
+                | Some (name, defaultExpr) ->
+                    let defaultVariantTy = newVar level
+                    let valueTy = TVariant defaultVariantTy
+                    let env = Map.add name valueTy env
+                    let returnTy = inferExpr env level defaultExpr
+                    defaultVariantTy, returnTy, env
             let exprTy = inferExpr env level expr
-            let casesRow = inferCases env level returnTy TRowEmpty cases
-            unify exprTy (TVariant casesRow)
-            returnTy
-        | _ ->
-            failwith "TODO"
-    | ECase (expr, cases, Some (name, defaultExpr)) ->
-        match makeVariantCases cases with
-        | Some cases ->
-            let defaultVariantTy = newVar level
-            let valueTy = TVariant defaultVariantTy
-            let env = Map.add name valueTy env
-            let returnTy = inferExpr env level defaultExpr
-            let exprTy = inferExpr env level expr
-            let casesRow = inferCases env level returnTy defaultVariantTy cases
+            let casesRow = inferCases env level returnTy defTy cases
             unify exprTy (TVariant casesRow)
             returnTy
         | _ ->

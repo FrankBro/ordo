@@ -59,16 +59,18 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                 raise (genericError (FieldNotFound label))
             )
         | _ -> raise (genericError (NotARecordExpr recordExpr))
-    | ECase (valueExpr, cases, oDefault) ->
+    | ECase (valueExpr, cases) ->
         let valueValue = evalExpr env valueExpr
-        match valueValue with
-        | VVariant (label, value) ->
+        let oCases = tryMakeVariantCases cases
+        match valueValue, oCases with
+        | VVariant (label, value), Some (cases, oDefault) ->
             let pattern, expr =
                 cases
                 |> List.tryFind (fun (caseLabel, _, _) -> caseLabel = label)
                 |> Option.map (fun (_, pattern, expr) -> pattern, expr)
                 |> Option.defaultWith (fun () ->
                     oDefault
+                    |> Option.map (fun (name, expr) -> EVar name, expr)
                     |> Option.defaultWith (fun () ->
                         raise (evalError (MissingMatchCase valueExpr))
                     )
