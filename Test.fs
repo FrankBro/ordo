@@ -660,6 +660,14 @@ let ``Float LesserEqual false`` () =
 let ``Record pattern in match`` () =
     test
         "match :a { a = 1 } { :a { a = a } -> a }"
-        (POk (ECase ((EVariant ("a", eRecord ["a", EInt 1])), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"])))
+        (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"])))
         (IOk (TConst "int"))
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Variant pattern in match`` () =
+    test
+        "match :a (:b 2) { :a (:b b) -> b }"
+        (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"])))
+        (IOk (TConst "int"))
+        (EOk (VInt 2))
