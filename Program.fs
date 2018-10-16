@@ -37,6 +37,6 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    let input = "1. + 2."
+    let input = "match :b 1 { :a a -> 1 | otherwise -> 2 }"
     test input
     0 // return an integer exit code

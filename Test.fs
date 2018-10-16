@@ -223,7 +223,7 @@ let ``Variant`` () =
 let ``Match variant`` () =
     test
         "match :a 1 { :a a -> 1 | :y a -> 2 }"
-        (POk (ECase ((EVariant ("a", EInt 1)), ["a", EVar "a", EInt 1;"y", EVar "a", EInt 2], None)))
+        (POk (ECase ((EVariant ("a", EInt 1)), [EVariant ("a", EVar "a"), EInt 1;EVariant ("y", EVar "a"), EInt 2])))
         (IOk (TConst "int"))
         (EOk (VInt 1))
 
@@ -231,7 +231,7 @@ let ``Match variant`` () =
 let ``Match open variant`` () =
     test
         "match :b 1 { :a a -> 1 | otherwise -> 2 }"
-        (POk (ECase ((EVariant ("b", EInt 1)), ["a", EVar "a", EInt 1], Some (EVar "otherwise", EInt 2))))
+        (POk (ECase ((EVariant ("b", EInt 1)), [EVariant ("a", EVar "a"), EInt 1; EVar "otherwise", EInt 2])))
         (IOk (TConst "int"))
         (EOk (VInt 2))
 
