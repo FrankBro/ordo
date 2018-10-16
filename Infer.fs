@@ -247,21 +247,21 @@ let rec inferExpr env level = function
                     let returnTy = inferExpr env level defaultExpr
                     defaultVariantTy, returnTy, env
             let exprTy = inferExpr env level expr
-            let casesRow = inferCases env level returnTy defTy cases
+            let casesRow = inferVariantCases env level returnTy defTy cases
             unify exprTy (TVariant casesRow)
             returnTy
-        | _ ->
+        | None ->
             failwith "TODO"
 
-and inferCases env level returnTy restRowTy cases =
+and inferVariantCases env level returnTy restRowTy cases =
     match cases with
     | [] -> restRowTy
     | (label, pattern, expr) :: otherCases ->
         let variantTy = newVar level
-        let (EVar name) = pattern
-        let env = Map.add name variantTy env
+        let patternTy, env = inferPattern env level pattern
+        unify patternTy variantTy
         unify returnTy (inferExpr env level expr)
-        let otherCasesRow = inferCases env level returnTy restRowTy otherCases
+        let otherCasesRow = inferVariantCases env level returnTy restRowTy otherCases
         TRowExtend (label, variantTy, otherCasesRow)
 
 and inferPattern env level pattern =
