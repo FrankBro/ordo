@@ -127,9 +127,10 @@ let parseMatchDefaultCase : Parser<string * Expr> =
 
 let parseMatch =
     let p1 = strWs "match" >>. parseExprWs
-    let p2 = strWs "{" >>. (sepBy parseMatchNormalCase (strWs "|")) .>> strWs "}"
-    pipe2 p1 p2 (fun expr normals -> 
-        ECase(expr, normals)
+    let p2 = strWs "{" >>. (sepBy parseMatchNormalCase (strWs ",")) 
+    let p3 = opt (strWs "|" >>. parseMatchDefaultCase) .>> strWs "}"
+    pipe3 p1 p2 p3 (fun expr normals oDefault -> 
+        ECase(expr, normals, oDefault)
     )
 
 let parseRecordEmpty : Parser<Expr> = 

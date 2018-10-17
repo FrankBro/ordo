@@ -222,8 +222,8 @@ let ``Variant`` () =
 [<Fact>]
 let ``Match variant`` () =
     test
-        "match :a 1 { :a a -> 1 | :y a -> 2 }"
-        (POk (ECase ((EVariant ("a", EInt 1)), [EVariant ("a", EVar "a"), EInt 1;EVariant ("y", EVar "a"), EInt 2])))
+        "match :a 1 { :a a -> 1 , :y a -> 2 }"
+        (POk (ECase ((EVariant ("a", EInt 1)), [EVariant ("a", EVar "a"), EInt 1;EVariant ("y", EVar "a"), EInt 2], None)))
         (IOk (TConst "int"))
         (EOk (VInt 1))
 
@@ -231,7 +231,7 @@ let ``Match variant`` () =
 let ``Match open variant`` () =
     test
         "match :b 1 { :a a -> 1 | otherwise -> 2 }"
-        (POk (ECase ((EVariant ("b", EInt 1)), [EVariant ("a", EVar "a"), EInt 1; EVar "otherwise", EInt 2])))
+        (POk (ECase ((EVariant ("b", EInt 1)), [EVariant ("a", EVar "a"), EInt 1], Some ("otherwise", EInt 2))))
         (IOk (TConst "int"))
         (EOk (VInt 2))
 
@@ -660,7 +660,7 @@ let ``Float LesserEqual false`` () =
 let ``Record pattern in match`` () =
     test
         "match :a { a = 1 } { :a { a = a } -> a }"
-        (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"])))
+        (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"], None)))
         (IOk (TConst "int"))
         (EOk (VInt 1))
 
@@ -668,6 +668,6 @@ let ``Record pattern in match`` () =
 let ``Variant pattern in match`` () =
     test
         "match :a (:b 2) { :a (:b b) -> b }"
-        (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"])))
+        (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"], None)))
         (IOk (TConst "int"))
         (EOk (VInt 2))

@@ -49,7 +49,7 @@ type Expr =
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
     | EVariant of Name * Expr
-    | ECase of Expr * (Pattern * Expr) list
+    | ECase of Expr * (Pattern * Expr) list * (Name * Expr) option
     | EIfThenElse of Expr * Expr * Expr
     | EBinOp of Expr * BinOp * Expr
 with
@@ -168,14 +168,18 @@ let stringOfExpr (x: Expr) : string =
                     g (str + ", " + label + " = " + f false valueExpr) restExpr
                 | otherExpr -> str + " | " + f false otherExpr
             "{" + g (name + " = " + f false valueExpr) restExpr + "}"
-        | ECase (expr, cases) ->
+        | ECase (expr, cases, oDefault) ->
             let caseStrList = 
                 cases
                 |> List.map (fun (pattern, expr) ->
-                    "| " + f false pattern + " -> " + f false expr
+                    f false pattern + " -> " + f false expr
                 )
-                |> String.concat ""
-            "match " + f false expr + " { " + caseStrList + " } "
+                |> String.concat ", "
+            let defaultStr =
+                match oDefault with
+                | None -> ""
+                | Some (name, expr) -> sprintf "| %s -> %s" name (f false expr)
+            "match " + f false expr + " { " + caseStrList + defaultStr + " } "
         | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
             let a = f false ifExpr
             let b = f false thenExpr
@@ -262,23 +266,15 @@ let rec stringOfValue value =
     f false value
 
 let tryMakeVariantCases cases =
-    let transformed, oDefault =
-        let rec loop oDefault transformed cases = 
-            match oDefault, cases with
-            | _, [] -> (List.rev transformed, oDefault)
-            | None, (EVar def, expr) :: cases ->
-                loop (Some (def, expr)) transformed cases
-            | _, (EVariant (name, pattern), expr) :: cases ->
-                loop oDefault ((name, pattern, expr) :: transformed) cases
-            | _, _ :: cases ->
-                loop oDefault transformed cases
+    let transformed =
         cases
-        |> List.rev
-        |> loop None []
-    match transformed, oDefault with
-    | transformed, None when List.length transformed = List.length cases ->
-        Some (transformed, oDefault)
-    | transformed, Some _ when List.length transformed = (List.length cases - 1) ->
-        Some (transformed, oDefault)
-    | _ ->
+        |> List.choose (fun case ->
+            match case with
+            | EVariant (name, pattern), expr -> 
+                Some (name, pattern, expr)
+            | _ -> None
+        )
+    if List.length transformed = List.length cases then
+        Some transformed
+    else
         None

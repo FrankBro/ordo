@@ -59,11 +59,11 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                 raise (genericError (FieldNotFound label))
             )
         | _ -> raise (genericError (NotARecordExpr recordExpr))
-    | ECase (valueExpr, cases) ->
+    | ECase (valueExpr, cases, oDefault) ->
         let valueValue = evalExpr env valueExpr
         let oCases = tryMakeVariantCases cases
         match valueValue, oCases with
-        | VVariant (label, value), Some (cases, oDefault) ->
+        | VVariant (label, value), Some cases ->
             let pattern, expr =
                 cases
                 |> List.tryFind (fun (caseLabel, _, _) -> caseLabel = label)

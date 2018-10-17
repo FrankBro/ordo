@@ -232,9 +232,9 @@ let rec inferExpr env level = function
         let returnTy = TVariant (TRowExtend (label, variantTy, restRowTy))
         unify paramTy (inferExpr env level expr)
         returnTy
-    | ECase (expr, cases) ->
+    | ECase (expr, cases, oDefault) ->
         match tryMakeVariantCases cases with
-        | Some (cases, oDefault) ->
+        | Some cases ->
             let defTy, returnTy, env =
                 match oDefault with
                 | None -> 
