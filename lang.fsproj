@@ -14,6 +14,7 @@
     <Compile Include="Eval.fs" />
     <Compile Include="Optimizer.fs" />
     <Compile Include="Compiler.fs" />
+    <Compile Include="Repl.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
