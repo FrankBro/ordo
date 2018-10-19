@@ -255,15 +255,20 @@ opp.AddOperator(InfixOperator("\\", ws, 8, Associativity.Left, fun a b ->
 ))
 opp.AddOperator(InfixOperator("*", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Multiply, b)))
 opp.AddOperator(InfixOperator("/", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Divide, b)))
+
 opp.AddOperator(InfixOperator("+", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Plus, b)))
 opp.AddOperator(InfixOperator("-", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
+
 opp.AddOperator(InfixOperator("<", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
 opp.AddOperator(InfixOperator("<=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, LesserEqual, b)))
 opp.AddOperator(InfixOperator(">", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Greater, b)))
 opp.AddOperator(InfixOperator(">=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, GreaterEqual, b)))
+
 opp.AddOperator(InfixOperator("=", ws, 4, Associativity.Left, fun a b -> EBinOp (a, Equal, b)))
 opp.AddOperator(InfixOperator("<>", ws, 4, Associativity.Left, fun a b -> EBinOp (a, NotEqual, b)))
+
 opp.AddOperator(InfixOperator("&&", ws, 3, Associativity.Left, fun a b -> EBinOp (a, And, b)))
+
 opp.AddOperator(InfixOperator("||", ws, 2, Associativity.Left, fun a b -> EBinOp (a, Or, b)))
 
 opp.TermParser <- parseExprOrCall
