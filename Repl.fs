@@ -24,17 +24,27 @@ let evalString (env: Env) expr : Env * string =
     try
         let ordoExpr = Parser.readExpr expr
         match ordoExpr with
+        | EVariant ("rawtype", EVar name) ->
+            env, Map.find name env.Infer |> string
         | EVariant ("type", EVar name) ->
             env, Map.find name env.Infer |> stringOfTy
         | EVariant ("value", EVar name) ->
-            env, Map.find name env.Eval |> stringOfValue
+            env, Map.find name env.Eval |> string
         | _ ->
-            let ordoTyp = Infer.inferExpr env.Infer 0 ordoExpr
+            let ordoTy = 
+                Infer.inferExpr env.Infer 0 ordoExpr
+                |> generalize
             let ordoVal = Eval.evalExpr env.Eval ordoExpr
             let env =
                 match ordoExpr with
+                | ELet (EVar name1, _, EVar name2) when name1 = name2 ->
+                    {
+                        Infer = Map.add name1 ordoTy env.Infer
+                        Eval = Map.add name1 ordoVal env.Eval
+                    }
                 | ELet (pat, _, ret) when pat = ret ->
-                    let _, infered = inferPattern env.Infer 0 pat
+                    let patTy, infered = inferPattern env.Infer 0 pat
+                    unify ordoTy patTy
                     let evaled = evalPattern env.Eval pat ordoVal
                     {
                         Infer = infered
@@ -63,5 +73,5 @@ let rec until env pred prompt (action: Env -> string -> Env) =
 let runRepl () =
     resetId ()
     let env = Env.Empty
-    printfn "':type name' for type, ':value name' for value"
+    printfn "':type name' for type, type 'quit' to quit."
     until env ((=) "quit") (fun () -> readPrompt "ordo>>> ") evalAndPrint
