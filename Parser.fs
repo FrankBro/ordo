@@ -100,8 +100,8 @@ let parseParen element =
 let parseLet = 
     let p1 = strWs1 "let" >>. parsePatternWs
     let p2 = strWs "=" >>. parseExprWs
-    let p3 = strWs1 "in" >>. parseExprWs
-    pipe3 p1 p2 p3 (fun pattern value body -> ELet (pattern, value, body))
+    let p3 = opt (strWs1 "in" >>. parseExprWs)
+    pipe3 p1 p2 p3 (fun pattern value body -> ELet (pattern, value, body |> Option.defaultValue pattern))
 
 let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs
