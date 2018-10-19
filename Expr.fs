@@ -223,6 +223,7 @@ let stringOfTy (x: Ty) : string =
                     |> Map.add id name
                 name
             )
+            |> ((+) "'")
         | TVar {contents = Unbound(id, _)} -> "_" + string id
         | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
@@ -237,17 +238,18 @@ let stringOfTy (x: Ty) : string =
                 | otherTy -> str + " | " + f false otherTy
             g (label + " : " + f false ty) rowTy
     let tyStr = f false x
-    if count > 0 then
-        let varNames = 
-            ([], idNameMap)
-            ||> Map.fold (fun acc _ value -> value :: acc)
-        let args =
-            varNames
-            |> List.sort
-            |> String.concat " "
-        "forall[" + args + "] " + tyStr
-    else
-        tyStr
+    // if count > 0 then
+    //     let varNames = 
+    //         ([], idNameMap)
+    //         ||> Map.fold (fun acc _ value -> value :: acc)
+    //     let args =
+    //         varNames
+    //         |> List.sort
+    //         |> String.concat " "
+    //     "forall[" + args + "] " + tyStr
+    // else
+    //     tyStr
+    tyStr
 
 let rec stringOfValue value =
     let rec f isSimple value =
