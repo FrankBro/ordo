@@ -190,7 +190,7 @@ let ``Empty record`` () =
 [<Fact>]
 let ``Record restrict`` () =
     test
-        "let r = { a = 1 } in { r \\ a }"
+        "let r = { a = 1 } in r\\a"
         (POk (ELet (EVar "r", eRecord ["a", EInt 1], ERecordRestrict (EVar "r", "a"))))
         (IOk (tRecord []))
         (EOk (vRecord []))

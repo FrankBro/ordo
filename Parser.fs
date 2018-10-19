@@ -157,11 +157,6 @@ let parseRecordInit content =
     strWs "{" >>. (parseRecordLabels content .>> ws) .>> strWs "}"
     |>> fun x -> exprRecordExtend x ERecordEmpty
 
-let parseRecordRestrict =
-    let p1 = strWs "{" >>. parseExprWs
-    let p2 = strWs "\\" >>. identWs .>> strWs "}"
-    pipe2 p1 p2 (fun expr label -> ERecordRestrict (expr, label))
-
 let parseRecordSelect =
     parseExprWs .>>. (strWs "." >>. identWs)
     |>> ERecordSelect
@@ -205,7 +200,6 @@ let parseNotCallOrRecordSelect =
         attempt parseRecordEmpty
         attempt (parseRecordExtend parseExprWs)
         attempt (parseRecordInit parseExprWs)
-        attempt parseRecordRestrict
         attempt parseIfThenElse
     ]
 
@@ -228,6 +222,7 @@ let parseAnything  =
                 attempt (strWs "<" >>. parseExprWs) |>> fun two -> EBinOp (one, Lesser, two)
                 attempt (strWs "<=" >>. parseExprWs) |>> fun two -> EBinOp (one, LesserEqual, two)
                 attempt (strWs "." >>. identWs) |>> fun field -> ERecordSelect (one, field)
+                attempt (strWs "\\" >>. identWs) |>> fun field -> ERecordRestrict (one, field)
                 preturn one
             ]
         | _ -> 
