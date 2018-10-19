@@ -7,6 +7,7 @@ open Eval
 open Expr
 open Infer
 open Parser
+open Repl
 
 let test input =
     try
@@ -37,6 +38,7 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    let input = "match :b 1 { :a a -> 1 | otherwise -> 2 }"
-    test input
+    // let input = "match :b 1 { :a a -> 1 | otherwise -> 2 }"
+    // test input
+    runRepl ()
     0 // return an integer exit code
