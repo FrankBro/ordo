@@ -14,11 +14,17 @@ Where in most ml-languages, you need to pre-define your records and variants, in
 
 * For records:
 ```ocaml
-let record = { x = 1, y = 2 }
-record : { x: int, y: int }
+ordo>>> let record = { x = 1, y = 2 }
+{ x : 1, y : 2 }
+ordo>>> :type record
+{y : int, x : int}
 ```
 * For variants:
 ```ocaml
-let variant = Variant 1
-variant: <Variant: int | 'r>
+ordo>>> let variant = :variant 1
+:variant 1
+ordo>>> :type variant
+<variant : int | 'a>
 ```
+
+The extra syntax at the end of the variant means it is an open variant. Rows (record or variants) can be open or closed. By default, record literals are closed but variant literals are open.
