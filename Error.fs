@@ -15,6 +15,7 @@ type GenericError =
 
 type ParserError =
     | FunctionCallNoArg
+    | InvalidFunctionDeclaration
 
 type InferError =
     | RecursiveTypes

@@ -87,9 +87,14 @@ let parseFloat : Parser<Expr> =
     |>> EFloat
 
 let parseFun : Parser<Expr> =
-    let p1 = strWs1 "fun" >>. parsePatternWs
+    let p1 = strWs1 "fun" >>. many1 parsePatternWs
     let p2 = strWs "->" >>. parseExprWs
-    (p1 .>>. p2) |>> EFun
+    pipe2 p1 p2 (fun patterns body ->
+        (patterns, body)
+        ||> List.foldBack (fun pattern state ->
+            EFun (pattern, state)
+        )
+    )
 
 let parseVar = 
     identWs |>> EVar
@@ -98,10 +103,29 @@ let parseParen element =
     between (strWs "(") (strWs ")") element
 
 let parseLet = 
-    let p1 = strWs1 "let" >>. parsePatternWs
+    let p1 = strWs1 "let" >>. many1 parsePatternWs
     let p2 = strWs "=" >>. parseExprWs
     let p3 = opt (strWs1 "in" >>. parseExprWs)
-    pipe3 p1 p2 p3 (fun pattern value body -> ELet (pattern, value, body |> Option.defaultValue pattern))
+    pipe3 p1 p2 p3 (fun patterns value oBody -> 
+        let pattern, value =
+            match patterns with
+            | [pattern] -> pattern, value
+            | EVar name :: rest ->
+                let wrappedValue =
+                    (rest, value)
+                    ||> List.foldBack (fun pattern state ->
+                        EFun (pattern, state)
+                    )
+                EVar name, wrappedValue
+            | _ -> raise (parserError InvalidFunctionDeclaration)
+        let body =
+            oBody
+            |> Option.defaultWith (fun () ->
+                match patterns with
+                | [] -> raise (parserError InvalidFunctionDeclaration)
+                | pattern :: _ -> pattern
+            )
+        ELet (pattern, value, body))
 
 let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs

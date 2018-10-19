@@ -671,3 +671,19 @@ let ``Variant pattern in match`` () =
         (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"], None)))
         (IOk (TConst "int"))
         (EOk (VInt 2))
+
+[<Fact>]
+let ``Function sugar in let`` () =
+    test
+        "let f a b = a + b in f 1 2"
+        (POk (ELet (EVar "f", EFun (EVar "a", EFun (EVar "b", EBinOp (EVar "a", Plus, EVar "b"))), ECall (ECall (EVar "f", EInt 1), EInt 2))))
+        (IOk (TConst "int"))
+        (EOk (VInt 3))
+
+[<Fact>]
+let ``Function multiple args`` () =
+    test
+        "let f = fun a b -> a + b in f 1 2"
+        (POk (ELet (EVar "f", EFun (EVar "a", EFun (EVar "b", EBinOp (EVar "a", Plus, EVar "b"))), ECall (ECall (EVar "f", EInt 1), EInt 2))))
+        (IOk (TConst "int"))
+        (EOk (VInt 3))

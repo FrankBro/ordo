@@ -114,7 +114,7 @@ type Value =
     | VBool of bool
     | VInt of int
     | VFloat of float
-    | VFun of Pattern * Expr
+    | VFun of Map<Name, Value> * Pattern * Expr
     | VRecord of Map<Name, Value>
     | VVariant of Name * Value
 
