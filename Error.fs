@@ -16,6 +16,8 @@ type GenericError =
 type ParserError =
     | FunctionCallNoArg
     | InvalidFunctionDeclaration
+    | InvalidRecordSelect
+    | InvalidRecordRestrict
 
 type InferError =
     | RecursiveTypes
