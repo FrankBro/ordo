@@ -10,6 +10,8 @@ open Error
 open Expr
 open Infer
 open Util 
+open FParsec
+open FParsec
 
 type LetState =
     | NotInLet
@@ -202,22 +204,13 @@ do parsePatternRef :=
         attempt (parseRecordInit parsePatternWs)
     ]
 
-// let opp = OperatorPrecedenceParser<Expr, unit, ParserState>()
-// opp.TermParser <- choice [
-//     attempt parseFloat
-//     attempt parseInt
-//     attempt parseVar
-// ]
-
-// opp.AddOperator(InfixOperator("+", ws, 1, Associativity.Left, (fun a b -> EBinOp (a, Plus, b))))
-
 let parseNotCallOrRecordSelect =
     choice [
         parseParen parseExprWs
         parseBool
         attempt parseFloat
-        attempt parseInt 
-        parseFun 
+        attempt parseInt
+        parseFun
         parseLet
         attempt parseVar
         parseVariant
@@ -256,8 +249,10 @@ opp.AddOperator(InfixOperator("\\", ws, 8, Associativity.Left, fun a b ->
 opp.AddOperator(InfixOperator("*", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Multiply, b)))
 opp.AddOperator(InfixOperator("/", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Divide, b)))
 
+
 opp.AddOperator(InfixOperator("+", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Plus, b)))
-opp.AddOperator(InfixOperator("-", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
+let notArrow : Parser<unit> = notFollowedBy (str ">") >>. ws
+opp.AddOperator(InfixOperator("-", notArrow, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
 
 opp.AddOperator(InfixOperator("<", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
 opp.AddOperator(InfixOperator("<=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, LesserEqual, b)))
