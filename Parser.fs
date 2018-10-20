@@ -10,6 +10,8 @@ open Error
 open Expr
 open Infer
 open Util 
+open FParsec
+open FParsec
 
 type Parser<'t> = Parser<'t, unit>
 
@@ -26,7 +28,8 @@ let str s = pstring s
 let strWs s = str s .>> ws
 let strWs1 s = str s .>> ws1
 
-let parseExpr, parseExprRef = createParserForwardedToRef ()
+let opp = new OperatorPrecedenceParser<Expr,unit, ParserState>()
+let parseExpr = opp.ExpressionParser
 let parseExprWs = parseExpr .>> ws
 
 let parsePattern, parsePatternRef = createParserForwardedToRef ()
@@ -73,9 +76,14 @@ let parseFloat : Parser<Expr> =
     |>> EFloat
 
 let parseFun : Parser<Expr> =
-    let p1 = strWs1 "fun" >>. parsePatternWs
+    let p1 = strWs1 "fun" >>. many1 parsePatternWs
     let p2 = strWs "->" >>. parseExprWs
-    (p1 .>>. p2) |>> EFun
+    pipe2 p1 p2 (fun patterns body ->
+        (patterns, body)
+        ||> List.foldBack (fun pattern state ->
+            EFun (pattern, state)
+        )
+    )
 
 let parseVar = 
     identWs |>> EVar
@@ -84,10 +92,29 @@ let parseParen element =
     between (strWs "(") (strWs ")") element
 
 let parseLet = 
-    let p1 = strWs1 "let" >>. parsePatternWs
+    let p1 = strWs1 "let" >>. many1 parsePatternWs
     let p2 = strWs "=" >>. parseExprWs
     let p3 = opt (strWs1 "in" >>. parseExprWs)
-    pipe3 p1 p2 p3 (fun pattern value body -> ELet (pattern, value, body |> Option.defaultValue pattern))
+    pipe3 p1 p2 p3 (fun patterns value oBody -> 
+        let pattern, value =
+            match patterns with
+            | [pattern] -> pattern, value
+            | EVar name :: rest ->
+                let wrappedValue =
+                    (rest, value)
+                    ||> List.foldBack (fun pattern state ->
+                        EFun (pattern, state)
+                    )
+                EVar name, wrappedValue
+            | _ -> raise (parserError InvalidFunctionDeclaration)
+        let body =
+            oBody
+            |> Option.defaultWith (fun () ->
+                match patterns with
+                | [] -> raise (parserError InvalidFunctionDeclaration)
+                | pattern :: _ -> pattern
+            )
+        ELet (pattern, value, body))
 
 let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs
@@ -163,22 +190,13 @@ do parsePatternRef :=
         attempt (parseRecordInit parsePatternWs)
     ]
 
-// let opp = OperatorPrecedenceParser<Expr, unit, ParserState>()
-// opp.TermParser <- choice [
-//     attempt parseFloat
-//     attempt parseInt
-//     attempt parseVar
-// ]
-
-// opp.AddOperator(InfixOperator("+", ws, 1, Associativity.Left, (fun a b -> EBinOp (a, Plus, b))))
-
 let parseNotCallOrRecordSelect =
     choice [
         parseParen parseExprWs
         parseBool
         attempt parseFloat
-        attempt parseInt 
-        parseFun 
+        attempt parseInt
+        parseFun
         parseLet
         attempt parseVar
         parseVariant
@@ -189,28 +207,11 @@ let parseNotCallOrRecordSelect =
         attempt parseIfThenElse
     ]
 
-let parseAnything  =
+let parseExprOrCall =
     many1 (parseNotCallOrRecordSelect .>> ws)
     >>= fun result ->
         match result with
-        | [one] ->
-            choice [
-                attempt (strWs "+" >>. parseExprWs) |>> fun two -> EBinOp (one, Plus, two)
-                attempt (strWs "-" >>. parseExprWs) |>> fun two -> EBinOp (one, Minus, two)
-                attempt (strWs "*" >>. parseExprWs) |>> fun two -> EBinOp (one, Multiply, two)
-                attempt (strWs "/" >>. parseExprWs) |>> fun two -> EBinOp (one, Divide, two)
-                attempt (strWs "&&" >>. parseExprWs) |>> fun two -> EBinOp (one, And, two)
-                attempt (strWs "||" >>. parseExprWs) |>> fun two -> EBinOp (one, Or, two)
-                attempt (strWs "=" >>. parseExprWs) |>> fun two -> EBinOp (one, Equal, two)
-                attempt (strWs "<>" >>. parseExprWs) |>> fun two -> EBinOp (one, NotEqual, two)
-                attempt (strWs ">" >>. parseExprWs) |>> fun two -> EBinOp (one, Greater, two)
-                attempt (strWs ">=" >>. parseExprWs) |>> fun two -> EBinOp (one, GreaterEqual, two)
-                attempt (strWs "<" >>. parseExprWs) |>> fun two -> EBinOp (one, Lesser, two)
-                attempt (strWs "<=" >>. parseExprWs) |>> fun two -> EBinOp (one, LesserEqual, two)
-                attempt (strWs "." >>. identWs) |>> fun field -> ERecordSelect (one, field)
-                attempt (strWs "\\" >>. identWs) |>> fun field -> ERecordRestrict (one, field)
-                preturn one
-            ]
+        | [one] -> preturn one
         | _ -> 
             let rec loop state exprs =
                 match state, exprs with
@@ -221,7 +222,37 @@ let parseAnything  =
             let calls = loop None result
             preturn calls
 
-do parseExprRef := parseAnything 
+opp.AddOperator(InfixOperator(".", ws, 9, Associativity.Left, fun a b -> 
+    match b with 
+    | EVar name -> ERecordSelect (a, name)
+    | _ -> raise (parserError InvalidRecordSelect)
+))
+opp.AddOperator(InfixOperator("\\", ws, 8, Associativity.Left, fun a b -> 
+    match b with 
+    | EVar name -> ERecordRestrict (a, name)
+    | _ -> raise (parserError InvalidRecordRestrict)
+))
+opp.AddOperator(InfixOperator("*", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Multiply, b)))
+opp.AddOperator(InfixOperator("/", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Divide, b)))
+
+
+opp.AddOperator(InfixOperator("+", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Plus, b)))
+let notArrow : Parser<unit> = notFollowedBy (str ">") >>. ws
+opp.AddOperator(InfixOperator("-", notArrow, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
+
+opp.AddOperator(InfixOperator("<", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
+opp.AddOperator(InfixOperator("<=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, LesserEqual, b)))
+opp.AddOperator(InfixOperator(">", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Greater, b)))
+opp.AddOperator(InfixOperator(">=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, GreaterEqual, b)))
+
+opp.AddOperator(InfixOperator("=", ws, 4, Associativity.Left, fun a b -> EBinOp (a, Equal, b)))
+opp.AddOperator(InfixOperator("<>", ws, 4, Associativity.Left, fun a b -> EBinOp (a, NotEqual, b)))
+
+opp.AddOperator(InfixOperator("&&", ws, 3, Associativity.Left, fun a b -> EBinOp (a, And, b)))
+
+opp.AddOperator(InfixOperator("||", ws, 2, Associativity.Left, fun a b -> EBinOp (a, Or, b)))
+
+opp.TermParser <- parseExprOrCall
 
 let inline readOrThrow (parser: Parser<'a>) input : 'a =
     match runParserOnString parser () "" input with

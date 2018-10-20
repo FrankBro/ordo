@@ -9,7 +9,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     | EBool b -> VBool b
     | EInt i -> VInt i
     | EFloat f -> VFloat f
-    | EFun (pattern, expr) -> VFun (pattern, expr)
+    | EFun (pattern, expr) -> VFun (env, pattern, expr)
     | EVar name -> 
         Map.tryFind name env
         |> Option.defaultWith (fun () ->
@@ -18,9 +18,8 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     | ECall (fnExpr, argExpr) -> 
         let fnValue = evalExpr env fnExpr
         match fnValue with
-        | VFun (pattern, bodyExpr) ->
-            let initialEnv = env
-            let argValue = evalExpr initialEnv argExpr
+        | VFun (env, pattern, bodyExpr) ->
+            let argValue = evalExpr env argExpr
             let fnEnv = evalPattern env pattern argValue
             evalExpr fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
@@ -75,7 +74,6 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                         raise (evalError (MissingMatchCase valueExpr))
                     )
                 )
-            let initialEnv = env
             let fnEnv = evalPattern env pattern value
             evalExpr fnEnv expr
         | _ -> 
