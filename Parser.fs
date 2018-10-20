@@ -28,7 +28,7 @@ let str s = pstring s
 let strWs s = str s .>> ws
 let strWs1 s = str s .>> ws1
 
-let opp = new OperatorPrecedenceParser<Expr,unit, ParserState>()
+let opp = new OperatorPrecedenceParser<Expr,unit, unit>()
 let parseExpr = opp.ExpressionParser
 let parseExprWs = parseExpr .>> ws
 
