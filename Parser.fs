@@ -13,21 +13,7 @@ open Util
 open FParsec
 open FParsec
 
-type LetState =
-    | NotInLet
-    | LetDone
-    | EqualDone
-    | InDone
-
-type ParserState = {
-    LetState: LetState
-}
-with
-    static member New = {
-        LetState = NotInLet
-    }
-
-type Parser<'t> = Parser<'t, ParserState>
+type Parser<'t> = Parser<'t, unit>
 
 let (<!>) (p: Parser<_>) label : Parser<_> =
     fun stream ->
@@ -268,8 +254,8 @@ opp.AddOperator(InfixOperator("||", ws, 2, Associativity.Left, fun a b -> EBinOp
 
 opp.TermParser <- parseExprOrCall
 
-let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
-    match runParserOnString parser ParserState.New "" input with
+let inline readOrThrow (parser: Parser<'a>) input : 'a =
+    match runParserOnString parser () "" input with
     | ParserResult.Success (result, state, pos) -> result
     | ParserResult.Failure (se, e, state) -> 
         failwith "Parser error" 
