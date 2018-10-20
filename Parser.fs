@@ -11,21 +11,7 @@ open Expr
 open Infer
 open Util 
 
-type LetState =
-    | NotInLet
-    | LetDone
-    | EqualDone
-    | InDone
-
-type ParserState = {
-    LetState: LetState
-}
-with
-    static member New = {
-        LetState = NotInLet
-    }
-
-type Parser<'t> = Parser<'t, ParserState>
+type Parser<'t> = Parser<'t, unit>
 
 let (<!>) (p: Parser<_>) label : Parser<_> =
     fun stream ->
@@ -237,8 +223,8 @@ let parseAnything  =
 
 do parseExprRef := parseAnything 
 
-let inline readOrThrow (parser: Parser<'a,ParserState>) input : 'a =
-    match runParserOnString parser ParserState.New "" input with
+let inline readOrThrow (parser: Parser<'a>) input : 'a =
+    match runParserOnString parser () "" input with
     | ParserResult.Success (result, state, pos) -> result
     | ParserResult.Failure (se, e, state) -> 
         failwith "Parser error" 
