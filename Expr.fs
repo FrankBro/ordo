@@ -77,7 +77,9 @@ type Id = int
 type Level = int
 
 type Ty =
-    | TConst of Name
+    | TBool
+    | TInt
+    | TFloat
     | TApp of Ty * Ty list
     | TArrow of Ty * Ty
     | TVar of Tvar ref
@@ -88,7 +90,9 @@ type Ty =
 with
     override x.ToString () =
         match x with
-        | TConst name -> sprintf "TConst %s" name
+        | TBool -> "TBool"
+        | TInt -> "TInt"
+        | TFloat -> "TFloat"
         | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
         | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
         | TVar a -> sprintf "TVar %O" (!a)
@@ -201,7 +205,9 @@ let stringOfTy (x: Ty) : string =
         let name = char(97 + i)
         string name
     let rec f isSimple = function
-        | TConst name -> name
+        | TBool -> "bool"
+        | TInt -> "int"
+        | TFloat -> "float"
         | TApp (ty, tyArgList) ->
             tyArgList
             |> List.map (f false)

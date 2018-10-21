@@ -42,13 +42,13 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TRowExtend (label, fieldTy, row) ->
             f fieldTy
             f row
-        | TConst _ | TRowEmpty -> ()
+        | TBool | TInt | TFloat | TRowEmpty -> ()
     f ty
 
 let rec unify ty1 ty2 =
     if ty1 = ty2 then () else
     match ty1, ty2 with
-    | TConst name1, TConst name2 when name1 = name2 -> ()
+    | TBool, TBool | TInt, TInt | TFloat, TFloat -> ()
     | TApp (ty1, tyArgList1), TApp (ty2, tyArgList2) ->
         unify ty1 ty2
         List.iter2 unify tyArgList1 tyArgList2
@@ -110,7 +110,7 @@ let rec generalizeTy level = function
         TRowExtend (label, generalizeTy level fieldTy, generalizeTy level row)
     | TVar {contents = Generic _ }
     | TVar {contents = Unbound _ }
-    | TConst _
+    | TBool | TInt | TFloat
     | TRowEmpty as ty -> ty
 
 let generalize ty =
@@ -120,7 +120,7 @@ let instantiate level ty =
     let mutable idVarMap = Map.empty
     let rec f ty =
         match ty with
-        | TConst _ -> ty
+        | TBool | TInt | TFloat -> ty
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic id} ->
             idVarMap
@@ -152,14 +152,10 @@ let rec matchFunTy = function
         paramTy, returnTy
     | _ -> raise (inferError FunctionExpected)
 
-let boolTy = TConst "bool"
-let intTy = TConst "int"
-let floatTy = TConst "float"
-
 let rec inferExpr env level = function
-    | EBool _ -> boolTy
-    | EInt _ -> intTy
-    | EFloat _ -> floatTy
+    | EBool _ -> TBool
+    | EInt _ -> TInt
+    | EFloat _ -> TFloat
     | EVar name ->
         env
         |> Map.tryFind name
@@ -183,7 +179,7 @@ let rec inferExpr env level = function
         let a = inferExpr env (level + 1) ifExpr
         let b = inferExpr env (level + 1) thenExpr
         let c = inferExpr env (level + 1) elseExpr
-        if a <> boolTy then
+        if a <> TBool then
             raise (genericError IfValueNotBoolean)
         unify b c
         c
@@ -193,7 +189,7 @@ let rec inferExpr env level = function
         unify a b
         match op with
         | Equal | NotEqual | Greater 
-        | GreaterEqual | Lesser | LesserEqual -> TConst "bool"
+        | GreaterEqual | Lesser | LesserEqual -> TBool
         | _ -> b
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
