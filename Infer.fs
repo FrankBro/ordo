@@ -13,22 +13,22 @@ let nextId () =
 
 let resetId () = currentId := 0
 
-let newVar level = TVar (ref { Kind = Unbound(nextId (), level); Shape = Star })
-let newGenVar () = TVar (ref { Kind = Generic(nextId ()); Shape = Star })
+let newVar level = TVar (ref (Unbound(nextId (), level)))
+let newGenVar () = TVar (ref (Generic(nextId ())))
 
 let occursCheckAdjustLevels tvarId tvarLevel ty =
     let rec f = function
-        | TVar {contents = { Kind = Link ty}} -> f ty
-        | TVar {contents = { Kind = Generic _ }} -> 
+        | TVar {contents = Link ty} -> f ty
+        | TVar {contents = Generic _ } -> 
             ()
             // why did this have to fail before introducing pattern matching?
             //failwithf "occursCheckAdjustLevels with Generic"
-        | TVar ({contents = { Kind = Unbound (otherId, otherLevel); Shape = shape }} as otherTvar) ->
+        | TVar ({contents = Unbound (otherId, otherLevel)} as otherTvar) ->
             if otherId = tvarId then
                 raise (inferError RecursiveTypes)
             else
                 if otherLevel > tvarLevel then
-                    otherTvar := { Kind = Unbound(otherId, tvarLevel); Shape = shape }
+                    otherTvar := Unbound(otherId, tvarLevel)
                 else
                     ()
         | TApp (ty, tyArgList) ->
@@ -55,26 +55,26 @@ let rec unify ty1 ty2 =
     | TArrow (paramTy1, returnTy1), TArrow (paramTy2, returnTy2) ->
         unify paramTy1 paramTy2
         unify returnTy1 returnTy2
-    | TVar {contents = { Kind = Link ty1}}, ty2
-    | ty1, TVar {contents = { Kind = Link ty2}} -> unify ty1 ty2
-    | TVar {contents = { Kind = Unbound(id1, _)}}, TVar {contents = { Kind = Unbound(id2, _)}} when id1 = id2 ->
+    | TVar {contents = Link ty1}, ty2
+    | ty1, TVar {contents = Link ty2} -> unify ty1 ty2
+    | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} when id1 = id2 ->
         // There is only a single instance of a particular type variable
         failwithf "unify with the same type variable" 
-    | TVar ({contents = { Kind = Unbound(id, level); Shape = shape}} as tvar), ty
-    | ty, TVar ({contents = { Kind = Unbound(id, level); Shape = shape }} as tvar) ->
+    | TVar ({contents = Unbound(id, level)} as tvar), ty
+    | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
         occursCheckAdjustLevels id level ty
-        tvar := { Kind = Link ty; Shape = shape }
+        tvar := Link ty
     | TRecord row1, TRecord row2 -> unify row1 row2
     | TVariant row1, TVariant row2 -> unify row1 row2
     | TRowEmpty, TRowEmpty -> ()
     | TRowExtend (label1, fieldTy1, restRow1), (TRowExtend _ as row2) -> 
         let restRow1TVarRefOption =
             match restRow1 with
-            | TVar ({contents = { Kind = Unbound _}} as tvarRef) -> Some tvarRef
+            | TVar ({contents = Unbound _} as tvarRef) -> Some tvarRef
             | _ -> None
         let restRow2 = rewriteRow row2 label1 fieldTy1
         match restRow1TVarRefOption with
-        | Some {contents = { Kind = Link _}} -> raise (inferError RecursiveRowTypes)
+        | Some {contents = Link _} -> raise (inferError RecursiveRowTypes)
         | _ -> ()
         unify restRow1 restRow2
     | _, _ -> 
@@ -88,28 +88,28 @@ and rewriteRow (row2: Ty) label1 fieldTy1 =
         restRow2
     | TRowExtend (label2, fieldTy2, restRow2) ->
         TRowExtend (label2, fieldTy2, rewriteRow restRow2 label1 fieldTy1)
-    | TVar {contents = { Kind = Link row2 }} -> rewriteRow row2 label1 fieldTy1
-    | TVar ({contents = { Kind = Unbound (id, level); Shape = shape }} as tvar) ->
+    | TVar {contents = Link row2 } -> rewriteRow row2 label1 fieldTy1
+    | TVar ({contents = Unbound (id, level)} as tvar) ->
         let restRow2 = newVar level
         let ty2 = TRowExtend (label1, fieldTy1, restRow2)
-        tvar := { Kind = Link ty2; Shape = shape }
+        tvar := Link ty2
         restRow2
     | _ -> raise (inferError RowTypeExpected)
 
 let rec generalizeTy level = function
-    | TVar {contents = { Kind = Unbound(id, otherLevel); Shape = shape }} when otherLevel > level ->  
-        TVar (ref { Kind = Generic id; Shape = shape })
+    | TVar {contents = Unbound(id, otherLevel)} when otherLevel > level ->  
+        TVar (ref (Generic id))
     | TApp (ty, tyArgList) ->
         TApp (generalizeTy level ty, List.map (generalizeTy level) tyArgList)
     | TArrow (paramTy, returnTy) ->
         TArrow (generalizeTy level paramTy, generalizeTy level returnTy)
-    | TVar {contents = { Kind = Link ty}} -> generalizeTy level ty
+    | TVar {contents = Link ty} -> generalizeTy level ty
     | TRecord row -> TRecord (generalizeTy level row)
     | TVariant row -> TVariant (generalizeTy level row)
     | TRowExtend (label, fieldTy, row) ->
         TRowExtend (label, generalizeTy level fieldTy, generalizeTy level row)
-    | TVar {contents = { Kind = Generic _ }}
-    | TVar {contents = { Kind = Unbound _ }}
+    | TVar {contents = Generic _ }
+    | TVar {contents = Unbound _ }
     | TBool | TInt | TFloat
     | TRowEmpty as ty -> ty
 
@@ -121,8 +121,8 @@ let instantiate level ty =
     let rec f ty =
         match ty with
         | TBool | TInt | TFloat -> ty
-        | TVar {contents = { Kind = Link ty}} -> f ty
-        | TVar {contents = { Kind = Generic id}} ->
+        | TVar {contents = Link ty} -> f ty
+        | TVar {contents = Generic id} ->
             idVarMap
             |> Map.tryFind id
             |> Option.defaultWith (fun () ->
@@ -130,7 +130,7 @@ let instantiate level ty =
                 idVarMap <- Map.add id var idVarMap
                 var
             )
-        | TVar {contents = { Kind = Unbound _}} -> ty
+        | TVar {contents = Unbound _} -> ty
         | TApp (ty, tyArgList) ->
             TApp (f ty, List.map f tyArgList)
         | TArrow (paramTy, returnTy) ->
@@ -144,11 +144,11 @@ let instantiate level ty =
 
 let rec matchFunTy = function
     | TArrow (paramTy, returnTy) -> paramTy, returnTy
-    | TVar {contents = { Kind = Link ty}} -> matchFunTy ty
-    | TVar ({contents = { Kind = Unbound(id, level); Shape = shape }} as tvar) ->
+    | TVar {contents = Link ty} -> matchFunTy ty
+    | TVar ({contents = Unbound(id, level)} as tvar) ->
         let paramTy = newVar level
         let returnTy = newVar level
-        tvar := { Kind = Link (TArrow(paramTy, returnTy)); Shape = shape }
+        tvar := Link (TArrow(paramTy, returnTy))
         paramTy, returnTy
     | _ -> raise (inferError FunctionExpected)
 

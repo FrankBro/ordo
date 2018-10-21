@@ -70,7 +70,7 @@ let tRecord xs =
     |> TRecord
 
 let tVariant xs =
-    (TVar {contents = { Kind = Generic 0; Shape = Star }}, xs)
+    (TVar {contents = Generic 0}, xs)
     ||> List.fold (fun variant (label, value) ->
         TRowExtend (label, value, variant)
     )
@@ -283,7 +283,7 @@ let ``More complex record pattern`` () =
         (IOk TInt)
         (EOk (VInt 2))
 
-let gen id = TVar {contents = { Kind = Generic id; Shape = Star }}
+let gen id = TVar {contents = Generic id}
 
 [<Fact>]
 let ``Record pattern in lambda`` () =

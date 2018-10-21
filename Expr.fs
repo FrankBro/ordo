@@ -103,7 +103,7 @@ with
 
 and Row = Ty
 
-and TvarKind =
+and Tvar =
     | Unbound of Id * Level
     | Link of Ty
     | Generic of Id
@@ -113,26 +113,6 @@ with
         | Unbound (id, level) -> sprintf "Unbound (%d, %d)" id level
         | Link a -> sprintf "Link %O" a
         | Generic id -> sprintf "Generic %d" id
-
-and TvarShape =
-    | Star
-    | Row of RowConstraints
-with
-    override x.ToString () =
-        match x with
-        | Star -> "Star"
-        | Row constraints -> sprintf "Row %O" constraints
-
-and RowConstraints = Set<string>
-
-and Tvar = {
-    Kind: TvarKind
-    Shape: TvarShape
-}
-with
-    override x.ToString () =
-        sprintf "{ Kind = %O; Shape = %O }" x.Kind x.Shape
-
 
 type Value =
     | VBool of bool
@@ -239,7 +219,7 @@ let stringOfTy (x: Ty) : string =
                 let returnTyStr = f false returnTy
                 sprintf "%s -> %s" paramTyStr returnTyStr
             if isSimple then "(" + arrowTyStr + ")" else arrowTyStr
-        | TVar {contents = { Kind = Generic id}} ->
+        | TVar {contents = Generic id} ->
             idNameMap
             |> Map.tryFind id
             |> Option.defaultWith (fun () ->
@@ -250,8 +230,8 @@ let stringOfTy (x: Ty) : string =
                 name
             )
             |> ((+) "'")
-        | TVar {contents = { Kind = Unbound(id, _)}} -> "_" + string id
-        | TVar {contents = { Kind = Link ty}} -> f isSimple ty
+        | TVar {contents = Unbound(id, _)} -> "_" + string id
+        | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
         | TVariant rowTy -> "<" + f false rowTy + ">"
         | TRowEmpty -> ""
@@ -260,7 +240,7 @@ let stringOfTy (x: Ty) : string =
                 | TRowEmpty -> str
                 | TRowExtend (label, ty, rowTy) ->
                     g (str + ", " + label + " : " + f false ty) rowTy
-                | TVar {contents = { Kind = Link ty}} -> g str ty
+                | TVar {contents = Link ty} -> g str ty
                 | otherTy -> str + " | " + f false otherTy
             g (label + " : " + f false ty) rowTy
     let tyStr = f false x
