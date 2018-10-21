@@ -38,11 +38,7 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    // "match :a { a = 1 } { :a { a = a } -> a }"
-    // "match :a (:b 2) { :a (:b b) -> b }"
-    // "match :a 1 { :a a -> 1 , :y a -> 2 }"
-    // "match :b 1 { :a a -> 1 | otherwise -> 2 }"
-    let input = "match :a { a = 1 } { :a { a = a } -> a }"
+    let input = "{ x = 1 | { x = 0 }\\x }"
     test input
     // runRepl ()
     0 // return an integer exit code
