@@ -695,3 +695,11 @@ let ``Binop a record field`` () =
         (POk (ELet (EVar "r", eRecord ["x", EInt 0], EBinOp (ERecordSelect (EVar "r", "x"), Plus, EInt 1))))
         (IOk TInt)
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Record match sugar`` () =
+    test
+        "let f {x,y} = x + y in f 1 2"
+        (POk (ELet (EVar "f", EFun (eRecord ["x", EVar "x"; "y", EVar "y"], EBinOp (EVar "x", Plus, EVar "y")), ECall (ECall (EVar "f", EInt 1), EInt 2))))
+        (IOk (failwith "todo"))
+        (EOk (VInt 3))

@@ -180,6 +180,14 @@ let parseIfThenElse =
     let p3 = strWs1 "else" >>. parseExprWs
     pipe3 p1 p2 p3 (fun ifExpr thenExpr elseExpr -> EIfThenElse (ifExpr, thenExpr, elseExpr))
 
+let parseRecordPattern =
+    strWs "{" >>. sepBy1 identWs (strWs ",") .>> strWs "}"
+    |>> fun labels -> 
+        (ERecordEmpty, labels)
+        ||> List.fold (fun state label ->
+            ERecordExtend (label, EVar label, state)
+        )
+
 do parsePatternRef :=
     choice [
         parseParen parsePatternWs
@@ -188,6 +196,7 @@ do parsePatternRef :=
         attempt parseRecordEmpty
         attempt (parseRecordExtend parsePatternWs)
         attempt (parseRecordInit parsePatternWs)
+        attempt parseRecordPattern
     ]
 
 let parseNotCallOrRecordSelect =
