@@ -77,6 +77,7 @@ type Id = int
 type Level = int
 
 type Ty =
+    | TConst of Name
     | TBool
     | TInt
     | TFloat
@@ -90,6 +91,7 @@ type Ty =
 with
     override x.ToString () =
         match x with
+        | TConst name -> name
         | TBool -> "TBool"
         | TInt -> "TInt"
         | TFloat -> "TFloat"
@@ -247,6 +249,7 @@ let stringOfTy (x: Ty) : string =
             name
         )
     let rec f isSimple = function
+        | TConst name -> name
         | TBool -> "bool"
         | TInt -> "int"
         | TFloat -> "float"

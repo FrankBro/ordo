@@ -53,7 +53,7 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TRowExtend (label, fieldTy, row) ->
             f fieldTy
             f row
-        | TBool | TInt | TFloat | TRowEmpty -> ()
+        | TConst _ | TBool | TInt | TFloat | TRowEmpty -> ()
     f ty
 
 let rec unify ty1 ty2 =
@@ -149,7 +149,7 @@ let rec generalizeTy level = function
     | TVar {contents = GenericRow _ }
     | TVar {contents = Unbound _ }
     | TVar {contents = UnboundRow _ }
-    | TBool | TInt | TFloat
+    | TConst _ | TBool | TInt | TFloat
     | TRowEmpty as ty -> ty
 
 let generalize ty =
@@ -159,7 +159,7 @@ let instantiate level ty =
     let mutable idVarMap = Map.empty
     let rec f ty =
         match ty with
-        | TBool | TInt | TFloat -> ty
+        | TConst _ | TBool | TInt | TFloat -> ty
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic id} ->
             idVarMap
