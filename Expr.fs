@@ -202,26 +202,50 @@ let stringOfExpr (x: Expr) : string =
             sprintf "%s %s %s" a op b
     f false x
 
+type Entry = {
+    Name: Name
+    Constraints: Set<Name>
+}
+with
+    static member Simple name = { Name = name; Constraints = Set.empty }
+    static member Row name constraints = { Name = name; Constraints = constraints }
+
 let stringOfTy (x: Ty) : string =
-    let mutable idNameMap = Map.empty
+    let mutable idNameMap = Map.empty<Id, Entry>
     let mutable count = 0
+    let mutable rowCount = 0
     let nextName () =
         let i = count
         count <- i + 1
         let name = char(97 + i)
         string name
+    let nextRowName () =
+        let i = count
+        count <- i + 1
+        let name = if i = 0 then "r" else sprintf "r%d" i
+        string name
     let genericName id =
         idNameMap
         |> Map.tryFind id
+        |> Option.map (fun entry -> entry.Name)
         |> Option.defaultWith (fun () ->
             let name = nextName ()
             idNameMap <-
                 idNameMap
-                |> Map.add id name
+                |> Map.add id (Entry.Simple name)
             name
         )
-        |> ((+) "'")
-
+    let genericRowName id constraints =
+        idNameMap
+        |> Map.tryFind id
+        |> Option.map (fun entry -> entry.Name)
+        |> Option.defaultWith (fun () ->
+            let name = nextRowName ()
+            idNameMap <-
+                idNameMap
+                |> Map.add id (Entry.Row name constraints)
+            name
+        )
     let rec f isSimple = function
         | TBool -> "bool"
         | TInt -> "int"
@@ -241,12 +265,8 @@ let stringOfTy (x: Ty) : string =
             let name = genericName id
             name
         | TVar {contents = GenericRow (id, constraints)} ->
-            let name = genericName id
-            let constraints =
-                constraints
-                |> Set.map ((+) "\\")
-                |> String.concat ""
-            name + constraints
+            let name = genericRowName id constraints
+            name
         | TVar {contents = Unbound(id, _)} -> "_" + string id
         | TVar {contents = UnboundRow(id, _, _)} -> "_" + string id
         | TVar {contents = Link ty} -> f isSimple ty
@@ -262,18 +282,32 @@ let stringOfTy (x: Ty) : string =
                 | otherTy -> str + " | " + f false otherTy
             g (label + " : " + f false ty) rowTy
     let tyStr = f false x
-    // if count > 0 then
-    //     let varNames = 
-    //         ([], idNameMap)
-    //         ||> Map.fold (fun acc _ value -> value :: acc)
-    //     let args =
-    //         varNames
-    //         |> List.sort
-    //         |> String.concat " "
-    //     "forall[" + args + "] " + tyStr
-    // else
-    //     tyStr
-    tyStr
+    if count > 0 || rowCount > 0 then
+        let varNames = 
+            ([], idNameMap)
+            ||> Map.fold (fun acc _ value -> value :: acc)
+        let args =
+            varNames
+            |> List.map (fun entry -> entry.Name)
+            |> List.sort
+            |> String.concat " "
+        let constraints =
+            let constraints =
+                varNames
+                |> List.sortBy (fun entry -> entry.Name)
+                |> List.choose (fun entry ->
+                    if Set.isEmpty entry.Constraints
+                    then None
+                    else 
+                        Set.fold (fun state constraint_ -> state + "\\" + constraint_) entry.Name entry.Constraints
+                        |> Some
+                )
+            if List.isEmpty constraints 
+            then " => "
+            else (sprintf ". (%s) => " (String.concat ", " constraints))
+        "forall " + args + constraints + tyStr
+    else
+        tyStr
 
 let rec stringOfValue value =
     let rec f isSimple value =
