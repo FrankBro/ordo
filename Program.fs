@@ -40,5 +40,19 @@ let test input =
 let main argv =
     // let input = "{ x = 1 | { x = 0 }\\x }"
     // test input
-    runRepl ()
+    // runRepl ()
+    let print i =
+        printfn "%s, %O" i (readType i)
+    // print "bool"
+    // print "int"
+    // print "float"
+    // print "const"
+    // print "{}"
+    // print "{ x : int, y : int }"
+    // print "{ x : int | r }"
+    // print "< x : int, y : int >"
+    // print "< x : int | r >"
+    // print "int -> int -> int"
+    // print "list[int]"
+    print "forall a => a -> a -> a"
     0 // return an integer exit code
