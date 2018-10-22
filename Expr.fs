@@ -103,16 +103,22 @@ with
 
 and Row = Ty
 
+and Constraints = Set<Name>
+
 and Tvar =
     | Unbound of Id * Level
+    | UnboundRow of Id * Level * Constraints
     | Link of Ty
     | Generic of Id
+    | GenericRow of Id * Constraints
 with
     override x.ToString () =
         match x with
         | Unbound (id, level) -> sprintf "Unbound (%d, %d)" id level
+        | UnboundRow (id, level, constraints) -> sprintf "UnboundRow (%d, %d, %O)" id level constraints
         | Link a -> sprintf "Link %O" a
         | Generic id -> sprintf "Generic %d" id
+        | GenericRow (id, constraints) -> sprintf "GenericRow (%d, %O)" id constraints
 
 type Value =
     | VBool of bool
@@ -204,6 +210,18 @@ let stringOfTy (x: Ty) : string =
         count <- i + 1
         let name = char(97 + i)
         string name
+    let genericName id =
+        idNameMap
+        |> Map.tryFind id
+        |> Option.defaultWith (fun () ->
+            let name = nextName ()
+            idNameMap <-
+                idNameMap
+                |> Map.add id name
+            name
+        )
+        |> ((+) "'")
+
     let rec f isSimple = function
         | TBool -> "bool"
         | TInt -> "int"
@@ -220,17 +238,17 @@ let stringOfTy (x: Ty) : string =
                 sprintf "%s -> %s" paramTyStr returnTyStr
             if isSimple then "(" + arrowTyStr + ")" else arrowTyStr
         | TVar {contents = Generic id} ->
-            idNameMap
-            |> Map.tryFind id
-            |> Option.defaultWith (fun () ->
-                let name = nextName ()
-                idNameMap <-
-                    idNameMap
-                    |> Map.add id name
-                name
-            )
-            |> ((+) "'")
+            let name = genericName id
+            name
+        | TVar {contents = GenericRow (id, constraints)} ->
+            let name = genericName id
+            let constraints =
+                constraints
+                |> Set.map ((+) "\\")
+                |> String.concat ""
+            name + constraints
         | TVar {contents = Unbound(id, _)} -> "_" + string id
+        | TVar {contents = UnboundRow(id, _, _)} -> "_" + string id
         | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
         | TVariant rowTy -> "<" + f false rowTy + ">"

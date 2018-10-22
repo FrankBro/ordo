@@ -38,7 +38,7 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    let input = "{ x = 1 | { x = 0 }\\x }"
-    test input
-    // runRepl ()
+    // let input = "{ x = 1 | { x = 0 }\\x }"
+    // test input
+    runRepl ()
     0 // return an integer exit code
