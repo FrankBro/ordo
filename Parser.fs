@@ -377,18 +377,19 @@ let parseTOpenVariant : Parser<Ty> =
         )
         |> TVariant
 
-let parseNotLeftRecursiveType = choice [
-    attempt parseTBool
-    attempt parseTInt
-    attempt parseTFloat
-    attempt parseTvar
-    attempt parseTConst
-    attempt parseTEmptyRecord
-    attempt parseTClosedRecord
-    attempt parseTOpenRecord
-    attempt parseTClosedVariant
-    attempt parseTOpenVariant
-]
+let parseNotLeftRecursiveType = 
+    choice [
+        attempt parseTBool
+        attempt parseTInt
+        attempt parseTFloat
+        attempt parseTvar
+        attempt parseTConst
+        attempt parseTEmptyRecord
+        attempt parseTClosedRecord
+        attempt parseTOpenRecord
+        attempt parseTClosedVariant
+        attempt parseTOpenVariant
+    ]
 
 let parseAll =
     many1 (parseNotLeftRecursiveType .>> ws)
