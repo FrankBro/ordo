@@ -322,6 +322,7 @@ let parseTvar =
                 match Map.tryFind name env with
                 | None -> ty
                 | Some gen -> gen
+            | TBool | TInt | TFloat -> ty
             | TVar _ -> ty
             | TApp(ty, tyArgs) -> TApp(f ty, List.map f tyArgs)
             | TArrow(param, ret) -> TArrow(f param, f ret)
