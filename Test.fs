@@ -203,7 +203,7 @@ let ``Record extend`` () =
     test
         "let r = { a = 1 } in { b = 2 | r }"
         (POk (ELet (EVar "r", eRecord ["a", EInt 1], ERecordExtend ("b", EInt 2, EVar "r"))))
-        (IOk "{b : int, a : int}")
+        (IOk "{a : int, b : int}")
         (EOk (vRecord ["a", VInt 1; "b", VInt 2]))
 
 [<Fact>]
@@ -710,7 +710,7 @@ let ``Record match to construct`` () =
     test
         "let x = 1 in let y = 2 in {x,y}"
         (POk (ELet (EVar "x", EInt 1, ELet (EVar "y", EInt 2, eRecord ["x", EVar "x"; "y", EVar "y"]))))
-        (IOk "{y : int, x : int}")
+        (IOk "{x : int, y : int}")
         (EOk (VRecord (["x", VInt 1; "y", VInt 2] |> Map.ofList)))
 
 [<Fact>]
@@ -766,7 +766,7 @@ let ``If variant restriction`` () =
     test
         "if true then :a 0 else :b 1"
         (POk (EIfThenElse (EBool true, EVariant ("a", EInt 0), EVariant ("b", EInt 1))))
-        (IOk "forall r. (r\\a\\b) => <b : int, a : int | r>")
+        (IOk "forall r. (r\\a\\b) => <a : int, b : int | r>")
         (EOk (VVariant ("a", VInt 0)))
 
 [<Fact>]
@@ -774,7 +774,7 @@ let ``Record restriction for multiple fields`` () =
     test
         "fun r -> { x = 0, y = 0 | r }"
         (POk (EFun (EVar "r", ERecordExtend ("y", EInt 0, ERecordExtend ("x", EInt 0, EVar "r")))))
-        (IOk "forall r. (r\\x\\y) => {r} -> {y : int, x : int | r}")
+        (IOk "forall r. (r\\x\\y) => {r} -> {x : int, y : int | r}")
         ESkip
 
 // test ideas

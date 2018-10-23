@@ -277,13 +277,19 @@ let stringOfTy (x: Ty) : string =
         | TVariant rowTy -> "<" + f false rowTy + ">"
         | TRowEmpty -> ""
         | TRowExtend (label, ty, rowTy) ->
-            let rec g str = function
-                | TRowEmpty -> str
+            let rec g xs = function
+                | TRowEmpty -> xs, ""
                 | TRowExtend (label, ty, rowTy) ->
-                    g (str + ", " + label + " : " + f false ty) rowTy
-                | TVar {contents = Link ty} -> g str ty
-                | otherTy -> str + " | " + f false otherTy
-            g (label + " : " + f false ty) rowTy
+                    g ((label, f false ty) :: xs) rowTy
+                | TVar {contents = Link ty} -> g xs ty
+                | otherTy -> xs, sprintf " | %s" (f false otherTy)
+            let labels, rest = g [label, f false ty] rowTy
+            let labels =
+                labels
+                |> List.sortBy fst
+                |> List.map (fun (label, ty) -> sprintf "%s : %s" label ty)
+                |> String.concat ", "
+            labels + rest
     let tyStr = f false x
     if count > 0 || rowCount > 0 then
         let varNames = 
@@ -322,6 +328,7 @@ let rec stringOfValue value =
         | VRecord fields ->
             fields
             |> Map.toList
+            |> List.sortBy fst
             |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
             |> String.concat ", "
             |> sprintf "{ %s }"
