@@ -713,6 +713,14 @@ let ``Record match to construct`` () =
         (IOk "{y : int, x : int}")
         (EOk (VRecord (["x", VInt 1; "y", VInt 2] |> Map.ofList)))
 
+[<Fact>]
+let ``Record restriction is infered on extension`` () =
+    test
+        "fun r -> { x = 0 | r }"
+        (POk (EFun (EVar "r", ERecordExtend ("x", EInt 0, EVar "r"))))
+        (IOk "forall r. (r\\x) => {r} -> {x : int | r}")
+        ESkip
+
 // test ideas
 // let f r = r\x
 // type : forall a r. (r\x) => { x: a | r} -> {r}
