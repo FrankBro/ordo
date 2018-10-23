@@ -286,7 +286,11 @@ let rec inferExpr env level = function
                     let returnTy = newVar level
                     TRowEmpty, returnTy, env
                 | Some (name, defaultExpr) ->
-                    let defaultVariantTy = newVar level
+                    let constraints =
+                        cases
+                        |> List.map (fun (name, _, _) -> name)
+                        |> set
+                    let defaultVariantTy = newRowVar level constraints
                     let valueTy = TVariant defaultVariantTy
                     let env = Map.add name valueTy env
                     let returnTy = inferExpr env level defaultExpr

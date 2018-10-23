@@ -737,6 +737,30 @@ let ``Record restriction is infered on restriction`` () =
         (IOk "forall a r => {x : a | r} -> {r}")
         ESkip
 
+[<Fact>]
+let ``Variant restriction on literal`` () =
+    test
+        ":a 0"
+        (POk (EVariant ("a", EInt 0)))
+        (IOk "forall r. (r\\a) => <a : int | r>")
+        (EOk (VVariant ("a", VInt 0)))
+
+[<Fact>]
+let ``Variant restriction on closed match`` () =
+    test
+        "fun r -> match r { :x x -> 0 }"
+        (POk (EFun (EVar "r", ECase (EVar "r", [EVariant ("x", EVar "x"), EInt 0], None))))
+        (IOk "forall a => <x : a> -> int")
+        ESkip
+
+[<Fact>]
+let ``Variant restriction on open match`` () =
+    test
+        "fun r -> match r { :x x -> 0 | otherwise -> 1 }"
+        (POk (EFun (EVar "r", ECase (EVar "r", [EVariant ("x", EVar "x"), EInt 0], Some ("otherwise", EInt 1)))))
+        (IOk "forall a r. (r\\x) => <x : a | r> -> int")
+        ESkip
+
 // test ideas
 // let f r = r\x
 // type : forall a r. (r\x) => { x: a | r} -> {r}
