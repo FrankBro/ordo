@@ -222,8 +222,8 @@ let stringOfTy (x: Ty) : string =
         let name = char(97 + i)
         string name
     let nextRowName () =
-        let i = count
-        count <- i + 1
+        let i = rowCount
+        rowCount <- i + 1
         let name = if i = 0 then "r" else sprintf "r%d" i
         string name
     let genericName id =
