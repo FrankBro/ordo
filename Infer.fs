@@ -96,7 +96,7 @@ let rec unify ty1 ty2 =
                     ()
             | _ -> ()
         // notConstrained restRow1
-        notConstrained restRow2
+        // notConstrained restRow2
         let restRow1TVarRefOption =
             match restRow1 with
             | TVar ({contents = Unbound _} as tvarRef) -> Some tvarRef

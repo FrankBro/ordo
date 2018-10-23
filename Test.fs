@@ -302,13 +302,13 @@ let ``Imbricked records`` () =
         (IOk "int")
         (EOk (VInt 2))
 
-// [<Fact>]
-// let ``Variant pattern`` () =
-//     test
-//         "let (:a a) = (:a 1) in a"
-//         (POk (ELet (EVariant ("a", EVar "a"), EVariant ("a", EInt 1), EVar "a")))
-//         (IOk "int")
-//         (EOk (VInt 1))
+[<Fact>]
+let ``Variant pattern`` () =
+    test
+        "let (:a a) = (:a 1) in a"
+        (POk (ELet (EVariant ("a", EVar "a"), EVariant ("a", EInt 1), EVar "a")))
+        (IOk "int")
+        (EOk (VInt 1))
 
 // TODO This probably should infer correctly, even if it makes little sense, should be generic
 [<Fact>]
@@ -319,13 +319,13 @@ let ``Bad variant pattern`` () =
         (IFail (i RowTypeExpected))
         (EFail (e (BadVariantPattern ("b", "a"))))
 
-// [<Fact>]
-// let ``Variant pattern in lambda`` () =
-//     test
-//         "let f = fun (:a a) -> a in f (:a 1)"
-//         (POk (ELet (EVar "f", EFun (EVariant ("a", EVar "a"), EVar "a"), ECall (EVar "f", EVariant ("a", EInt 1)))))
-//         (IOk "int")
-//         (EOk (VInt 1))
+[<Fact>]
+let ``Variant pattern in lambda`` () =
+    test
+        "let f = fun (:a a) -> a in f (:a 1)"
+        (POk (ELet (EVar "f", EFun (EVariant ("a", EVar "a"), EVar "a"), ECall (EVar "f", EVariant ("a", EInt 1)))))
+        (IOk "int")
+        (EOk (VInt 1))
 
 [<Fact>]
 let ``Plus integer`` () =
@@ -655,21 +655,21 @@ let ``Float LesserEqual false`` () =
         (IOk "bool")
         (EOk (VBool false))
 
-// [<Fact>]
-// let ``Record pattern in match`` () =
-//     test
-//         "match :a { a = 1 } { :a { a = a } -> a }"
-//         (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"], None)))
-//         (IOk "int")
-//         (EOk (VInt 1))
+[<Fact>]
+let ``Record pattern in match`` () =
+    test
+        "match :a { a = 1 } { :a { a = a } -> a }"
+        (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"], None)))
+        (IOk "int")
+        (EOk (VInt 1))
 
-// [<Fact>]
-// let ``Variant pattern in match`` () =
-//     test
-//         "match :a (:b 2) { :a (:b b) -> b }"
-//         (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"], None)))
-//         (IOk "int")
-//         (EOk (VInt 2))
+[<Fact>]
+let ``Variant pattern in match`` () =
+    test
+        "match :a (:b 2) { :a (:b b) -> b }"
+        (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"], None)))
+        (IOk "int")
+        (EOk (VInt 2))
 
 [<Fact>]
 let ``Function sugar in let`` () =
@@ -700,5 +700,5 @@ let ``Binop a record field`` () =
 //     test
 //         "let f {x,y} = x + y in f 1 2"
 //         (POk (ELet (EVar "f", EFun (eRecord ["x", EVar "x"; "y", EVar "y"], EBinOp (EVar "x", Plus, EVar "y")), ECall (ECall (EVar "f", EInt 1), EInt 2))))
-//         (IOk (failwith "todo"))
+//         (IOk "int")
 //         (EOk (VInt 3))
