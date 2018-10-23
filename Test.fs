@@ -729,6 +729,14 @@ let ``Record restriction is infered on selection`` () =
         (IOk "forall a r. (r\\x) => {x : a | r} -> a")
         ESkip
 
+[<Fact>]
+let ``Record restriction is infered on restriction`` () =
+    test
+        "fun r -> r\\x"
+        (POk (EFun (EVar "r", ERecordRestrict (EVar "r", "x"))))
+        (IOk "forall a r => {x : a | r} -> {r}")
+        ESkip
+
 // test ideas
 // let f r = r\x
 // type : forall a r. (r\x) => { x: a | r} -> {r}
