@@ -38,7 +38,7 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    // let input = "let r = { x = 1 } in r.x"
+    // let input = "let (:a a) = (:a 1) in a"
     // test input
     runRepl ()
     0 // return an integer exit code

@@ -776,7 +776,3 @@ let ``Record restriction for multiple fields`` () =
         (POk (EFun (EVar "r", ERecordExtend ("y", EInt 0, ERecordExtend ("x", EInt 0, EVar "r")))))
         (IOk "forall r. (r\\x\\y) => {r} -> {x : int, y : int | r}")
         ESkip
-
-// test ideas
-// let f r = r\x
-// type : forall a r. (r\x) => { x: a | r} -> {r}
