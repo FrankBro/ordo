@@ -702,3 +702,11 @@ let ``Record match sugar`` () =
         (POk (ELet (EVar "f", EFun (eRecord ["x", EVar "x"; "y", EVar "y"], EBinOp (EVar "x", Plus, EVar "y")), ECall (EVar "f", eRecord ["x", EInt 1; "y", EInt 2]))))
         (IOk "int")
         (EOk (VInt 3))
+
+[<Fact>]
+let ``Record match to construct`` () =
+    test
+        "let x = 1 in let y = 2 in {x,y}"
+        (POk (ELet (EVar "x", EInt 1, ELet (EVar "y", EInt 2, eRecord ["x", EVar "x"; "y", EVar "y"]))))
+        (IOk "{y : int, x : int}")
+        (EOk (VRecord (["x", VInt 1; "y", VInt 2] |> Map.ofList)))
