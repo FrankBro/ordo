@@ -14,12 +14,15 @@ let nextId () =
 let resetId () = currentId := 0
 
 let newVar level = TVar (ref (Unbound(nextId (), level)))
+let newRowVar level constraints = TVar (ref (UnboundRow(nextId (), level, constraints)))
 let newGenVar () = TVar (ref (Generic(nextId ())))
+let newGenRowVar constraints = TVar (ref (GenericRow(nextId (), constraints)))
 
 let occursCheckAdjustLevels tvarId tvarLevel ty =
     let rec f = function
         | TVar {contents = Link ty} -> f ty
-        | TVar {contents = Generic _ } -> 
+        | TVar {contents = Generic _ } 
+        | TVar {contents = GenericRow _ } -> 
             ()
             // why did this have to fail before introducing pattern matching?
             //failwithf "occursCheckAdjustLevels with Generic"
@@ -29,6 +32,14 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
             else
                 if otherLevel > tvarLevel then
                     otherTvar := Unbound(otherId, tvarLevel)
+                else
+                    ()
+        | TVar ({contents = UnboundRow (otherId, otherLevel, constraints)} as otherTvar) ->
+            if otherId = tvarId then
+                raise (inferError RecursiveTypes)
+            else
+                if otherLevel > tvarLevel then
+                    otherTvar := UnboundRow(otherId, tvarLevel, constraints)
                 else
                     ()
         | TApp (ty, tyArgList) ->
@@ -42,13 +53,38 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TRowExtend (label, fieldTy, row) ->
             f fieldTy
             f row
-        | TConst _ | TRowEmpty -> ()
+        | TConst _ | TBool | TInt | TFloat | TRowEmpty -> ()
+    f ty
+
+let injectConstraints constraints1 ty =
+    let rec f ty =
+        match ty with
+        | TBool | TInt | TFloat | TConst _ -> ()
+        | TVar {contents = Link ty} -> f ty
+        | TArrow (a, b) -> 
+            f a
+            f b
+        | TApp (x, xs) ->
+            f x
+            List.iter f xs
+        | TVar {contents = Unbound _}
+        | TVar {contents = Generic _} -> ()
+        | TVar ({contents = UnboundRow (id, level, constraints2)} as tvar) ->
+            tvar := UnboundRow (id, level, Set.union constraints1 constraints2)
+        | TVar ({contents = GenericRow (id, constraints2)} as tvar) ->
+            tvar := GenericRow (id, Set.union constraints1 constraints2)
+        | TRecord ty -> f ty
+        | TVariant ty -> f ty
+        | TRowEmpty -> ()
+        | TRowExtend (_, _, rest) ->
+            f rest
+            
     f ty
 
 let rec unify ty1 ty2 =
     if ty1 = ty2 then () else
     match ty1, ty2 with
-    | TConst name1, TConst name2 when name1 = name2 -> ()
+    | TBool, TBool | TInt, TInt | TFloat, TFloat -> ()
     | TApp (ty1, tyArgList1), TApp (ty2, tyArgList2) ->
         unify ty1 ty2
         List.iter2 unify tyArgList1 tyArgList2
@@ -57,9 +93,16 @@ let rec unify ty1 ty2 =
         unify returnTy1 returnTy2
     | TVar {contents = Link ty1}, ty2
     | ty1, TVar {contents = Link ty2} -> unify ty1 ty2
-    | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} when id1 = id2 ->
+    | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} 
+    | TVar {contents = UnboundRow(id1, _, _)}, TVar {contents = UnboundRow(id2, _, _)} when id1 = id2 ->
         // There is only a single instance of a particular type variable
         failwithf "unify with the same type variable" 
+    | TVar ({contents = UnboundRow(id, level, constraints)} as tvar), ty
+    | ty, TVar ({contents = UnboundRow(id, level, constraints)} as tvar) ->
+        injectConstraints constraints ty
+        occursCheckAdjustLevels id level ty
+        tvar := Link ty
+
     | TVar ({contents = Unbound(id, level)} as tvar), ty
     | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
         occursCheckAdjustLevels id level ty
@@ -67,7 +110,18 @@ let rec unify ty1 ty2 =
     | TRecord row1, TRecord row2 -> unify row1 row2
     | TVariant row1, TVariant row2 -> unify row1 row2
     | TRowEmpty, TRowEmpty -> ()
-    | TRowExtend (label1, fieldTy1, restRow1), (TRowExtend _ as row2) -> 
+    | TRowExtend (label1, fieldTy1, restRow1), (TRowExtend (_, _, restRow2) as row2) -> 
+        let notConstrained restRow = 
+            match restRow with
+            | TVar { contents = UnboundRow (_, _, constraints)}
+            | TVar { contents = GenericRow (_, constraints)} ->
+                if Set.contains label1 constraints then
+                    raise (inferError (InferError.RowConstraintFail label1))
+                else
+                    ()
+            | _ -> ()
+        // notConstrained restRow1
+        // notConstrained restRow2
         let restRow1TVarRefOption =
             match restRow1 with
             | TVar ({contents = Unbound _} as tvarRef) -> Some tvarRef
@@ -89,8 +143,13 @@ and rewriteRow (row2: Ty) label1 fieldTy1 =
     | TRowExtend (label2, fieldTy2, restRow2) ->
         TRowExtend (label2, fieldTy2, rewriteRow restRow2 label1 fieldTy1)
     | TVar {contents = Link row2 } -> rewriteRow row2 label1 fieldTy1
+    | TVar ({contents = UnboundRow (id, level, constraints)} as tvar) ->
+        let restRow2 = newRowVar level constraints
+        let ty2 = TRowExtend (label1, fieldTy1, restRow2)
+        tvar := Link ty2
+        restRow2
     | TVar ({contents = Unbound (id, level)} as tvar) ->
-        let restRow2 = newVar level
+        let restRow2 = newRowVar level Set.empty
         let ty2 = TRowExtend (label1, fieldTy1, restRow2)
         tvar := Link ty2
         restRow2
@@ -99,6 +158,8 @@ and rewriteRow (row2: Ty) label1 fieldTy1 =
 let rec generalizeTy level = function
     | TVar {contents = Unbound(id, otherLevel)} when otherLevel > level ->  
         TVar (ref (Generic id))
+    | TVar {contents = UnboundRow(id, otherLevel, constraints)} when otherLevel > level ->  
+        TVar (ref (GenericRow (id, constraints)))
     | TApp (ty, tyArgList) ->
         TApp (generalizeTy level ty, List.map (generalizeTy level) tyArgList)
     | TArrow (paramTy, returnTy) ->
@@ -109,8 +170,10 @@ let rec generalizeTy level = function
     | TRowExtend (label, fieldTy, row) ->
         TRowExtend (label, generalizeTy level fieldTy, generalizeTy level row)
     | TVar {contents = Generic _ }
+    | TVar {contents = GenericRow _ }
     | TVar {contents = Unbound _ }
-    | TConst _
+    | TVar {contents = UnboundRow _ }
+    | TConst _ | TBool | TInt | TFloat
     | TRowEmpty as ty -> ty
 
 let generalize ty =
@@ -120,7 +183,7 @@ let instantiate level ty =
     let mutable idVarMap = Map.empty
     let rec f ty =
         match ty with
-        | TConst _ -> ty
+        | TConst _ | TBool | TInt | TFloat -> ty
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic id} ->
             idVarMap
@@ -130,7 +193,16 @@ let instantiate level ty =
                 idVarMap <- Map.add id var idVarMap
                 var
             )
-        | TVar {contents = Unbound _} -> ty
+        | TVar {contents = GenericRow (id, constraints)} ->
+            idVarMap
+            |> Map.tryFind id
+            |> Option.defaultWith (fun () ->
+                let var = newRowVar level constraints
+                idVarMap <- Map.add id var idVarMap
+                var
+            )
+        | TVar {contents = Unbound _} 
+        | TVar {contents = UnboundRow _} -> ty
         | TApp (ty, tyArgList) ->
             TApp (f ty, List.map f tyArgList)
         | TArrow (paramTy, returnTy) ->
@@ -150,16 +222,13 @@ let rec matchFunTy = function
         let returnTy = newVar level
         tvar := Link (TArrow(paramTy, returnTy))
         paramTy, returnTy
+    | TVar ({contents = UnboundRow(id, level, constraints)} as tvar) -> raise (inferError FunctionExpected)
     | _ -> raise (inferError FunctionExpected)
 
-let boolTy = TConst "bool"
-let intTy = TConst "int"
-let floatTy = TConst "float"
-
 let rec inferExpr env level = function
-    | EBool _ -> boolTy
-    | EInt _ -> intTy
-    | EFloat _ -> floatTy
+    | EBool _ -> TBool
+    | EInt _ -> TInt
+    | EFloat _ -> TFloat
     | EVar name ->
         env
         |> Map.tryFind name
@@ -183,7 +252,7 @@ let rec inferExpr env level = function
         let a = inferExpr env (level + 1) ifExpr
         let b = inferExpr env (level + 1) thenExpr
         let c = inferExpr env (level + 1) elseExpr
-        if a <> boolTy then
+        if a <> TBool then
             raise (genericError IfValueNotBoolean)
         unify b c
         c
@@ -193,7 +262,7 @@ let rec inferExpr env level = function
         unify a b
         match op with
         | Equal | NotEqual | Greater 
-        | GreaterEqual | Lesser | LesserEqual -> TConst "bool"
+        | GreaterEqual | Lesser | LesserEqual -> TBool
         | _ -> b
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
@@ -203,21 +272,21 @@ let rec inferExpr env level = function
         TArrow (paramTy, returnTy)
     | ERecordEmpty -> TRecord TRowEmpty
     | ERecordSelect (recordExpr, label) ->
-        let restRowTy = newVar level
+        let restRowTy = newRowVar level (Set.singleton label)
         let fieldTy = newVar level
         let paramTy = TRecord (TRowExtend(label, fieldTy, restRowTy))
         let returnTy = fieldTy
         unify paramTy (inferExpr env level recordExpr)
         returnTy
     | ERecordRestrict (recordExpr, label) ->
-        let restRowTy = newVar level
+        let restRowTy = newRowVar level Set.empty // Used to be Set.singleton label
         let fieldTy = newVar level
         let paramTy = TRecord (TRowExtend(label, fieldTy, restRowTy))
         let returnTy = TRecord restRowTy
         unify paramTy (inferExpr env level recordExpr)
         returnTy
     | ERecordExtend (label, expr, recordExpr) ->
-        let restRowTy = newVar level
+        let restRowTy = newRowVar level (Set.singleton label)
         let fieldTy = newVar level
         let param1Ty = fieldTy
         let param2Ty = TRecord restRowTy
@@ -226,7 +295,7 @@ let rec inferExpr env level = function
         unify param2Ty (inferExpr env level recordExpr)
         returnTy
     | EVariant (label, expr) ->
-        let restRowTy = newVar level
+        let restRowTy = newRowVar level (Set.singleton label)
         let variantTy = newVar level
         let paramTy = variantTy in
         let returnTy = TVariant (TRowExtend (label, variantTy, restRowTy))
@@ -241,7 +310,11 @@ let rec inferExpr env level = function
                     let returnTy = newVar level
                     TRowEmpty, returnTy, env
                 | Some (name, defaultExpr) ->
-                    let defaultVariantTy = newVar level
+                    let constraints =
+                        cases
+                        |> List.map (fun (name, _, _) -> name)
+                        |> set
+                    let defaultVariantTy = newRowVar level constraints
                     let valueTy = TVariant defaultVariantTy
                     let env = Map.add name valueTy env
                     let returnTy = inferExpr env level defaultExpr
@@ -273,7 +346,7 @@ and inferPattern env level pattern =
             (var, env)
         | ERecordExtend (label, expr, rest) ->
             let fieldTy = newVar level
-            let restRowTy = newVar level
+            let restRowTy = newRowVar level (Set.singleton label)
             let param1Ty = fieldTy
             let param2Ty = TRecord restRowTy
             let returnTy = TRecord (TRowExtend (label, fieldTy, restRowTy))
@@ -290,7 +363,7 @@ and inferPattern env level pattern =
         | ERecordEmpty -> 
             TRecord TRowEmpty, env
         | EVariant (label, expr) ->
-            let restRowTy = newVar level
+            let restRowTy = newRowVar level (Set.singleton label)
             let variantTy = newVar level
             let paramTy = variantTy
             let returnTy = TVariant (TRowExtend (label, variantTy, restRowTy))

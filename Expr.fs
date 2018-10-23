@@ -78,6 +78,9 @@ type Level = int
 
 type Ty =
     | TConst of Name
+    | TBool
+    | TInt
+    | TFloat
     | TApp of Ty * Ty list
     | TArrow of Ty * Ty
     | TVar of Tvar ref
@@ -88,7 +91,10 @@ type Ty =
 with
     override x.ToString () =
         match x with
-        | TConst name -> sprintf "TConst %s" name
+        | TConst name -> name
+        | TBool -> "TBool"
+        | TInt -> "TInt"
+        | TFloat -> "TFloat"
         | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
         | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
         | TVar a -> sprintf "TVar %O" (!a)
@@ -99,16 +105,22 @@ with
 
 and Row = Ty
 
+and Constraints = Set<Name>
+
 and Tvar =
     | Unbound of Id * Level
+    | UnboundRow of Id * Level * Constraints
     | Link of Ty
     | Generic of Id
+    | GenericRow of Id * Constraints
 with
     override x.ToString () =
         match x with
         | Unbound (id, level) -> sprintf "Unbound (%d, %d)" id level
+        | UnboundRow (id, level, constraints) -> sprintf "UnboundRow (%d, %d, %O)" id level constraints
         | Link a -> sprintf "Link %O" a
         | Generic id -> sprintf "Generic %d" id
+        | GenericRow (id, constraints) -> sprintf "GenericRow (%d, %O)" id constraints
 
 type Value =
     | VBool of bool
@@ -192,16 +204,55 @@ let stringOfExpr (x: Expr) : string =
             sprintf "%s %s %s" a op b
     f false x
 
+type Entry = {
+    Name: Name
+    Constraints: Set<Name>
+}
+with
+    static member Simple name = { Name = name; Constraints = Set.empty }
+    static member Row name constraints = { Name = name; Constraints = constraints }
+
 let stringOfTy (x: Ty) : string =
-    let mutable idNameMap = Map.empty
+    let mutable idNameMap = Map.empty<Id, Entry>
     let mutable count = 0
+    let mutable rowCount = 0
     let nextName () =
         let i = count
         count <- i + 1
         let name = char(97 + i)
         string name
+    let nextRowName () =
+        let i = rowCount
+        rowCount <- i + 1
+        let name = if i = 0 then "r" else sprintf "r%d" i
+        string name
+    let genericName id =
+        idNameMap
+        |> Map.tryFind id
+        |> Option.map (fun entry -> entry.Name)
+        |> Option.defaultWith (fun () ->
+            let name = nextName ()
+            idNameMap <-
+                idNameMap
+                |> Map.add id (Entry.Simple name)
+            name
+        )
+    let genericRowName id constraints =
+        idNameMap
+        |> Map.tryFind id
+        |> Option.map (fun entry -> entry.Name)
+        |> Option.defaultWith (fun () ->
+            let name = nextRowName ()
+            idNameMap <-
+                idNameMap
+                |> Map.add id (Entry.Row name constraints)
+            name
+        )
     let rec f isSimple = function
         | TConst name -> name
+        | TBool -> "bool"
+        | TInt -> "int"
+        | TFloat -> "float"
         | TApp (ty, tyArgList) ->
             tyArgList
             |> List.map (f false)
@@ -214,42 +265,58 @@ let stringOfTy (x: Ty) : string =
                 sprintf "%s -> %s" paramTyStr returnTyStr
             if isSimple then "(" + arrowTyStr + ")" else arrowTyStr
         | TVar {contents = Generic id} ->
-            idNameMap
-            |> Map.tryFind id
-            |> Option.defaultWith (fun () ->
-                let name = nextName ()
-                idNameMap <-
-                    idNameMap
-                    |> Map.add id name
-                name
-            )
-            |> ((+) "'")
+            let name = genericName id
+            name
+        | TVar {contents = GenericRow (id, constraints)} ->
+            let name = genericRowName id constraints
+            name
         | TVar {contents = Unbound(id, _)} -> "_" + string id
+        | TVar {contents = UnboundRow(id, _, _)} -> "_" + string id
         | TVar {contents = Link ty} -> f isSimple ty
         | TRecord rowTy -> "{" + f false rowTy + "}"
         | TVariant rowTy -> "<" + f false rowTy + ">"
         | TRowEmpty -> ""
         | TRowExtend (label, ty, rowTy) ->
-            let rec g str = function
-                | TRowEmpty -> str
+            let rec g xs = function
+                | TRowEmpty -> xs, ""
                 | TRowExtend (label, ty, rowTy) ->
-                    g (str + ", " + label + " : " + f false ty) rowTy
-                | TVar {contents = Link ty} -> g str ty
-                | otherTy -> str + " | " + f false otherTy
-            g (label + " : " + f false ty) rowTy
+                    g ((label, f false ty) :: xs) rowTy
+                | TVar {contents = Link ty} -> g xs ty
+                | otherTy -> xs, sprintf " | %s" (f false otherTy)
+            let labels, rest = g [label, f false ty] rowTy
+            let labels =
+                labels
+                |> List.sortBy fst
+                |> List.map (fun (label, ty) -> sprintf "%s : %s" label ty)
+                |> String.concat ", "
+            labels + rest
     let tyStr = f false x
-    // if count > 0 then
-    //     let varNames = 
-    //         ([], idNameMap)
-    //         ||> Map.fold (fun acc _ value -> value :: acc)
-    //     let args =
-    //         varNames
-    //         |> List.sort
-    //         |> String.concat " "
-    //     "forall[" + args + "] " + tyStr
-    // else
-    //     tyStr
-    tyStr
+    if count > 0 || rowCount > 0 then
+        let varNames = 
+            ([], idNameMap)
+            ||> Map.fold (fun acc _ value -> value :: acc)
+        let args =
+            varNames
+            |> List.map (fun entry -> entry.Name)
+            |> List.sort
+            |> String.concat " "
+        let constraints =
+            let constraints =
+                varNames
+                |> List.sortBy (fun entry -> entry.Name)
+                |> List.choose (fun entry ->
+                    if Set.isEmpty entry.Constraints
+                    then None
+                    else 
+                        Set.fold (fun state constraint_ -> state + "\\" + constraint_) entry.Name entry.Constraints
+                        |> Some
+                )
+            if List.isEmpty constraints 
+            then " => "
+            else (sprintf ". (%s) => " (String.concat ", " constraints))
+        "forall " + args + constraints + tyStr
+    else
+        tyStr
 
 let rec stringOfValue value =
     let rec f isSimple value =
@@ -261,6 +328,7 @@ let rec stringOfValue value =
         | VRecord fields ->
             fields
             |> Map.toList
+            |> List.sortBy fst
             |> List.map (fun (label, value) -> sprintf "%s : %s" label (stringOfValue value))
             |> String.concat ", "
             |> sprintf "{ %s }"

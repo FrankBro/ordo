@@ -25,6 +25,7 @@ type InferError =
     | UnifyFail of Ty * Ty
     | RowTypeExpected
     | FunctionExpected
+    | RowConstraintFail of Name
 
 type EvalError =
     | NotAFunction of Expr

@@ -155,7 +155,8 @@ let exprRecordExtend labelExprList record =
     ||> List.fold (fun record (label, expr) -> ERecordExtend (label, expr, record))
 
 let parseRecordLabel content : Parser<string * Expr> =
-    identWs .>> strWs "=" .>>. content
+    attempt (identWs .>> strWs "=" .>>. content)
+    <|> (identWs |>> (fun label -> label, EVar label))
 
 let parseRecordLabels content : Parser<(string * Expr) list> =
     attempt (sepBy (parseRecordLabel content) (strWs ","))
@@ -264,60 +265,148 @@ let inline readExprList input : Expr list =
     let parser = (sepEndBy parseExpr ws) .>> eof
     readOrThrow parser input
 
-// let parseTy, parseTyRef = createParserForwardedToRef ()
+let parseTy, parseTyRef = createParserForwardedToRef ()
 
-// let parseTyWs = parseTy .>> ws
-// let parseTyListWs = sepBy parseTyWs (strWs ",")
+let parseTyWs = parseTy .>> ws
+let parseTyListWs = sepBy parseTyWs (strWs ",")
 
-// let parseTConst =
-//     identWs |>> TConst
+let parseTConst =
+    identWs |>> TConst
 
-// let parseTApp : Parser<Ty> =
-//     parseTyWs .>> strWs "[" .>>. parseTyListWs .>> strWs "]"
-//     |>> TApp
+let parseTBool =
+    strWs "bool" |>> fun _ -> TBool
 
-// let parseTArrow : Parser<Ty> =
-//     parseTyWs .>> strWs "->" .>>. parseTyWs
-//     |>> TArrow
+let parseTInt =
+    strWs "int" |>> fun _ -> TInt
 
-// let nameToIdMap = ref Map.empty
+let parseTFloat =
+    strWs "float" |>> fun _ -> TFloat
 
-// let nameToId s : Ty =
-//     let m = !nameToIdMap
-//     m 
-//     |> Map.tryFind s 
-//     |> Option.defaultWith (fun () ->
-//         let id = newGenVar ()
-//         nameToIdMap := Map.add s id m
-//         id
-//     )
+let identList = sepBy1 identWs ws1
 
-// let parseTVar : Parser<Ty> =
-//     strWs "'" >>. identWs
-//     |>> nameToId
+let parseRowConstraint =
+    sepBy1 identWs (strWs "\\")
 
-// let parseTEmptyRecord : Parser<Ty> =
-//     strWs "{" .>> strWs "}"
-//     |>> fun _ -> TRecord TRowEmpty
+let parseRowConstraints =
+    sepBy1 parseRowConstraint (strWs ",")
 
-// let parseTRowFields : Parser<(string * Ty) list> =
-//     let field = identWs .>>. parseTyWs
-//     sepBy1 field (strWs ",")
+let parseTvar =
+    let p1 = strWs1 "forall" >>. identList 
+    let p2 = opt (strWs "." >>. strWs "(" >>. parseRowConstraints .>> strWs ")")
+    let p3 = strWs "=>" >>. parseTyWs
+    pipe3 p1 p2 p3 (fun vars oConstraints rest ->
+        let constraintEnv =
+            match oConstraints with
+            | None -> Map.empty
+            | Some constraints ->
+                (Map.empty, constraints)
+                ||> List.fold (fun env constraints ->
+                    match constraints with
+                    | []
+                    | [_] -> failwith "Impossible"
+                    | name :: constraints ->
+                        Map.add name constraints env
+                )
+        let env =
+            (Map.empty, vars)
+            ||> List.fold (fun env var ->
+                let ty = 
+                    if var.StartsWith "r" 
+                    then newGenRowVar Set.empty
+                    else newGenVar ()
+                Map.add var ty env
+            )
+        let rec f ty = 
+            match ty with
+            | TConst name ->
+                match Map.tryFind name env with
+                | None -> ty
+                | Some gen -> gen
+            | TBool | TInt | TFloat -> ty
+            | TVar _ -> ty
+            | TApp(ty, tyArgs) -> TApp(f ty, List.map f tyArgs)
+            | TArrow(param, ret) -> TArrow(f param, f ret)
+            | TRecord row -> TRecord (f row)
+            | TVariant row -> TVariant (f row)
+            | TRowEmpty -> ty
+            | TRowExtend(label, ty, row) ->
+                TRowExtend(label, f ty, f row)
+        f rest
+    )
 
-// let parseTRecord : Parser<Ty> =
-//     strWs "{" >>. parseTRowFields .>> strWs "}"
-//     |>> fun fields ->
-//         let fixedFields =
-//             fields
-//             |> Map.ofList
-//             |> Map.map (fun _ -> List.singleton)
-//         TRowExtend (fixedFields, TRowEmpty)
+let parseTEmptyRecord : Parser<Ty> =
+    strWs "{" .>> strWs "}"
+    |>> fun _ -> TRecord TRowEmpty
 
-// let parseTExtendRecord : Parser<Ty> =
-//     strWs "{" >>. parseTRowFields .>> strWs "|" .>>. parseTyWs .>> strWs "}"
-//     |>> fun (fields, record) ->
-//         let fixedFields =
-//             fields
-//             |> Map.ofList
-//             |> Map.map (fun _ -> List.singleton)
-//         TRowExtend (fixedFields, record)
+let parseTRowFields : Parser<(string * Ty) list> =
+    let field = identWs .>> strWs ":" .>>. parseTyWs
+    sepBy1 field (strWs ",")
+
+let parseTClosedRecord : Parser<Ty> =
+    strWs "{" >>. parseTRowFields .>> strWs "}"
+    |>> fun fields ->
+        (TRowEmpty, fields)
+        ||> List.fold (fun rest (label, ty) ->
+            TRowExtend (label, ty, rest)
+        )
+        |> TRecord
+
+let parseTOpenRecord : Parser<Ty> =
+    strWs "{" >>. parseTRowFields .>> strWs "|" .>>. parseTyWs .>> strWs "}"
+    |>> fun (fields, rest) ->
+        (rest, fields)
+        ||> List.fold (fun rest (label, ty) ->
+            TRowExtend (label, ty, rest)
+        )
+        |> TRecord
+
+let parseTClosedVariant : Parser<Ty> =
+    strWs "<" >>. parseTRowFields .>> strWs ">"
+    |>> fun fields ->
+        (TRowEmpty, fields)
+        ||> List.fold (fun rest (label, ty) ->
+            TRowExtend (label, ty, rest)
+        )
+        |> TVariant
+
+let parseTOpenVariant : Parser<Ty> =
+    strWs "<" >>. parseTRowFields .>> strWs "|" .>>. parseTyWs .>> strWs ">"
+    |>> fun (fields, rest) ->
+        (rest, fields)
+        ||> List.fold (fun rest (label, ty) ->
+            TRowExtend (label, ty, rest)
+        )
+        |> TVariant
+
+let parseNotLeftRecursiveType = 
+    choice [
+        attempt parseTBool
+        attempt parseTInt
+        attempt parseTFloat
+        attempt parseTvar
+        attempt parseTConst
+        attempt parseTEmptyRecord
+        attempt parseTClosedRecord
+        attempt parseTOpenRecord
+        attempt parseTClosedVariant
+        attempt parseTOpenVariant
+    ]
+
+let parseAll =
+    many1 (parseNotLeftRecursiveType .>> ws)
+    >>= fun result ->
+        match result with
+        | [one] -> 
+            choice [
+                attempt (strWs "[" >>. sepBy1 parseTy (strWs ",") .>> strWs "]") 
+                    |>> fun two -> TApp (one, two)
+                attempt (strWs "->" >>. parseTyWs) 
+                    |>> fun two -> TArrow (one, two)
+                preturn one
+            ]
+        | _ -> 
+            failwith "should never happen?"
+
+do parseTyRef := parseAll
+
+let inline readType input = readOrThrow (parseTy .>> eof) input
