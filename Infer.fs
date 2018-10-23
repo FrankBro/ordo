@@ -279,7 +279,6 @@ let rec inferExpr env level = function
     | ECase (expr, cases, oDefault) ->
         match tryMakeVariantCases cases with
         | Some cases ->
-            // TODO, make sure our open variant case has all the proper limitations
             let defTy, returnTy, env =
                 match oDefault with
                 | None -> 
