@@ -56,6 +56,31 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TConst _ | TBool | TInt | TFloat | TRowEmpty -> ()
     f ty
 
+let injectConstraints constraints1 ty =
+    let rec f ty =
+        match ty with
+        | TBool | TInt | TFloat | TConst _ -> ()
+        | TVar {contents = Link ty} -> f ty
+        | TArrow (a, b) -> 
+            f a
+            f b
+        | TApp (x, xs) ->
+            f x
+            List.iter f xs
+        | TVar {contents = Unbound _}
+        | TVar {contents = Generic _} -> ()
+        | TVar ({contents = UnboundRow (id, level, constraints2)} as tvar) ->
+            tvar := UnboundRow (id, level, Set.union constraints1 constraints2)
+        | TVar ({contents = GenericRow (id, constraints2)} as tvar) ->
+            tvar := GenericRow (id, Set.union constraints1 constraints2)
+        | TRecord ty -> f ty
+        | TVariant ty -> f ty
+        | TRowEmpty -> ()
+        | TRowExtend (_, _, rest) ->
+            f rest
+            
+    f ty
+
 let rec unify ty1 ty2 =
     if ty1 = ty2 then () else
     match ty1, ty2 with
@@ -72,14 +97,14 @@ let rec unify ty1 ty2 =
     | TVar {contents = UnboundRow(id1, _, _)}, TVar {contents = UnboundRow(id2, _, _)} when id1 = id2 ->
         // There is only a single instance of a particular type variable
         failwithf "unify with the same type variable" 
-    | TVar ({contents = UnboundRow (id1, level1, constraints1)} as tvar1), TVar ({contents = UnboundRow (id2, level2, constraints2)} as tvar2) ->
-        let union = Set.union constraints1 constraints2
-        tvar1 := UnboundRow (id1, level1, union)
-        tvar2 := UnboundRow (id2, level2, union)
+    | TVar ({contents = UnboundRow(id, level, constraints)} as tvar), ty
+    | ty, TVar ({contents = UnboundRow(id, level, constraints)} as tvar) ->
+        injectConstraints constraints ty
+        occursCheckAdjustLevels id level ty
+        tvar := Link ty
+
     | TVar ({contents = Unbound(id, level)} as tvar), ty
-    | TVar ({contents = UnboundRow(id, level, _)} as tvar), ty
-    | ty, TVar ({contents = Unbound(id, level)} as tvar) 
-    | ty, TVar ({contents = UnboundRow(id, level, _)} as tvar) ->
+    | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
         occursCheckAdjustLevels id level ty
         tvar := Link ty
     | TRecord row1, TRecord row2 -> unify row1 row2

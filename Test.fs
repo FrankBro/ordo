@@ -761,6 +761,22 @@ let ``Variant restriction on open match`` () =
         (IOk "forall a r. (r\\x) => <x : a | r> -> int")
         ESkip
 
+[<Fact>]
+let ``If variant restriction`` () =
+    test
+        "if true then :a 0 else :b 1"
+        (POk (EIfThenElse (EBool true, EVariant ("a", EInt 0), EVariant ("b", EInt 1))))
+        (IOk "forall r. (r\\a\\b) => <b : int, a : int | r>")
+        (EOk (VVariant ("a", VInt 0)))
+
+[<Fact>]
+let ``Record restriction for multiple fields`` () =
+    test
+        "fun r -> { x = 0, y = 0 | r }"
+        (POk (EFun (EVar "r", ERecordExtend ("y", EInt 0, ERecordExtend ("x", EInt 0, EVar "r")))))
+        (IOk "forall r. (r\\x\\y) => {r} -> {y : int, x : int | r}")
+        ESkip
+
 // test ideas
 // let f r = r\x
 // type : forall a r. (r\x) => { x: a | r} -> {r}
