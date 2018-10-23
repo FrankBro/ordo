@@ -21,6 +21,7 @@ type InferResult =
 
 type EvalResult =
     | EOk of Value
+    | ESkip
     | EFail of OrdoError
 
 let test input parserExpected inferExpected evalExpected =
@@ -51,7 +52,8 @@ let test input parserExpected inferExpected evalExpected =
                 |> EOk
             with
             | OrdoException error -> EFail error
-    Assert.StrictEqual(evalExpected, evalResult)
+    if evalExpected <> ESkip then 
+        Assert.StrictEqual(evalExpected, evalResult)
 
 let g e = OrdoError.Generic e
 let e e = OrdoError.Eval e
