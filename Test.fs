@@ -710,3 +710,7 @@ let ``Record match to construct`` () =
         (POk (ELet (EVar "x", EInt 1, ELet (EVar "y", EInt 2, eRecord ["x", EVar "x"; "y", EVar "y"]))))
         (IOk "{y : int, x : int}")
         (EOk (VRecord (["x", VInt 1; "y", VInt 2] |> Map.ofList)))
+
+// test ideas
+// let f r = r\x
+// type : forall a r. (r\x) => { x: a | r} -> {r}
