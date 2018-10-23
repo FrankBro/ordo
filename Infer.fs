@@ -95,9 +95,8 @@ let rec unify ty1 ty2 =
                 else
                     ()
             | _ -> ()
-        notConstrained restRow1
+        // notConstrained restRow1
         notConstrained restRow2
-        // MAKE SURE RESTROW DOES NOT HAVE A CONSTRAINT ON OUR LABEL
         let restRow1TVarRefOption =
             match restRow1 with
             | TVar ({contents = Unbound _} as tvarRef) -> Some tvarRef
@@ -255,7 +254,7 @@ let rec inferExpr env level = function
         unify paramTy (inferExpr env level recordExpr)
         returnTy
     | ERecordRestrict (recordExpr, label) ->
-        let restRowTy = newRowVar level (Set.singleton label)
+        let restRowTy = newRowVar level Set.empty // Used to be Set.singleton label
         let fieldTy = newVar level
         let paramTy = TRecord (TRowExtend(label, fieldTy, restRowTy))
         let returnTy = TRecord restRowTy
