@@ -38,7 +38,7 @@ let test input =
 
 [<EntryPoint>]
 let main argv =
-    // let input = "let (:a a) = (:a 1) in a"
+    // let input = "let f {x,y} = x + y in let x = 1 in let y = 2 in f {x,y}"
     // test input
     runRepl ()
     0 // return an integer exit code

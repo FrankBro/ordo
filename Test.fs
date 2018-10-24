@@ -13,6 +13,7 @@ open Util
 
 type ParseResult =
     | POk of Expr
+    | PSkip
     | PFail of OrdoError
 
 type InferResult =
@@ -31,9 +32,11 @@ let test input parserExpected inferExpected evalExpected =
             |> POk
         with
         | OrdoException error -> PFail error
-    Assert.StrictEqual(parserExpected, parserResult)
+    if parserExpected <> PSkip then
+        Assert.StrictEqual(parserExpected, parserResult)
     let inferResult =
         match parserResult with
+        | PSkip -> failwith "Impossible"
         | PFail e -> IFail e
         | POk expr ->
             try
@@ -45,6 +48,7 @@ let test input parserExpected inferExpected evalExpected =
     Assert.StrictEqual(inferExpected, inferResult)
     let evalResult =
         match parserResult with
+        | PSkip -> failwith "Impossible"
         | PFail e -> EFail e
         | POk expr ->
             try
@@ -776,3 +780,30 @@ let ``Record restriction for multiple fields`` () =
         (POk (EFun (EVar "r", ERecordExtend ("y", EInt 0, ERecordExtend ("x", EInt 0, EVar "r")))))
         (IOk "forall r. (r\\x\\y) => {r} -> {x : int, y : int | r}")
         ESkip
+
+[<Fact>]
+let ``Record arg sugar bug`` () =
+    test
+        "let f {x,y} = x + y in 
+         let x = 1 in 
+         let y = 2 in 
+         f {x,y}"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 3))
+
+[<Fact>]
+let ``Same field in record twice is invalid`` () =
+    test
+        "{x = 0, x = 1}"
+        (POk (ERecordExtend ("x", EInt 1, ERecordExtend ("x", EInt 0, ERecordEmpty))))
+        (IFail (i (RowConstraintFail "x")))
+        (EFail (i (RowConstraintFail "x")))
+
+[<Fact>]
+let ``Same field in variant twice is invalid`` () =
+    test
+        "let f variant bool = if bool then variant else :a 1 in f (:a 1) true"
+        PSkip
+        (IFail (i (RowConstraintFail "a")))
+        (EFail (i (RowConstraintFail "a")))
