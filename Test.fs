@@ -807,3 +807,20 @@ let ``If expressions can just use a boolean variable`` () =
         (POk (ELet (EVar "f", EFun (EVar "bool", EIfThenElse (EVar "bool", EInt 1, EInt 0)), ECall (EVar "f", EBool true))))
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Record equality works`` () =
+    test
+        "{ x = 0 } = { x = 0 }"
+        (POk (EBinOp (ERecordExtend ("x", EInt 0, ERecordEmpty), Equal, ERecordExtend ("x", EInt 0, ERecordEmpty))))
+        (IOk "bool")
+        (EOk (VBool true))
+
+// Shitty that I need parenthesis here
+[<Fact>]
+let ``Variant equality works`` () =
+    test
+        "(:a 0) = (:a 0)"
+        (POk (EBinOp (EVariant ("a", EInt 0), Equal, EVariant ("a", EInt 0))))
+        (IOk "bool")
+        (EOk (VBool true))
