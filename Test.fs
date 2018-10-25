@@ -798,7 +798,7 @@ let ``Same field in record twice is invalid`` () =
         "{x = 0, x = 1}"
         (POk (ERecordExtend ("x", EInt 1, ERecordExtend ("x", EInt 0, ERecordEmpty))))
         (IFail (i (RowConstraintFail "x")))
-        (EFail (i (RowConstraintFail "x")))
+        ESkip
 
 [<Fact>]
 let ``Same field in variant twice is invalid`` () =
@@ -806,7 +806,7 @@ let ``Same field in variant twice is invalid`` () =
         "let f variant bool = if bool then variant else :a 1 in f (:a 1) true"
         PSkip
         (IFail (i (RowConstraintFail "a")))
-        (EFail (i (RowConstraintFail "a")))
+        ESkip
 
 [<Fact>]
 let ``If expressions can just use a boolean variable`` () =
