@@ -262,7 +262,10 @@ let rec inferExpr env level = function
         let a = inferExpr env (level + 1) ifExpr
         let b = inferExpr env (level + 1) thenExpr
         let c = inferExpr env (level + 1) elseExpr
-        if a <> TBool then
+        unify a TBool
+        match a with
+        | TBool | TVar {contents = Link TBool} -> ()
+        | _ ->
             raise (genericError IfValueNotBoolean)
         unify b c
         c

@@ -807,3 +807,11 @@ let ``Same field in variant twice is invalid`` () =
         PSkip
         (IFail (i (RowConstraintFail "a")))
         (EFail (i (RowConstraintFail "a")))
+
+[<Fact>]
+let ``If expressions can just use a boolean variable`` () =
+    test
+        "let f bool = if bool then 1 else 0 in f true"
+        (POk (ELet (EVar "f", EFun (EVar "bool", EIfThenElse (EVar "bool", EInt 1, EInt 0)), ECall (EVar "f", EBool true))))
+        (IOk "int")
+        (EOk (VInt 1))
