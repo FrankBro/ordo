@@ -70,13 +70,23 @@ let injectConstraints constraints1 ty =
         | TVar {contents = Unbound _}
         | TVar {contents = Generic _} -> ()
         | TVar ({contents = UnboundRow (id, level, constraints2)} as tvar) ->
+            let intersect = Set.intersect constraints1 constraints2
+            if not (Set.isEmpty intersect) then
+                let label = Set.minElement intersect
+                raise (inferError (InferError.RowConstraintFail label))
             tvar := UnboundRow (id, level, Set.union constraints1 constraints2)
         | TVar ({contents = GenericRow (id, constraints2)} as tvar) ->
+            let intersect = Set.intersect constraints1 constraints2
+            if not (Set.isEmpty intersect) then
+                let label = Set.minElement intersect
+                raise (inferError (InferError.RowConstraintFail label))
             tvar := GenericRow (id, Set.union constraints1 constraints2)
         | TRecord ty -> f ty
         | TVariant ty -> f ty
         | TRowEmpty -> ()
-        | TRowExtend (_, _, rest) ->
+        | TRowExtend (label, _, rest) ->
+            if Set.contains label constraints1 then
+                raise (inferError (InferError.RowConstraintFail label))
             f rest
             
     f ty
