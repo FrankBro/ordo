@@ -21,7 +21,6 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VFun (innerEnv, pattern, bodyExpr) ->
             let argValue = evalExpr innerEnv argExpr
             let fnEnv = evalPattern innerEnv pattern argValue
-            printfn "env: %O, innerEnv: %O, fnEnv: %O" env innerEnv fnEnv
             evalExpr fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
     | ELet (pattern, valueExpr, bodyExpr) ->
