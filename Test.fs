@@ -801,14 +801,6 @@ let ``Same field in record twice is invalid`` () =
         ESkip
 
 [<Fact>]
-let ``Same field in variant twice is invalid`` () =
-    test
-        "let f variant bool = if bool then variant else :a 1 in f (:a 1) true"
-        PSkip
-        (IFail (i (RowConstraintFail "a")))
-        ESkip
-
-[<Fact>]
 let ``If expressions can just use a boolean variable`` () =
     test
         "let f bool = if bool then 1 else 0 in f true"
