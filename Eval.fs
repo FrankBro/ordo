@@ -36,6 +36,8 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         let recordValue = evalExpr env recordExpr
         match recordValue with
         | VRecord fields ->
+            if Map.containsKey name fields then
+                raise (inferError (RowConstraintFail name))
             let valueValue = evalExpr env valueExpr
             fields
             |> Map.add name valueValue

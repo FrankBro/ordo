@@ -56,83 +56,84 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TConst _ | TBool | TInt | TFloat | TRowEmpty -> ()
     f ty
 
-let injectConstraints constraints1 ty =
-    let rec f ty =
+let injectConstraints isVariant constraints1 ty =
+    let rec f isVariant ty =
         match ty with
         | TBool | TInt | TFloat | TConst _ -> ()
-        | TVar {contents = Link ty} -> f ty
+        | TVar {contents = Link ty} -> f false ty
         | TArrow (a, b) -> 
-            f a
-            f b
+            f false a
+            f false b
         | TApp (x, xs) ->
-            f x
-            List.iter f xs
+            f false x
+            List.iter (f false) xs
         | TVar {contents = Unbound _}
         | TVar {contents = Generic _} -> ()
         | TVar ({contents = UnboundRow (id, level, constraints2)} as tvar) ->
+            let intersect = Set.intersect constraints1 constraints2
+            if not isVariant && not (Set.isEmpty intersect) then
+                let label = Set.minElement intersect
+                raise (inferError (InferError.RowConstraintFail label))
             tvar := UnboundRow (id, level, Set.union constraints1 constraints2)
         | TVar ({contents = GenericRow (id, constraints2)} as tvar) ->
+            let intersect = Set.intersect constraints1 constraints2
+            if not isVariant && not (Set.isEmpty intersect) then
+                let label = Set.minElement intersect
+                raise (inferError (InferError.RowConstraintFail label))
             tvar := GenericRow (id, Set.union constraints1 constraints2)
-        | TRecord ty -> f ty
-        | TVariant ty -> f ty
+        | TRecord ty -> f false ty
+        | TVariant ty -> f true ty
         | TRowEmpty -> ()
-        | TRowExtend (_, _, rest) ->
-            f rest
+        | TRowExtend (label, _, rest) ->
+            if Set.contains label constraints1 then
+                raise (inferError (InferError.RowConstraintFail label))
+            f isVariant rest
             
-    f ty
+    f isVariant ty
 
 let rec unify ty1 ty2 =
     if ty1 = ty2 then () else
-    match ty1, ty2 with
-    | TBool, TBool | TInt, TInt | TFloat, TFloat -> ()
-    | TApp (ty1, tyArgList1), TApp (ty2, tyArgList2) ->
-        unify ty1 ty2
-        List.iter2 unify tyArgList1 tyArgList2
-    | TArrow (paramTy1, returnTy1), TArrow (paramTy2, returnTy2) ->
-        unify paramTy1 paramTy2
-        unify returnTy1 returnTy2
-    | TVar {contents = Link ty1}, ty2
-    | ty1, TVar {contents = Link ty2} -> unify ty1 ty2
-    | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} 
-    | TVar {contents = UnboundRow(id1, _, _)}, TVar {contents = UnboundRow(id2, _, _)} when id1 = id2 ->
-        // There is only a single instance of a particular type variable
-        failwithf "unify with the same type variable" 
-    | TVar ({contents = UnboundRow(id, level, constraints)} as tvar), ty
-    | ty, TVar ({contents = UnboundRow(id, level, constraints)} as tvar) ->
-        injectConstraints constraints ty
-        occursCheckAdjustLevels id level ty
-        tvar := Link ty
+    let rec f isVariant ty1 ty2 =
+        match ty1, ty2 with
+        | TBool, TBool | TInt, TInt | TFloat, TFloat -> ()
+        | TApp (ty1, tyArgList1), TApp (ty2, tyArgList2) ->
+            f isVariant ty1 ty2
+            List.iter2 (f isVariant) tyArgList1 tyArgList2
+        | TArrow (paramTy1, returnTy1), TArrow (paramTy2, returnTy2) ->
+            f isVariant paramTy1 paramTy2
+            f isVariant returnTy1 returnTy2
+        | TVar {contents = Link ty1}, ty2
+        | ty1, TVar {contents = Link ty2} -> f isVariant ty1 ty2
+        | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} 
+        | TVar {contents = UnboundRow(id1, _, _)}, TVar {contents = UnboundRow(id2, _, _)} when id1 = id2 ->
+            // There is only a single instance of a particular type variable
+            failwithf "unify with the same type variable" 
+        | TVar ({contents = UnboundRow(id, level, constraints)} as tvar), ty
+        | ty, TVar ({contents = UnboundRow(id, level, constraints)} as tvar) ->
+            injectConstraints isVariant constraints ty 
+            occursCheckAdjustLevels id level ty
+            tvar := Link ty
 
-    | TVar ({contents = Unbound(id, level)} as tvar), ty
-    | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
-        occursCheckAdjustLevels id level ty
-        tvar := Link ty
-    | TRecord row1, TRecord row2 -> unify row1 row2
-    | TVariant row1, TVariant row2 -> unify row1 row2
-    | TRowEmpty, TRowEmpty -> ()
-    | TRowExtend (label1, fieldTy1, restRow1), (TRowExtend (_, _, restRow2) as row2) -> 
-        let notConstrained restRow = 
-            match restRow with
-            | TVar { contents = UnboundRow (_, _, constraints)}
-            | TVar { contents = GenericRow (_, constraints)} ->
-                if Set.contains label1 constraints then
-                    raise (inferError (InferError.RowConstraintFail label1))
-                else
-                    ()
+        | TVar ({contents = Unbound(id, level)} as tvar), ty
+        | ty, TVar ({contents = Unbound(id, level)} as tvar) ->
+            occursCheckAdjustLevels id level ty
+            tvar := Link ty
+        | TRecord row1, TRecord row2 -> f false row1 row2
+        | TVariant row1, TVariant row2 -> f true row1 row2
+        | TRowEmpty, TRowEmpty -> ()
+        | TRowExtend (label1, fieldTy1, restRow1), (TRowExtend (_, _, restRow2) as row2) -> 
+            let restRow1TVarRefOption =
+                match restRow1 with
+                | TVar ({contents = Unbound _} as tvarRef) -> Some tvarRef
+                | _ -> None
+            let restRow2 = rewriteRow row2 label1 fieldTy1
+            match restRow1TVarRefOption with
+            | Some {contents = Link _} -> raise (inferError RecursiveRowTypes)
             | _ -> ()
-        // notConstrained restRow1
-        // notConstrained restRow2
-        let restRow1TVarRefOption =
-            match restRow1 with
-            | TVar ({contents = Unbound _} as tvarRef) -> Some tvarRef
-            | _ -> None
-        let restRow2 = rewriteRow row2 label1 fieldTy1
-        match restRow1TVarRefOption with
-        | Some {contents = Link _} -> raise (inferError RecursiveRowTypes)
-        | _ -> ()
-        unify restRow1 restRow2
-    | _, _ -> 
-        raise (inferError (UnifyFail (ty1, ty2)))
+            f isVariant restRow1 restRow2
+        | _, _ -> 
+            raise (inferError (UnifyFail (ty1, ty2)))
+    f false ty1 ty2
 
 and rewriteRow (row2: Ty) label1 fieldTy1 =
     match row2 with
@@ -252,7 +253,10 @@ let rec inferExpr env level = function
         let a = inferExpr env (level + 1) ifExpr
         let b = inferExpr env (level + 1) thenExpr
         let c = inferExpr env (level + 1) elseExpr
-        if a <> TBool then
+        unify a TBool
+        match a with
+        | TBool | TVar {contents = Link TBool} -> ()
+        | _ ->
             raise (genericError IfValueNotBoolean)
         unify b c
         c

@@ -255,7 +255,7 @@ let ``If value must be bool`` () =
     test
         "if 1 then 1 else 0"
         (POk (EIfThenElse (EInt 1, EInt 1, EInt 0)))
-        (IFail (g IfValueNotBoolean))
+        (IFail (i (UnifyFail (TInt, TBool))))
         (EFail (g IfValueNotBoolean))
 
 [<Fact>]
@@ -798,12 +798,12 @@ let ``Same field in record twice is invalid`` () =
         "{x = 0, x = 1}"
         (POk (ERecordExtend ("x", EInt 1, ERecordExtend ("x", EInt 0, ERecordEmpty))))
         (IFail (i (RowConstraintFail "x")))
-        (EFail (i (RowConstraintFail "x")))
+        ESkip
 
 [<Fact>]
-let ``Same field in variant twice is invalid`` () =
+let ``If expressions can just use a boolean variable`` () =
     test
-        "let f variant bool = if bool then variant else :a 1 in f (:a 1) true"
-        PSkip
-        (IFail (i (RowConstraintFail "a")))
-        (EFail (i (RowConstraintFail "a")))
+        "let f bool = if bool then 1 else 0 in f true"
+        (POk (ELet (EVar "f", EFun (EVar "bool", EIfThenElse (EVar "bool", EInt 1, EInt 0)), ECall (EVar "f", EBool true))))
+        (IOk "int")
+        (EOk (VInt 1))
