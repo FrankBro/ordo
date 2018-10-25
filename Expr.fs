@@ -129,6 +129,15 @@ type Value =
     | VFun of Map<Name, Value> * Pattern * Expr
     | VRecord of Map<Name, Value>
     | VVariant of Name * Value
+with
+    override x.ToString () =
+        match x with
+        | VBool b -> sprintf "VBool %b" b
+        | VInt i -> sprintf "VInt %d" i
+        | VFloat f -> sprintf "VFloat %f" f
+        | VFun _ -> "VFun"
+        | VRecord fields -> sprintf "VRecord %O" fields
+        | VVariant (name, value) -> sprintf "VVariant (%s, %O)" name value
 
 let stringOfBinOp = function
     | Plus -> "+"

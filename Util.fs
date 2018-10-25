@@ -8,6 +8,15 @@ module Map =
         Map.empty
         |> Map.add k v
 
+    let merge m1 m2 =
+        (m1, m2)
+        ||> Map.fold (fun state key value ->
+            if Map.containsKey key state then
+                failwith "should this happen?"
+            else
+                Map.add key value state
+        )
+
 module Option =
     let bindNone f = function
         | None -> f ()
