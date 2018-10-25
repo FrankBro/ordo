@@ -255,7 +255,7 @@ let ``If value must be bool`` () =
     test
         "if 1 then 1 else 0"
         (POk (EIfThenElse (EInt 1, EInt 1, EInt 0)))
-        (IFail (g IfValueNotBoolean))
+        (IFail (i (UnifyFail (TInt, TBool))))
         (EFail (g IfValueNotBoolean))
 
 [<Fact>]
