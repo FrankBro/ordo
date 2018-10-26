@@ -16,13 +16,11 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             raise (genericError (VariableNotFound name))
         )
     | ECall (fnExpr, argExpr) -> 
-        printfn "fnExpr = %O, argExpr = %O, env = %O" fnExpr argExpr env
         let fnValue = evalExpr env fnExpr
         match fnValue with
         | VFun (innerEnv, pattern, bodyExpr) ->
             let mergedEnv = Map.merge innerEnv env
             let argValue = evalExpr mergedEnv argExpr
-            printfn "argValue = %O" argValue
             let fnEnv = evalPattern mergedEnv pattern argValue
             evalExpr fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
@@ -32,16 +30,13 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         match valueExpr with
         | EFun _ -> ()
         | _ ->
-            printfn "let %O = %O, added to env %O" pattern value env
         evalExpr env bodyExpr
     | ERecordEmpty  -> 
-        printfn "ERecordEmpty env: %O" env
         VRecord Map.empty
     | EVariant (label, expr) ->
         let value = evalExpr env expr
         VVariant (label, value)
     | ERecordExtend (name, valueExpr, recordExpr) ->
-        printfn "ERecordExtend env: %O" env
         let recordValue = evalExpr env recordExpr
         match recordValue with
         | VRecord fields ->
@@ -98,7 +93,6 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | _ -> 
             raise (genericError IfValueNotBoolean )
     | EBinOp (a, op, b) ->
-        printfn "EBinOp env: %O" env
         let a = evalExpr env a
         match op with
         | And ->
