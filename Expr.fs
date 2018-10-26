@@ -48,7 +48,6 @@ type Expr =
     | ERecordExtend of Name * Expr * Expr
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
-    // New expr: A mix of option and record select. Wouldn't add row restrictions?
     | EVariant of Name * Expr
     | ECase of Expr * (Pattern * Expr) list * (Name * Expr) option
     | EIfThenElse of Expr * Expr * Expr
