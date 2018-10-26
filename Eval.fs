@@ -27,9 +27,6 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     | ELet (pattern, valueExpr, bodyExpr) ->
         let value = evalExpr env valueExpr
         let env = evalPattern env pattern value
-        match valueExpr with
-        | EFun _ -> ()
-        | _ ->
         evalExpr env bodyExpr
     | ERecordEmpty  -> 
         VRecord Map.empty
