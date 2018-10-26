@@ -824,3 +824,11 @@ let ``Variant equality works`` () =
         (POk (EBinOp (EVariant ("a", EInt 0), Equal, EVariant ("a", EInt 0))))
         (IOk "bool")
         (EOk (VBool true))
+
+[<Fact>]
+let ``Record update`` () =
+    test
+        "let a = { a = 0 } in { a := 1 | a }.a"
+        (POk (ELet (EVar "a", ERecordExtend ("a", EInt 0, ERecordEmpty), ERecordSelect (ERecordExtend ("a", EInt 1, ERecordRestrict (EVar "a", "a")), "a"))))
+        (IOk "int")
+        (EOk (VInt 1))

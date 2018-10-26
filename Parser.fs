@@ -158,14 +158,46 @@ let parseRecordLabel content : Parser<string * Expr> =
     attempt (identWs .>> strWs "=" .>>. content)
     <|> (identWs |>> (fun label -> label, EVar label))
 
-let parseRecordLabels content : Parser<(string * Expr) list> =
-    attempt (sepBy (parseRecordLabel content) (strWs ","))
-    <|> (parseRecordLabel content|>> List.singleton)
+type RecordAction =
+    | Set 
+    | Update 
 
-let parseRecordExtend content =
-    let p1 = strWs "{" >>. (parseRecordLabels content .>> ws)
+let parseRecordLabelOrUpdate : Parser<string * Expr * RecordAction> =
+    (attempt (identWs .>> strWs ":=" .>>. parseExprWs) |>> (fun (label, expr) -> label, expr, Update))
+    <|> (parseRecordLabel parseExprWs |>> (fun (label, expr) -> label, expr, Set))
+
+let parseRecordLabels content : Parser<(string * Expr) list> =
+    sepBy1 (parseRecordLabel content) (strWs ",")
+
+let parseRecordLabelsOrUpdate =
+    sepBy1 (parseRecordLabelOrUpdate) (strWs ",")
+
+let parseRecordExtendPattern =
+    let p1 = strWs "{" >>. (parseRecordLabels parsePatternWs .>> ws)
     let p2 = strWs "|" >>. parseExprWs .>> strWs "}"
     pipe2 p1 p2 exprRecordExtend
+
+let parseRecordExtendOrUpdate =
+    let p1 = strWs "{" >>. (parseRecordLabelsOrUpdate .>> ws)
+    let p2 = strWs "|" >>. parseExprWs .>> strWs "}"
+    pipe2 p1 p2 (fun labelsOrUpdate record ->
+        let labels =
+            labelsOrUpdate
+            |> List.map (fun (label, expr, _) -> label, expr)
+        let toRemove =
+            labelsOrUpdate
+            |> List.choose (fun (label, _, action) ->
+                match action with
+                | Set -> None
+                | Update -> Some label
+            )
+        let restrictedRecord =
+            (record, toRemove)
+            ||> List.fold (fun record label ->
+                ERecordRestrict (record, label)
+            )
+        exprRecordExtend labels restrictedRecord
+    )
 
 let parseRecordInit content =
     strWs "{" >>. (parseRecordLabels content .>> ws) .>> strWs "}"
@@ -187,7 +219,7 @@ do parsePatternRef :=
         parseVariant
         attempt parseVar
         attempt parseRecordEmpty
-        attempt (parseRecordExtend parsePatternWs)
+        attempt parseRecordExtendPattern 
         attempt (parseRecordInit parsePatternWs)
     ]
 
@@ -203,7 +235,7 @@ let parseNotCallOrRecordSelect =
         parseVariant
         parseMatch
         attempt parseRecordEmpty
-        attempt (parseRecordExtend parseExprWs)
+        attempt parseRecordExtendOrUpdate 
         attempt (parseRecordInit parseExprWs)
         attempt parseIfThenElse
     ]
