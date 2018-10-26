@@ -838,7 +838,7 @@ let ``Record update`` () =
 [<Fact>]
 let ``Match in function bug`` () =
     test
-        "let f def v = match v { :just value -> value, :none -> def }"
+        "let f def v = match v { :just value -> value, :none {} -> def }"
         PSkip
         ISkip
         ESkip
