@@ -146,4 +146,33 @@ ordo>>> let variant = :variant 1
 
 Variant can be eliminated via pattern matching. While variant literals are open rows, we can deduce if the input if open on closed based on the fact that a default case is provided or not.
 
-TODO
+```ocaml
+ordo>>> let defaultwith default value = match value { :some value -> value, :none {} -> default }
+<Lambda>
+ordo>>> :type defaultwith
+forall a => a -> <none : {}, some : a> -> a
+```
+
+In this case, we did not provide a default case and therefore, the variant was infered to be closed. However, if we wrote it this way:
+
+```ocaml
+ordo>>> let issuccess v = match v { :success a -> true | otherwise -> false }
+<Lambda>
+ordo>>> :type issuccess
+forall a r. (r\success) => <success : a | r> -> bool
+```
+
+This is useful to make sure which variant can be passed in.
+
+```ocaml
+ordo>>> issuccess (:fail 0)
+False
+ordo>>> defaultwith 1 (:fail 0)
+Error: OrdoException
+  (Infer
+     (UnifyFail
+        (TRowEmpty,
+         TRowExtend
+           ("fail",TVar {contents = Link TInt;},
+            TVar {contents = UnboundRow (34,0,set ["fail"]);}))))
+```
