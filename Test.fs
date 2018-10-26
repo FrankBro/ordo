@@ -18,6 +18,7 @@ type ParseResult =
 
 type InferResult =
     | IOk of string
+    | ISkip
     | IFail of OrdoError
 
 type EvalResult =
@@ -45,7 +46,8 @@ let test input parserExpected inferExpected evalExpected =
                 |> IOk
             with
             | OrdoException error -> IFail error
-    Assert.StrictEqual(inferExpected, inferResult)
+    if inferExpected <> ISkip then
+        Assert.StrictEqual(inferExpected, inferResult)
     let evalResult =
         match parserResult with
         | PSkip -> failwith "Impossible"
@@ -832,3 +834,11 @@ let ``Record update`` () =
         (POk (ELet (EVar "a", ERecordExtend ("a", EInt 0, ERecordEmpty), ERecordSelect (ERecordExtend ("a", EInt 1, ERecordRestrict (EVar "a", "a")), "a"))))
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Match in function bug`` () =
+    test
+        "let f def v = match v { :just value -> value, :none -> def }"
+        PSkip
+        ISkip
+        ESkip
