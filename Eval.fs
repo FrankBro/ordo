@@ -69,8 +69,18 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VVariant (label, value), Some cases ->
             let pattern, expr =
                 cases
-                |> List.tryFind (fun (caseLabel, _, _) -> caseLabel = label)
-                |> Option.map (fun (_, pattern, expr) -> pattern, expr)
+                |> List.tryFind (fun (caseLabel, pattern, _, oGuard) -> 
+                    let isGuardTrue () =
+                        match oGuard with
+                        | None -> true
+                        | Some guard ->
+                            let guardEnv = evalPattern env pattern value
+                            match evalExpr guardEnv guard with
+                            | VBool value -> value
+                            | _ -> raise (genericError (InvalidGuard guard))
+                    caseLabel = label && isGuardTrue ()
+                )
+                |> Option.map (fun (_, pattern, expr, _) -> pattern, expr)
                 |> Option.defaultWith (fun () ->
                     oDefault
                     |> Option.map (fun (name, expr) -> EVar name, expr)

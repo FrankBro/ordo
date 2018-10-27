@@ -35,7 +35,7 @@ let parseExprWs = parseExpr .>> ws
 let parsePattern, parsePatternRef = createParserForwardedToRef ()
 let parsePatternWs = parsePattern .>> ws
 
-let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false" ]
+let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -120,10 +120,11 @@ let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs
     |>> EVariant
 
-let parseMatchNormalCase : Parser<Pattern * Expr> =
+let parseMatchNormalCase : Parser<Pattern * Expr * Guard option> =
     let pa = parsePatternWs
-    let pb = strWs "->" >>. parseExprWs
-    pipe2 pa pb (fun pattern expr -> (pattern, expr))
+    let pb = opt (strWs "when" >>. parseExprWs)
+    let pc = strWs "->" >>. parseExprWs
+    pipe3 pa pb pc (fun pattern guard expr -> (pattern, expr, guard))
 
 let parseMatchDefaultCase : Parser<string * Expr> =
     let pa = identWs

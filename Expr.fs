@@ -49,7 +49,7 @@ type Expr =
     | ERecordRestrict of Expr * Name
     | ERecordEmpty
     | EVariant of Name * Expr
-    | ECase of Expr * (Pattern * Expr) list * (Name * Expr) option
+    | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
     | EIfThenElse of Expr * Expr * Expr
     | EBinOp of Expr * BinOp * Expr
 with
@@ -67,11 +67,12 @@ with
         | ERecordRestrict (a, label) -> sprintf "ERecordRestrict (%O, %s)" a label
         | ERecordEmpty -> "ERecordEmpty"
         | EVariant (label, a) -> sprintf "EVariant (%s, %O)" label a
-        | ECase _ -> "ECase"
+        | ECase (a, xs, o) -> sprintf "ECase (%O, %O, %O)" a xs o
         | EIfThenElse (a, b, c) -> sprintf "EIfThenElse (%O, %O, %O)" a b c
         | EBinOp (a, op, b) -> sprintf "EBinOp (%O, %O, %O)" a op b
 
 and Pattern = Expr
+and Guard = Expr
 
 type Id = int
 type Level = int
@@ -192,8 +193,12 @@ let stringOfExpr (x: Expr) : string =
         | ECase (expr, cases, oDefault) ->
             let caseStrList = 
                 cases
-                |> List.map (fun (pattern, expr) ->
-                    f false pattern + " -> " + f false expr
+                |> List.map (fun (pattern, expr, oGuard) ->
+                    let guard =
+                        match oGuard with
+                        | None -> ""
+                        | Some guard -> sprintf " when %O" (f false guard)
+                    f false pattern + guard + " -> " + f false expr
                 )
                 |> String.concat ", "
             let defaultStr =
@@ -349,8 +354,8 @@ let tryMakeVariantCases cases =
         cases
         |> List.choose (fun case ->
             match case with
-            | EVariant (name, pattern), expr -> 
-                Some (name, pattern, expr)
+            | EVariant (name, pattern), expr, guard -> 
+                Some (name, pattern, expr, guard)
             | _ -> None
         )
     if List.length transformed = List.length cases then

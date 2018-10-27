@@ -85,7 +85,7 @@ let injectConstraints isVariant constraints1 ty =
         | TVariant ty -> f true ty
         | TRowEmpty -> ()
         | TRowExtend (label, _, rest) ->
-            if Set.contains label constraints1 then
+            if not isVariant && Set.contains label constraints1 then
                 raise (inferError (InferError.RowConstraintFail label))
             f isVariant rest
             
@@ -316,7 +316,7 @@ let rec inferExpr env level = function
                 | Some (name, defaultExpr) ->
                     let constraints =
                         cases
-                        |> List.map (fun (name, _, _) -> name)
+                        |> List.map (fun (name, _, _, _) -> name)
                         |> set
                     let defaultVariantTy = newRowVar level constraints
                     let valueTy = TVariant defaultVariantTy
@@ -333,9 +333,14 @@ let rec inferExpr env level = function
 and inferVariantCases env level returnTy restRowTy cases =
     match cases with
     | [] -> restRowTy
-    | (label, pattern, expr) :: otherCases ->
+    | (label, pattern, expr, oGuard) :: otherCases ->
         let variantTy = newVar level
         let patternTy, env = inferPattern env level pattern
+        oGuard
+        |> Option.iter (fun guard ->
+            let a = inferExpr env level guard
+            unify a TBool
+        )
         unify patternTy variantTy
         unify returnTy (inferExpr env level expr)
         let otherCasesRow = inferVariantCases env level returnTy restRowTy otherCases

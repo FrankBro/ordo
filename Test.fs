@@ -232,7 +232,7 @@ let ``Variant`` () =
 let ``Match variant`` () =
     test
         "match :a 1 { :a a -> 1 , :y a -> 2 }"
-        (POk (ECase ((EVariant ("a", EInt 1)), [EVariant ("a", EVar "a"), EInt 1;EVariant ("y", EVar "a"), EInt 2], None)))
+        (POk (ECase ((EVariant ("a", EInt 1)), [EVariant ("a", EVar "a"), EInt 1, None;EVariant ("y", EVar "a"), EInt 2, None], None)))
         (IOk "int")
         (EOk (VInt 1))
 
@@ -240,7 +240,7 @@ let ``Match variant`` () =
 let ``Match open variant`` () =
     test
         "match :b 1 { :a a -> 1 | otherwise -> 2 }"
-        (POk (ECase ((EVariant ("b", EInt 1)), [EVariant ("a", EVar "a"), EInt 1], Some ("otherwise", EInt 2))))
+        (POk (ECase ((EVariant ("b", EInt 1)), [EVariant ("a", EVar "a"), EInt 1, None], Some ("otherwise", EInt 2))))
         (IOk "int")
         (EOk (VInt 2))
 
@@ -667,7 +667,7 @@ let ``Float LesserEqual false`` () =
 let ``Record pattern in match`` () =
     test
         "match :a { a = 1 } { :a { a = a } -> a }"
-        (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a"], None)))
+        (POk (ECase (EVariant ("a", eRecord ["a", EInt 1]), [EVariant ("a", eRecord ["a", EVar "a"]), EVar "a", None], None)))
         (IOk "int")
         (EOk (VInt 1))
 
@@ -675,7 +675,7 @@ let ``Record pattern in match`` () =
 let ``Variant pattern in match`` () =
     test
         "match :a (:b 2) { :a (:b b) -> b }"
-        (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b"], None)))
+        (POk (ECase (EVariant ("a", EVariant ("b", EInt 2)), [EVariant ("a", EVariant ("b", EVar "b")), EVar "b", None], None)))
         (IOk "int")
         (EOk (VInt 2))
 
@@ -755,7 +755,7 @@ let ``Variant restriction on literal`` () =
 let ``Variant restriction on closed match`` () =
     test
         "fun r -> match r { :x x -> 0 }"
-        (POk (EFun (EVar "r", ECase (EVar "r", [EVariant ("x", EVar "x"), EInt 0], None))))
+        (POk (EFun (EVar "r", ECase (EVar "r", [EVariant ("x", EVar "x"), EInt 0, None], None))))
         (IOk "forall a => <x : a> -> int")
         ESkip
 
@@ -763,7 +763,7 @@ let ``Variant restriction on closed match`` () =
 let ``Variant restriction on open match`` () =
     test
         "fun r -> match r { :x x -> 0 | otherwise -> 1 }"
-        (POk (EFun (EVar "r", ECase (EVar "r", [EVariant ("x", EVar "x"), EInt 0], Some ("otherwise", EInt 1)))))
+        (POk (EFun (EVar "r", ECase (EVar "r", [EVariant ("x", EVar "x"), EInt 0, None], Some ("otherwise", EInt 1)))))
         (IOk "forall a r. (r\\x) => <x : a | r> -> int")
         ESkip
 
@@ -842,3 +842,11 @@ let ``Match in function bug`` () =
         PSkip
         ISkip
         ESkip
+
+[<Fact>]
+let ``Variant match with pattern guard`` () =
+    test
+        "match :a 1 { :a a when a = 0 -> 0, :a a -> a }"
+        (POk (ECase (EVariant ("a", EInt 1), [EVariant ("a", EVar "a"), EInt 0, Some (EBinOp (EVar "a", Equal, EInt 0)); EVariant ("a", EVar "a"), EVar "a", None], None)))
+        (IOk "int")
+        (EOk (VInt 1))

@@ -12,6 +12,7 @@ type GenericError =
     | NotARecordValue of Value
     | NotAVariantValue of Value
     | EmptyMatch
+    | InvalidGuard of Expr
 
 type ParserError =
     | FunctionCallNoArg
