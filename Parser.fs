@@ -130,14 +130,6 @@ let parseMatchDefaultCase : Parser<string * Expr> =
     let pb = strWs "->" >>. parseExprWs
     pipe2 pa pb (fun var expr -> (var, expr))
 
-// let parseMatchCase : Parser<string option * Pattern * Expr> =
-//     parseMatchNormalCase 
-//     <|> parseMatchDefaultCase
-
-// let parseMatchCases =
-//     attempt (sepBy parseMatchCase (strWs "|"))
-//     <|> (parseMatchCase |>> List.singleton)
-
 let parseMatch =
     let p1 = strWs "match" >>. parseExprWs
     let p2 = strWs "{" >>. (sepBy parseMatchNormalCase (strWs ",")) 
