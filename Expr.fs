@@ -141,7 +141,7 @@ with
         | VBool b -> sprintf "VBool %b" b
         | VInt i -> sprintf "VInt %d" i
         | VFloat f -> sprintf "VFloat %f" f
-        | VFun _ -> "VFun"
+        | VFun (env, pat, bod) -> sprintf "VFun (%O, %O, %O)" env pat bod
         | VRecord fields -> sprintf "VRecord %O" fields
         | VVariant (name, value) -> sprintf "VVariant (%s, %O)" name value
 
