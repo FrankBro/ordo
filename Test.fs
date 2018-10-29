@@ -886,3 +886,19 @@ let ``Variant pattern match var reuse bug`` () =
         PSkip
         (IOk "forall r. (r\\a\\b) => <a : int, b : bool | r> -> int")
         ESkip
+
+[<Fact>]
+let ``Unary negative work on int`` () =
+    test
+        "let a = 1 in -a"
+        (POk (ELet (EVar "a", EInt 1, EUnOp (Negative, EVar "a"))))
+        (IOk "int")
+        (EOk (VInt -1))
+
+[<Fact>]
+let ``Unary negative work on float`` () =
+    test
+        "let a = 1.0 in -a"
+        (POk (ELet (EVar "a", EFloat 1.0, EUnOp (Negative, EVar "a"))))
+        (IOk "float")
+        (EOk (VFloat -1.0))
