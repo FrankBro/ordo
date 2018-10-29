@@ -868,3 +868,13 @@ let ``Pattern match on int`` () =
         (POk (ECase (EInt 1, [EVar "a", EInt 0, Some (EBinOp (EVar "a", Equal, EInt 0)); EVar "a", EInt 2, Some (EBinOp (EVar "a", Equal, EInt 2))], Some ("otherwise", EVar "otherwise"))))
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Var pattern matching var switch is not a problem`` () =
+    let a = (eRecord ["a", EVar "a"; "b", EVar "b"], EVar "a", None)
+    let b = (eRecord ["a", EVar "b"; "b", EVar "a"], EVar "b", None)
+    test
+        "match { a = 0, b = false } { { a = a, b = b } -> a, { a = b, b = a } -> b }"
+        (POk (ECase (eRecord ["a", EInt 0; "b", EBool false], [a; b], None)))
+        (IOk "int")
+        (EOk (VInt 0))
