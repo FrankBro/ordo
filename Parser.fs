@@ -283,8 +283,16 @@ let parseTy, parseTyRef = createParserForwardedToRef ()
 let parseTyWs = parseTy .>> ws
 let parseTyListWs = sepBy parseTyWs (strWs ",")
 
-let parseTConst =
-    identWs |>> TConst
+let typeReserved = [ "forall" ]
+
+let parseTConst: Parser<Ty> =
+    many1 lower |>> (Array.ofList >> String)
+    >>= fun s ->
+        if typeReserved |> List.exists ((=) s) then 
+            fail "reserved"
+        else
+            TConst s
+            |> preturn
 
 let parseTBool =
     strWs "bool" |>> fun _ -> TBool
@@ -391,8 +399,12 @@ let parseTOpenVariant : Parser<Ty> =
         )
         |> TVariant
 
+let parseTypeParen =
+    strWs "(" >>. parseTyWs .>> strWs ")"
+
 let parseNotLeftRecursiveType = 
     choice [
+        parseTypeParen
         attempt parseTBool
         attempt parseTInt
         attempt parseTFloat
