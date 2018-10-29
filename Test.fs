@@ -902,3 +902,11 @@ let ``Unary negative work on float`` () =
         (POk (ELet (EVar "a", EFloat 1.0, EUnOp (Negative, EVar "a"))))
         (IOk "float")
         (EOk (VFloat -1.0))
+
+[<Fact>]
+let ``Parse inner functions`` () =
+    test
+        "let map f i = f i in map"
+        PSkip
+        (IOk "forall a b => (a -> b) -> a -> b")
+        ESkip
