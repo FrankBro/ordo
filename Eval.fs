@@ -122,6 +122,12 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VBool false -> evalExpr env elseExpr
         | _ -> 
             raise (genericError IfValueNotBoolean )
+    | EUnOp (op, a) ->
+        let a = evalExpr env a
+        match op, a with
+        | Negative, VInt a -> VInt (-a)
+        | Negative, VFloat a -> VFloat (-a)
+        | _ -> raise (evalError BadUnOp)
     | EBinOp (a, op, b) ->
         let a = evalExpr env a
         match op with

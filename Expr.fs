@@ -36,6 +36,9 @@ with
         | Lesser -> "Lesser"
         | LesserEqual -> "LesserEqual"
 
+type UnOp =
+    | Negative
+
 type Expr =
     | EBool of bool
     | EInt of int
@@ -52,6 +55,7 @@ type Expr =
     | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
     | EIfThenElse of Expr * Expr * Expr
     | EBinOp of Expr * BinOp * Expr
+    | EUnOp of UnOp * Expr
 with
     override x.ToString () =
         match x with
@@ -70,6 +74,7 @@ with
         | ECase (a, xs, o) -> sprintf "ECase (%O, %O, %O)" a xs o
         | EIfThenElse (a, b, c) -> sprintf "EIfThenElse (%O, %O, %O)" a b c
         | EBinOp (a, op, b) -> sprintf "EBinOp (%O, %O, %O)" a op b
+        | EUnOp (op, a) -> sprintf "EUnOp (%O, %O)" op a
 
 and Pattern = Expr
 and Guard = Expr
@@ -154,6 +159,9 @@ let stringOfBinOp = function
     | Lesser -> "<"
     | LesserEqual -> "<="
 
+let stringOfUnOp = function
+    | Negative -> "-"
+
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
         | EBool bool -> sprintf "%b" bool
@@ -216,6 +224,10 @@ let stringOfExpr (x: Expr) : string =
             let op = stringOfBinOp op
             let b = f false b
             sprintf "%s %s %s" a op b
+        | EUnOp (op, a) ->
+            let a = f false a
+            let op = stringOfUnOp op
+            sprintf "%s%s" op a
     f false x
 
 type Entry = {

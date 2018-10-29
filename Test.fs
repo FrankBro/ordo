@@ -104,7 +104,7 @@ let ``Positive integer`` () =
 let ``Negative integer`` () =
     test 
         "-1"
-        (POk (EInt -1))
+        (POk (EUnOp (Negative, EInt 1)))
         (IOk "int")
         (EOk (VInt -1))
 
@@ -120,7 +120,7 @@ let ``Positive float`` () =
 let ``Negative float`` () =
     test 
         "-3.14"
-        (POk (EFloat -3.14))
+        (POk (EUnOp (Negative, EFloat 3.14)))
         (IOk "float")
         (EOk (VFloat -3.14))
 

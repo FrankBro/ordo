@@ -34,6 +34,8 @@ type EvalError =
     | MissingMatchCase of Expr
     | BadVariantPattern of Name * Name
     | BadBinOp
+    | BadUnOp
+    | InvalidFix of Name
 
 type OrdoError =
     | Generic of GenericError

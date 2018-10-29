@@ -268,6 +268,10 @@ let rec inferExpr env level = function
         | Equal | NotEqual | Greater 
         | GreaterEqual | Lesser | LesserEqual -> TBool
         | _ -> b
+    | EUnOp (op, a) ->
+        let a = inferExpr env (level + 1) a
+        match op with
+        | Negative -> a
     | EFun (pattern, bodyExpr) ->
         let paramTy = newVar level
         let patternTy, fnEnv = inferPattern env level pattern

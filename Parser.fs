@@ -10,8 +10,6 @@ open Error
 open Expr
 open Infer
 open Util 
-open FParsec
-open FParsec
 
 type Parser<'t> = Parser<'t, unit>
 
@@ -50,30 +48,16 @@ let parseBool : Parser<Expr> =
     (stringReturn "true" (EBool true))
     <|> (stringReturn "false" (EBool false))
 
-let parseInt : Parser<Expr> =    
-    let pa = opt (str "-")
-    let pb = many1 digit |>> (Array.ofList >> String)
-    pipe2 pa pb (fun sign whole ->
-        let number = whole |> int
-        if Option.isSome sign then
-            -number
-        else
-            number
-    )
-    |>> EInt
+let parseInt : Parser<Expr> = 
+    many1 digit |>> (Array.ofList >> String >> int >> EInt)
 
-let parseFloat : Parser<Expr> =
-    let pa = opt (str "-")
-    let pb = many1 digit |>> (Array.ofList >> String)
-    let pc = str "." >>. many digit |>> (Array.ofList >> String)
-    pipe3 pa pb pc (fun sign whole decimal -> 
-        let number = whole + "." + decimal |> float
-        if Option.isSome sign then
-            -number
-        else
-            number
-    ) 
-    |>> EFloat
+let parseFloat : Parser<Expr> = 
+    let pa = many1 digit |>> (Array.ofList >> String)
+    let pb = str "." >>. many digit |>> (Array.ofList >> String)
+    pipe2 pa pb (fun whole decimal -> 
+        whole + "." + decimal |> float
+        |> EFloat
+    )
 
 let parseFun : Parser<Expr> =
     let p1 = strWs1 "fun" >>. many1 parsePatternWs
@@ -258,12 +242,16 @@ opp.AddOperator(InfixOperator("\\", ws, 8, Associativity.Left, fun a b ->
     | EVar name -> ERecordRestrict (a, name)
     | _ -> raise (parserError InvalidRecordRestrict)
 ))
+
+let notArrow : Parser<unit> = notFollowedBy (str ">") >>. ws
+
+opp.AddOperator(PrefixOperator("-", notArrow, 8, true, fun a -> EUnOp (Negative, a)))
+
 opp.AddOperator(InfixOperator("*", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Multiply, b)))
 opp.AddOperator(InfixOperator("/", ws, 7, Associativity.Left, fun a b -> EBinOp (a, Divide, b)))
 
 
 opp.AddOperator(InfixOperator("+", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Plus, b)))
-let notArrow : Parser<unit> = notFollowedBy (str ">") >>. ws
 opp.AddOperator(InfixOperator("-", notArrow, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
 
 opp.AddOperator(InfixOperator("<", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
