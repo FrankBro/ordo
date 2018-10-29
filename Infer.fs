@@ -308,11 +308,11 @@ let rec inferExpr env level = function
     | ECase (expr, cases, oDefault) ->
         match tryMakeVariantCases cases with
         | Some cases ->
-            let defTy, returnTy, env =
+            let defTy, returnTy =
                 match oDefault with
                 | None -> 
                     let returnTy = newVar level
-                    TRowEmpty, returnTy, env
+                    TRowEmpty, returnTy
                 | Some (name, defaultExpr) ->
                     let constraints =
                         cases
@@ -322,7 +322,7 @@ let rec inferExpr env level = function
                     let valueTy = TVariant defaultVariantTy
                     let env = Map.add name valueTy env
                     let returnTy = inferExpr env level defaultExpr
-                    defaultVariantTy, returnTy, env
+                    defaultVariantTy, returnTy
             let exprTy = inferExpr env level expr
             let casesRow = inferVariantCases env level returnTy defTy cases
             unify exprTy (TVariant casesRow)
@@ -356,14 +356,14 @@ and inferVariantCases env level returnTy restRowTy cases =
     | [] -> restRowTy
     | (label, pattern, expr, oGuard) :: otherCases ->
         let variantTy = newVar level
-        let patternTy, env = inferPattern env level pattern
+        let patternTy, caseEnv = inferPattern env level pattern
         oGuard
         |> Option.iter (fun guard ->
-            let a = inferExpr env level guard
+            let a = inferExpr caseEnv level guard
             unify a TBool
         )
         unify patternTy variantTy
-        unify returnTy (inferExpr env level expr)
+        unify returnTy (inferExpr caseEnv level expr)
         let otherCasesRow = inferVariantCases env level returnTy restRowTy otherCases
         TRowExtend (label, variantTy, otherCasesRow)
 

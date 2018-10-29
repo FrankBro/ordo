@@ -878,3 +878,11 @@ let ``Var pattern matching var switch is not a problem`` () =
         (POk (ECase (eRecord ["a", EInt 0; "b", EBool false], [a; b], None)))
         (IOk "int")
         (EOk (VInt 0))
+
+[<Fact>]
+let ``Variant pattern match var reuse bug`` () =
+    test
+        "let f v = match v { :a a when a = 0 -> a, :b a when a = false -> 0 | otherwise -> 0 }"
+        PSkip
+        (IOk "forall r. (r\\a\\b) => <a : int, b : bool | r> -> int")
+        ESkip
