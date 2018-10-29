@@ -215,7 +215,8 @@ let instantiate level ty =
             TRowExtend (label, f fieldTy, f row)
     f ty
 
-let rec matchFunTy = function
+let rec matchFunTy ty =
+    match ty with
     | TArrow (paramTy, returnTy) -> paramTy, returnTy
     | TVar {contents = Link ty} -> matchFunTy ty
     | TVar ({contents = Unbound(id, level)} as tvar) ->
@@ -223,10 +224,24 @@ let rec matchFunTy = function
         let returnTy = newVar level
         tvar := Link (TArrow(paramTy, returnTy))
         paramTy, returnTy
-    | TVar ({contents = UnboundRow(id, level, constraints)} as tvar) -> raise (inferError FunctionExpected)
-    | _ -> raise (inferError FunctionExpected)
+    | TVar ({contents = UnboundRow(id, level, constraints)} as tvar) -> raise (inferError (FunctionExpected ty))
+    | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr env level = function
+    | EFix name -> 
+        let ty = 
+            env
+            |> Map.tryFind name 
+            |> Option.defaultWith (fun () ->
+                raise (genericError (VariableNotFound name))
+            )
+        let rec split ty =
+            match ty with
+            | TVar {contents = Link ty} -> split ty
+            | TArrow (recur, rest) -> recur, rest
+            | _ -> raise (genericError (InvalidFix name))
+        let recur, rest = split ty
+        rest
     | EBool _ -> TBool
     | EInt _ -> TInt
     | EFloat _ -> TFloat

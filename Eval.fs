@@ -6,6 +6,18 @@ open Util
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | EFix name ->
+        let fnValue =
+            Map.tryFind name env
+            |> Option.defaultWith (fun () ->
+                raise (genericError (VariableNotFound name))
+            )
+        match fnValue with
+        | VFun (innerEnv, EVar fnName, (EFun(arg, rest) as fn)) ->
+            let fnValue = evalExpr innerEnv fn
+            let env = Map.add fnName fnValue innerEnv
+            evalExpr env fn
+        | _ -> raise (genericError (InvalidFix name))
     | EBool b -> VBool b
     | EInt i -> VInt i
     | EFloat f -> VFloat f

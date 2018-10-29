@@ -13,6 +13,7 @@ type GenericError =
     | NotAVariantValue of Value
     | EmptyMatch
     | InvalidGuard of Expr
+    | InvalidFix of Name
 
 type ParserError =
     | FunctionCallNoArg
@@ -25,7 +26,7 @@ type InferError =
     | RecursiveRowTypes
     | UnifyFail of Ty * Ty
     | RowTypeExpected
-    | FunctionExpected
+    | FunctionExpected of Ty
     | RowConstraintFail of Name
 
 type EvalError =
@@ -35,7 +36,6 @@ type EvalError =
     | BadVariantPattern of Name * Name
     | BadBinOp
     | BadUnOp
-    | InvalidFix of Name
 
 type OrdoError =
     | Generic of GenericError

@@ -56,6 +56,7 @@ type Expr =
     | EIfThenElse of Expr * Expr * Expr
     | EBinOp of Expr * BinOp * Expr
     | EUnOp of UnOp * Expr
+    | EFix of Name
 with
     override x.ToString () =
         match x with
@@ -75,6 +76,7 @@ with
         | EIfThenElse (a, b, c) -> sprintf "EIfThenElse (%O, %O, %O)" a b c
         | EBinOp (a, op, b) -> sprintf "EBinOp (%O, %O, %O)" a op b
         | EUnOp (op, a) -> sprintf "EUnOp (%O, %O)" op a
+        | EFix name -> sprintf "EFix %s" name
 
 and Pattern = Expr
 and Guard = Expr
@@ -164,6 +166,7 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | EFix name -> sprintf "fix %s" name
         | EBool bool -> sprintf "%b" bool
         | EInt int -> sprintf "%d" int
         | EFloat float -> sprintf "%f" float

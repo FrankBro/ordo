@@ -33,7 +33,7 @@ let parseExprWs = parseExpr .>> ws
 let parsePattern, parsePatternRef = createParserForwardedToRef ()
 let parsePatternWs = parsePattern .>> ws
 
-let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when" ]
+let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -190,6 +190,9 @@ let parseIfThenElse =
     let p3 = strWs1 "else" >>. parseExprWs
     pipe3 p1 p2 p3 (fun ifExpr thenExpr elseExpr -> EIfThenElse (ifExpr, thenExpr, elseExpr))
 
+let parseFix =
+    strWs1 "fix" >>. identWs |>> EFix
+
 do parsePatternRef :=
     choice [
         parseParen parsePatternWs
@@ -203,6 +206,7 @@ do parsePatternRef :=
 let parseNotCallOrRecordSelect =
     choice [
         parseParen parseExprWs
+        attempt parseFix
         parseBool
         attempt parseFloat
         attempt parseInt

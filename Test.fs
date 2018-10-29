@@ -910,3 +910,12 @@ let ``Parse inner functions`` () =
         PSkip
         (IOk "forall a b => (a -> b) -> a -> b")
         ESkip
+
+[<Fact>]
+let ``Fix works`` () =
+    test
+        "let yfact fact n = if n > 0 then n * fact(n-1) else 1 in let fact = fix yfact in fact 5"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 120))
+
