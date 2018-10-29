@@ -861,3 +861,10 @@ let ``Pattern match on record with guard`` () =
         (IOk "int")
         (EOk (VInt 0))
         
+[<Fact>]
+let ``Pattern match on int`` () =
+    test
+        "match 1 { a when a = 0 -> 0, a when a = 2 -> 2 | otherwise -> otherwise }"
+        (POk (ECase (EInt 1, [EVar "a", EInt 0, Some (EBinOp (EVar "a", Equal, EInt 0)); EVar "a", EInt 2, Some (EBinOp (EVar "a", Equal, EInt 2))], Some ("otherwise", EVar "otherwise"))))
+        (IOk "int")
+        (EOk (VInt 1))
