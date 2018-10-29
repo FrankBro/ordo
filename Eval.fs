@@ -91,7 +91,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             let fnEnv = evalPattern env pattern value
             evalExpr fnEnv expr
         | _ -> 
-            let value = evalExpr env expr
+            let value = evalExpr env valueExpr
             let pattern, expr =
                 cases
                 |> List.tryFind (fun (pattern, expr, oGuard) ->
