@@ -29,14 +29,28 @@ let test input =
         printfn "Exception"
         printfn "%O" e
 
+let testType input =
+    try
+        printfn "Input    : %s" input
+        let ty = readType input
+        printfn "Type     : %O" ty
+        printfn "Raw type : %s" (stringOfTy ty)
+    with 
+    | OrdoException e ->
+        printfn "Exception"
+        printfn "%O" e
+    | e ->
+        printfn "Exception"
+        printfn "%O" e
+
 [<EntryPoint>]
 let main argv =
-    // let input = 
-    //     "let f {x,y} = x + y in 
-    //      let x = 1 in 
-    //      let y = 2 in 
-    //      f {x,y}"
-    let input = "match { a = 0, b = 1 } { { a = a, b = b } when a = 1 -> b, { a = a, b = b } -> a }"
-    test input
-    // runRepl ()
+    // let input = "let yfact fact n = if n > 0 then n * fact(n-1) else 1 in let fact = fix yfact in fact 5"
+    // test input
+
+    // let input = "forall a => (a -> a) -> a"
+    // testType input
+
+    runRepl ()
+
     0 // return an integer exit code
