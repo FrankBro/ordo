@@ -36,6 +36,7 @@ let main argv =
     //      let x = 1 in 
     //      let y = 2 in 
     //      f {x,y}"
-    // test input
-    runRepl ()
+    let input = "match { a = 0, b = 1 } { { a = a, b = b } when a = 1 -> b, { a = a, b = b } -> a }"
+    test input
+    // runRepl ()
     0 // return an integer exit code

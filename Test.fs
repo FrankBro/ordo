@@ -850,3 +850,14 @@ let ``Variant match with pattern guard`` () =
         (POk (ECase (EVariant ("a", EInt 1), [EVariant ("a", EVar "a"), EInt 0, Some (EBinOp (EVar "a", Equal, EInt 0)); EVariant ("a", EVar "a"), EVar "a", None], None)))
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Pattern match on record with guard`` () =
+    let a = (eRecord ["a", EVar "a"; "b", EVar "b"], EVar "b", Some (EBinOp (EVar "a", Equal, EInt 1)))
+    let b = (eRecord ["a", EVar "a"; "b", EVar "b"], EVar "a", None)
+    test
+        "match { a = 0, b = 1 } { { a = a, b = b } when a = 1 -> b, { a = a, b = b } -> a }"
+        (POk (ECase (eRecord ["a", EInt 0; "b", EInt 1], [a; b], None)))
+        (IOk "int")
+        (EOk (VInt 0))
+        

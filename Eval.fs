@@ -91,7 +91,30 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             let fnEnv = evalPattern env pattern value
             evalExpr fnEnv expr
         | _ -> 
-            raise (evalError (NotAVariant valueExpr))
+            let value = evalExpr env expr
+            let pattern, expr =
+                cases
+                |> List.tryFind (fun (pattern, expr, oGuard) ->
+                    let isGuardTrue () =
+                        match oGuard with
+                        | None -> true
+                        | Some guard ->
+                            let guardEnv = evalPattern env pattern value
+                            match evalExpr guardEnv guard with
+                            | VBool value -> value
+                            | _ -> raise (genericError (InvalidGuard guard))
+                    isGuardTrue ()
+                )
+                |> Option.map (fun (pattern, expr, _) -> pattern, expr)
+                |> Option.defaultWith (fun () ->
+                    oDefault
+                    |> Option.map (fun (name, expr) -> EVar name, expr)
+                    |> Option.defaultWith (fun () ->
+                        raise (evalError (MissingMatchCase valueExpr))
+                    )
+                )
+            let fnEnv = evalPattern env pattern value
+            evalExpr fnEnv expr
     | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
         let ifValue = evalExpr env ifExpr
         match ifValue with

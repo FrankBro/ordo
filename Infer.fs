@@ -328,7 +328,28 @@ let rec inferExpr env level = function
             unify exprTy (TVariant casesRow)
             returnTy
         | None ->
-            failwith "TODO"
+            let exprTy = inferExpr env level expr
+            let returnTy =
+                match oDefault with
+                | None -> newVar level
+                | Some (name, defaultExpr) ->
+                    let valueTy = newVar level
+                    let env = Map.add name valueTy env
+                    inferExpr env level defaultExpr
+            let casesExprReturn =
+                cases
+                |> List.iter (fun (pattern, expr, oGuard) ->
+                    let patternTy, env = inferPattern env level pattern
+                    oGuard
+                    |> Option.iter (fun guard ->
+                        let a = inferExpr env level guard
+                        unify a TBool
+                    )
+                    unify patternTy exprTy
+                    let localReturnTy = inferExpr env level expr
+                    unify localReturnTy returnTy
+                )
+            returnTy
 
 and inferVariantCases env level returnTy restRowTy cases =
     match cases with
