@@ -918,4 +918,3 @@ let ``Fix works`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 120))
-
