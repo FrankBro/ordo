@@ -926,3 +926,11 @@ let ``Fix multiarg`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 10))
+
+[<Fact>]
+let ``Rec sugar`` () =
+    test
+        "let rec fact n = if n > 0 then n * fact(n-1) else 1 in fact 5"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 120))

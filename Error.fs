@@ -20,6 +20,7 @@ type ParserError =
     | InvalidFunctionDeclaration
     | InvalidRecordSelect
     | InvalidRecordRestrict
+    | InvalidLetRec
 
 type InferError =
     | RecursiveTypes

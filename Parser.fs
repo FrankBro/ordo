@@ -33,7 +33,7 @@ let parseExprWs = parseExpr .>> ws
 let parsePattern, parsePatternRef = createParserForwardedToRef ()
 let parsePatternWs = parsePattern .>> ws
 
-let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix" ]
+let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -98,7 +98,34 @@ let parseLet =
                 | [] -> raise (parserError InvalidFunctionDeclaration)
                 | pattern :: _ -> pattern
             )
-        ELet (pattern, value, body))
+        ELet (pattern, value, body)
+    )
+
+let parseLetRec = 
+    let p1 = strWs1 "let rec" >>. many1 parsePatternWs
+    let p2 = strWs "=" >>. parseExprWs
+    let p3 = opt (strWs1 "in" >>. parseExprWs)
+    pipe3 p1 p2 p3 (fun patterns value oBody -> 
+        let name, value =
+            match patterns with
+            | [pattern] -> raise (parserError InvalidLetRec)
+            | EVar name :: rest ->
+                let wrappedValue =
+                    (rest, value)
+                    ||> List.foldBack (fun pattern state ->
+                        EFun (pattern, state)
+                    )
+                name, wrappedValue
+            | _ -> raise (parserError InvalidFunctionDeclaration)
+        let body =
+            oBody
+            |> Option.defaultWith (fun () ->
+                match patterns with
+                | [] -> raise (parserError InvalidFunctionDeclaration)
+                | pattern :: _ -> pattern
+            )
+        ELet (EVar ("_" + name), EFun (EVar name, value), ELet (EVar name, EFix ("_" + name), body))
+    )
 
 let parseVariant =
     strWs ":" >>. identWs .>>. parseExprWs
@@ -206,6 +233,7 @@ do parsePatternRef :=
 let parseNotCallOrRecordSelect =
     choice [
         parseParen parseExprWs
+        attempt parseLetRec
         attempt parseFix
         parseBool
         attempt parseFloat
