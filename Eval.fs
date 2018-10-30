@@ -16,7 +16,8 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VFun (innerEnv, EVar fnName, (EFun(arg, rest) as fn)) ->
             let fnValue = evalExpr innerEnv fn
             let env = Map.add fnName fnValue innerEnv
-            evalExpr env fn
+            VFun (env, arg, rest)
+            // evalExpr env fn
         | _ -> raise (genericError (InvalidFix name))
     | EBool b -> VBool b
     | EInt i -> VInt i
@@ -31,6 +32,9 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         let fnValue = evalExpr env fnExpr
         match fnValue with
         | VFun (innerEnv, pattern, bodyExpr) ->
+            printfn "innerEnv = %O" innerEnv
+            printfn "pattern = %O" pattern
+            printfn "bodyExpr = %O" bodyExpr
             let mergedEnv = Map.merge innerEnv env
             let argValue = evalExpr mergedEnv argExpr
             let fnEnv = evalPattern mergedEnv pattern argValue

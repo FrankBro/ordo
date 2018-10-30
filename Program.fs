@@ -45,12 +45,19 @@ let testType input =
 
 [<EntryPoint>]
 let main argv =
-    // let input = "let yfact fact n = if n > 0 then n * fact(n-1) else 1 in let fact = fix yfact in fact 5"
-    // test input
+    let input = 
+        "let ydiff diff a b = " +
+        "   if a < b " +
+        "   then diff b a " +
+        "   else a " +
+        "in " +
+        "let diff = fix ydiff in " +
+        "diff 3 10"
+    test input
 
     // let input = "forall a => (a -> a) -> a"
     // testType input
 
-    runRepl ()
+    // runRepl ()
 
     0 // return an integer exit code

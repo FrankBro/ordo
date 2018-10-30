@@ -919,3 +919,10 @@ let ``Fix works`` () =
         (IOk "int")
         (EOk (VInt 120))
 
+[<Fact>]
+let ``Fix multiarg`` () =
+    test
+        "let ycountdown countdown a b = if a > b then countdown (a - b) b else countdown a (b - a) in let countdown = fix ycountdown in countdown 21 10"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 120))
