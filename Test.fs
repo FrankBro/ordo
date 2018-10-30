@@ -922,7 +922,7 @@ let ``Fix works`` () =
 [<Fact>]
 let ``Fix multiarg`` () =
     test
-        "let ycountdown countdown a b = if a > b then countdown (a - b) b else countdown a (b - a) in let countdown = fix ycountdown in countdown 21 10"
+        "let ydiff diff a b = if a < b then diff b a else a in let diff = fix ydiff in diff 3 10"
         PSkip
         (IOk "int")
-        (EOk (VInt 120))
+        (EOk (VInt 10))

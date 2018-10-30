@@ -32,10 +32,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         let fnValue = evalExpr env fnExpr
         match fnValue with
         | VFun (innerEnv, pattern, bodyExpr) ->
-            printfn "innerEnv = %O" innerEnv
-            printfn "pattern = %O" pattern
-            printfn "bodyExpr = %O" bodyExpr
-            let mergedEnv = Map.merge innerEnv env
+            let mergedEnv = Map.merge env innerEnv
             let argValue = evalExpr mergedEnv argExpr
             let fnEnv = evalPattern mergedEnv pattern argValue
             evalExpr fnEnv bodyExpr
