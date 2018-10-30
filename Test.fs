@@ -918,3 +918,11 @@ let ``Fix works`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 120))
+
+[<Fact>]
+let ``Fix multiarg`` () =
+    test
+        "let ydiff diff a b = if a < b then diff b a else a in let diff = fix ydiff in diff 3 10"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 10))
