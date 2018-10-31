@@ -57,6 +57,8 @@ type Expr =
     | EBinOp of Expr * BinOp * Expr
     | EUnOp of UnOp * Expr
     | EFix of Name
+    | EListEmpty
+    | EListCons of Expr * Expr
 with
     override x.ToString () =
         match x with
@@ -77,6 +79,8 @@ with
         | EBinOp (a, op, b) -> sprintf "EBinOp (%O, %O, %O)" a op b
         | EUnOp (op, a) -> sprintf "EUnOp (%O, %O)" op a
         | EFix name -> sprintf "EFix %s" name
+        | EListEmpty -> "EListEmpty"
+        | EListCons (x, xs) -> sprintf "EListCons (%O, %O)" x xs
 
 and Pattern = Expr
 and Guard = Expr
@@ -89,6 +93,7 @@ type Ty =
     | TBool
     | TInt
     | TFloat
+    | TList of Ty
     | TApp of Ty * Ty list
     | TArrow of Ty * Ty
     | TVar of Tvar ref
@@ -103,6 +108,7 @@ with
         | TBool -> "TBool"
         | TInt -> "TInt"
         | TFloat -> "TFloat"
+        | TList ty -> sprintf "TList %O" ty
         | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
         | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
         | TVar a -> sprintf "TVar %O" (!a)
@@ -137,6 +143,7 @@ type Value =
     | VFun of Map<Name, Value> * Pattern * Expr
     | VRecord of Map<Name, Value>
     | VVariant of Name * Value
+    | VList of Value list
 with
     override x.ToString () =
         match x with
@@ -146,6 +153,7 @@ with
         | VFun (env, pat, bod) -> sprintf "VFun (%O, %O, %O)" env pat bod
         | VRecord fields -> sprintf "VRecord %O" fields
         | VVariant (name, value) -> sprintf "VVariant (%s, %O)" name value
+        | VList xs -> sprintf "VList %O" xs
 
 let stringOfBinOp = function
     | Plus -> "+"
@@ -231,6 +239,8 @@ let stringOfExpr (x: Expr) : string =
             let a = f false a
             let op = stringOfUnOp op
             sprintf "%s%s" op a
+        | EListEmpty -> "[]"
+        | EListCons (x, xs) -> sprintf "%s :: %s" (f false x) (f false xs)
     f false x
 
 type Entry = {
@@ -282,6 +292,7 @@ let stringOfTy (x: Ty) : string =
         | TBool -> "bool"
         | TInt -> "int"
         | TFloat -> "float"
+        | TList ty -> sprintf "[%s]" (f false ty)
         | TApp (ty, tyArgList) ->
             tyArgList
             |> List.map (f false)
@@ -362,6 +373,12 @@ let rec stringOfValue value =
             |> String.concat ", "
             |> sprintf "{ %s }"
         | VVariant (label, value) -> sprintf ":%s %s" label (stringOfValue value)
+        | VList xs -> 
+            let content =
+                xs
+                |> List.map stringOfValue
+                |> String.concat ", "
+            "[" + content + "]"
     f false value
 
 let tryMakeVariantCases cases =

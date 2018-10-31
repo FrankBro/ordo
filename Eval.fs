@@ -6,6 +6,15 @@ open Util
 
 let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | EListEmpty -> VList []
+    | EListCons (x, xs) ->
+        let xsValue = evalExpr env xs
+        match xsValue with
+        | VList xs ->
+            let xValue = evalExpr env x
+            VList (xValue :: xs)
+        | _ ->
+            raise (evalError InvalidList)
     | EFix name ->
         let fnValue =
             Map.tryFind name env

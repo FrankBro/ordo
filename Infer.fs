@@ -53,6 +53,7 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TRowExtend (label, fieldTy, row) ->
             f fieldTy
             f row
+        | TList ty -> f ty
         | TConst _ | TBool | TInt | TFloat | TRowEmpty -> ()
     f ty
 
@@ -60,6 +61,7 @@ let injectConstraints isVariant constraints1 ty =
     let rec f isVariant ty =
         match ty with
         | TBool | TInt | TFloat | TConst _ -> ()
+        | TList ty -> f isVariant ty
         | TVar {contents = Link ty} -> f false ty
         | TArrow (a, b) -> 
             f false a
@@ -170,6 +172,7 @@ let rec generalizeTy level = function
     | TVariant row -> TVariant (generalizeTy level row)
     | TRowExtend (label, fieldTy, row) ->
         TRowExtend (label, generalizeTy level fieldTy, generalizeTy level row)
+    | TList ty -> TList (generalizeTy level ty)
     | TVar {contents = Generic _ }
     | TVar {contents = GenericRow _ }
     | TVar {contents = Unbound _ }
@@ -185,6 +188,7 @@ let instantiate level ty =
     let rec f ty =
         match ty with
         | TConst _ | TBool | TInt | TFloat -> ty
+        | TList ty -> TList (f ty)
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic id} ->
             idVarMap
@@ -228,6 +232,12 @@ let rec matchFunTy ty =
     | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr env level = function
+    | EListEmpty -> TList (newVar level)
+    | EListCons (x, xs) -> 
+        let xTy = inferExpr env level x
+        let xsTy = inferExpr env level xs
+        unify xTy xsTy
+        TList xTy
     | EFix name -> 
         let ty = 
             env

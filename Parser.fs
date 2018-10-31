@@ -230,8 +230,21 @@ do parsePatternRef :=
         attempt (parseRecordInit parsePatternWs)
     ]
 
+let parseListEmpty =
+    strWs "[]" |>> fun _ -> EListEmpty
+
+let parseListLiteral = 
+    strWs "[" >>. sepBy1 parseExprWs (strWs ",") .>> strWs "]"
+    |>> fun list ->
+        (EListEmpty, list)
+        ||> List.fold (fun state x ->
+            EListCons (x, state)
+        )
+
 let parseNotCallOrRecordSelect =
     choice [
+        attempt parseListEmpty
+        parseListLiteral
         parseParen parseExprWs
         attempt parseLetRec
         attempt parseFix
@@ -286,6 +299,7 @@ opp.AddOperator(InfixOperator("/", ws, 7, Associativity.Left, fun a b -> EBinOp 
 opp.AddOperator(InfixOperator("+", ws, 6, Associativity.Left, fun a b -> EBinOp (a, Plus, b)))
 opp.AddOperator(InfixOperator("-", notArrow, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
 
+opp.AddOperator(InfixOperator("::", ws, 5, Associativity.Right, fun a b -> EListCons (a, b)))
 opp.AddOperator(InfixOperator("<", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
 opp.AddOperator(InfixOperator("<=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, LesserEqual, b)))
 opp.AddOperator(InfixOperator(">", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Greater, b)))
@@ -375,6 +389,7 @@ let parseTvar =
                 match Map.tryFind name env with
                 | None -> ty
                 | Some gen -> gen
+            | TList ty -> TList (f ty)
             | TBool | TInt | TFloat -> ty
             | TVar _ -> ty
             | TApp(ty, tyArgs) -> TApp(f ty, List.map f tyArgs)

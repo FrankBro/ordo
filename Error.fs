@@ -37,6 +37,7 @@ type EvalError =
     | BadVariantPattern of Name * Name
     | BadBinOp
     | BadUnOp
+    | InvalidList
 
 type OrdoError =
     | Generic of GenericError
