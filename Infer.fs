@@ -104,6 +104,7 @@ let rec unify ty1 ty2 =
         | TArrow (paramTy1, returnTy1), TArrow (paramTy2, returnTy2) ->
             f isVariant paramTy1 paramTy2
             f isVariant returnTy1 returnTy2
+        | TList ty1, TList ty2 -> f isVariant ty1 ty2
         | TVar {contents = Link ty1}, ty2
         | ty1, TVar {contents = Link ty2} -> f isVariant ty1 ty2
         | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} 
@@ -234,10 +235,10 @@ let rec matchFunTy ty =
 let rec inferExpr env level = function
     | EListEmpty -> TList (newVar level)
     | EListCons (x, xs) -> 
-        let xTy = inferExpr env level x
+        let xTy = TList (inferExpr env level x)
         let xsTy = inferExpr env level xs
         unify xTy xsTy
-        TList xTy
+        xTy
     | EFix name -> 
         let ty = 
             env

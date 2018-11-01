@@ -254,7 +254,7 @@ let parseNotCallOrRecordSelect =
         parseFun
         parseLet
         attempt parseVar
-        parseVariant
+        attempt parseVariant
         parseMatch
         attempt parseRecordEmpty
         attempt parseRecordExtendOrUpdate 
