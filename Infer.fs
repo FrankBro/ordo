@@ -53,6 +53,7 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
         | TRowExtend (label, fieldTy, row) ->
             f fieldTy
             f row
+        | TList ty -> f ty
         | TConst _ | TBool | TInt | TFloat | TRowEmpty -> ()
     f ty
 
@@ -60,6 +61,7 @@ let injectConstraints isVariant constraints1 ty =
     let rec f isVariant ty =
         match ty with
         | TBool | TInt | TFloat | TConst _ -> ()
+        | TList ty -> f isVariant ty
         | TVar {contents = Link ty} -> f false ty
         | TArrow (a, b) -> 
             f false a
@@ -102,6 +104,7 @@ let rec unify ty1 ty2 =
         | TArrow (paramTy1, returnTy1), TArrow (paramTy2, returnTy2) ->
             f isVariant paramTy1 paramTy2
             f isVariant returnTy1 returnTy2
+        | TList ty1, TList ty2 -> f isVariant ty1 ty2
         | TVar {contents = Link ty1}, ty2
         | ty1, TVar {contents = Link ty2} -> f isVariant ty1 ty2
         | TVar {contents = Unbound(id1, _)}, TVar {contents = Unbound(id2, _)} 
@@ -170,6 +173,7 @@ let rec generalizeTy level = function
     | TVariant row -> TVariant (generalizeTy level row)
     | TRowExtend (label, fieldTy, row) ->
         TRowExtend (label, generalizeTy level fieldTy, generalizeTy level row)
+    | TList ty -> TList (generalizeTy level ty)
     | TVar {contents = Generic _ }
     | TVar {contents = GenericRow _ }
     | TVar {contents = Unbound _ }
@@ -185,6 +189,7 @@ let instantiate level ty =
     let rec f ty =
         match ty with
         | TConst _ | TBool | TInt | TFloat -> ty
+        | TList ty -> TList (f ty)
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic id} ->
             idVarMap
@@ -228,6 +233,12 @@ let rec matchFunTy ty =
     | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr env level = function
+    | EListEmpty -> TList (newVar level)
+    | EListCons (x, xs) -> 
+        let xTy = TList (inferExpr env level x)
+        let xsTy = inferExpr env level xs
+        unify xTy xsTy
+        xTy
     | EFix name -> 
         let ty = 
             env

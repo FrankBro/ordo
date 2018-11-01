@@ -934,3 +934,19 @@ let ``Rec sugar`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 120))
+
+[<Fact>]
+let ``Empty list`` () =
+    test
+        "[]"
+        (POk EListEmpty)
+        (IOk "forall a => [a]")
+        (EOk (VList []))
+
+[<Fact>]
+let ``Cons list`` () =
+    test
+        "1 :: []"
+        (POk (EListCons (EInt 1, EListEmpty)))
+        (IOk "[int]")
+        (EOk (VList [VInt 1]))

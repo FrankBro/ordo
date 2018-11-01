@@ -45,14 +45,7 @@ let testType input =
 
 [<EntryPoint>]
 let main argv =
-    let input = 
-        "let ydiff diff a b = " +
-        "   if a < b " +
-        "   then diff b a " +
-        "   else a " +
-        "in " +
-        "let diff = fix ydiff in " +
-        "diff 3 10"
+    let input = "a :: b"
     test input
 
     // let input = "forall a => (a -> a) -> a"
