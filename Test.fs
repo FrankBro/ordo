@@ -958,3 +958,11 @@ let ``Multiple cons list`` () =
         (POk (EListCons (EInt 1, EListCons (EInt 2, EListCons (EInt 3, EListEmpty)))))
         (IOk "[int]")
         (EOk (VList [VInt 1; VInt 2; VInt 3]))
+
+[<Fact>]
+let ``List init`` () =
+    test
+        "[1, 2, 3]"
+        (POk (EListCons (EInt 1, EListCons (EInt 2, EListCons (EInt 3, EListEmpty)))))
+        (IOk "[int]")
+        (EOk (VList [VInt 1; VInt 2; VInt 3]))

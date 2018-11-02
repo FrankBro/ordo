@@ -236,8 +236,8 @@ let parseListEmpty =
 let parseListLiteral = 
     strWs "[" >>. sepBy1 parseExprWs (strWs ",") .>> strWs "]"
     |>> fun list ->
-        (EListEmpty, list)
-        ||> List.fold (fun state x ->
+        (list, EListEmpty)
+        ||> List.foldBack (fun x state ->
             EListCons (x, state)
         )
 
