@@ -45,7 +45,7 @@ let testType input =
 
 [<EntryPoint>]
 let main argv =
-    let input = "a :: b"
+    let input = "match { a = 1 } { { a = 2 } -> 2 | otherwise -> 1 }"
     test input
 
     // let input = "forall a => (a -> a) -> a"

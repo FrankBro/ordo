@@ -223,6 +223,9 @@ let parseFix =
 do parsePatternRef :=
     choice [
         parseParen parsePatternWs
+        attempt parseBool
+        attempt parseFloat
+        attempt parseInt
         parseVariant
         attempt parseVar
         attempt parseRecordEmpty

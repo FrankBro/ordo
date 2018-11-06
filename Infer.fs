@@ -400,6 +400,9 @@ and inferVariantCases env level returnTy restRowTy cases =
 and inferPattern env level pattern =
     let rec loop env pattern =
         match pattern with
+        | EBool _ -> TBool, env
+        | EInt _ -> TInt, env
+        | EFloat _ -> TFloat, env
         | EVar name ->
             let var = newVar level
             let env = Map.add name var env

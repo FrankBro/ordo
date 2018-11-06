@@ -43,12 +43,16 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | VFun (innerEnv, pattern, bodyExpr) ->
             let mergedEnv = Map.merge env innerEnv
             let argValue = evalExpr mergedEnv argExpr
-            let fnEnv = evalPattern mergedEnv pattern argValue
+            let matches, fnEnv = evalPattern mergedEnv pattern argValue
+            if not matches then
+                raise (genericError (InvalidPattern pattern))
             evalExpr fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
     | ELet (pattern, valueExpr, bodyExpr) ->
         let value = evalExpr env valueExpr
-        let env = evalPattern env pattern value
+        let matches, env = evalPattern env pattern value
+        if not matches then
+            raise (genericError (InvalidPattern pattern))
         evalExpr env bodyExpr
     | ERecordEmpty  -> 
         VRecord Map.empty
@@ -92,15 +96,16 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             let pattern, expr =
                 cases
                 |> List.tryFind (fun (caseLabel, pattern, _, oGuard) -> 
+                    let patternMatches, _ = evalPattern env pattern value
                     let isGuardTrue () =
                         match oGuard with
                         | None -> true
                         | Some guard ->
-                            let guardEnv = evalPattern env pattern value
+                            let matches, guardEnv = evalPattern env pattern value
                             match evalExpr guardEnv guard with
-                            | VBool value -> value
+                            | VBool value -> value && matches
                             | _ -> raise (genericError (InvalidGuard guard))
-                    caseLabel = label && isGuardTrue ()
+                    caseLabel = label && isGuardTrue () && patternMatches
                 )
                 |> Option.map (fun (_, pattern, expr, _) -> pattern, expr)
                 |> Option.defaultWith (fun () ->
@@ -110,22 +115,26 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                         raise (evalError (MissingMatchCase valueExpr))
                     )
                 )
-            let fnEnv = evalPattern env pattern value
+            let matches, fnEnv = evalPattern env pattern value
+            if not matches then
+                raise (genericError (InvalidPattern pattern))
             evalExpr fnEnv expr
         | _ -> 
             let value = evalExpr env valueExpr
             let pattern, expr =
                 cases
                 |> List.tryFind (fun (pattern, expr, oGuard) ->
+                    let patternMatches, _ = evalPattern env pattern value
                     let isGuardTrue () =
                         match oGuard with
                         | None -> true
                         | Some guard ->
-                            let guardEnv = evalPattern env pattern value
+                            let matches, guardEnv = evalPattern env pattern value
                             match evalExpr guardEnv guard with
-                            | VBool value -> value
+                            | VBool value -> value && matches
                             | _ -> raise (genericError (InvalidGuard guard))
-                    isGuardTrue ()
+                    printfn "pattern = %O, expr = %O, guard = %O, patternMatches = %b, value = %O" pattern expr oGuard patternMatches value
+                    isGuardTrue () && patternMatches
                 )
                 |> Option.map (fun (pattern, expr, _) -> pattern, expr)
                 |> Option.defaultWith (fun () ->
@@ -135,7 +144,9 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                         raise (evalError (MissingMatchCase valueExpr))
                     )
                 )
-            let fnEnv = evalPattern env pattern value
+            let matches, fnEnv = evalPattern env pattern value
+            if not matches then
+                raise (genericError (InvalidPattern pattern))
             evalExpr fnEnv expr
     | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
         let ifValue = evalExpr env ifExpr
@@ -207,11 +218,15 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             | _ -> 
                 raise (evalError BadBinOp)
 
-and evalPattern (env: Map<string, Value>) pattern (value: Value) =
+and evalPattern (env: Map<string, Value>) pattern (value: Value) : bool * Map<_, _> =
+    let initialEnv = env
     let rec loop env pattern (value: Value) =
         match pattern with
-        | EVar var -> Map.add var value env
-        | ERecordEmpty -> env
+        | EBool b -> VBool b = value, env
+        | EInt i -> VInt i = value, env
+        | EFloat f -> VFloat f = value, env
+        | EVar var -> true, Map.add var value env
+        | ERecordEmpty -> true, env
         | ERecordExtend (label, expr, record) ->
             match value with
             | VRecord fields ->
@@ -221,18 +236,21 @@ and evalPattern (env: Map<string, Value>) pattern (value: Value) =
                     |> Option.defaultWith (fun () ->
                         raise (genericError (FieldNotFound label))
                     )
-                let env = evalPattern env expr field
-                let remainingFields =
-                    fields
-                    |> Map.remove label
-                loop env record (VRecord remainingFields)
+                let matches, env = evalPattern env expr field
+                if not matches then
+                    false, initialEnv
+                else
+                    let remainingFields =
+                        fields
+                        |> Map.remove label
+                    loop env record (VRecord remainingFields)
             | _ ->
                 raise (genericError (NotARecordValue value))
         | EVariant (label, expr) ->
             match value with
             | VVariant (name, value) when label = name ->
-                let env = evalPattern env expr value
-                env
+                let matches, env = evalPattern env expr value
+                matches, env
             | VVariant (name, _) ->
                 raise (evalError (BadVariantPattern (label, name)))
             | _ ->

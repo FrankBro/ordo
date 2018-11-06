@@ -966,3 +966,19 @@ let ``List init`` () =
         (POk (EListCons (EInt 1, EListCons (EInt 2, EListCons (EInt 3, EListEmpty)))))
         (IOk "[int]")
         (EOk (VList [VInt 1; VInt 2; VInt 3]))
+
+[<Fact>]
+let ``Pattern match sugar for record`` () =
+    test
+        "match { a = 1 } { { a = 2 } -> 2 | otherwise -> 1 }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))
+
+[<Fact>]
+let ``Pattern match sugar for variant`` () =
+    test
+        "match :a 1 { :a 2 -> 2 | otherwise -> 1 }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))

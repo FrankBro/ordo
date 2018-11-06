@@ -45,7 +45,7 @@ let evalString (env: Env) expr : Env * string =
                 | ELet (pat, _, ret) when pat = ret ->
                     let patTy, infered = inferPattern env.Infer 0 pat
                     unify ordoTy patTy
-                    let evaled = evalPattern env.Eval pat ordoVal
+                    let matches, evaled = evalPattern env.Eval pat ordoVal
                     {
                         Infer = infered
                         Eval = evaled
