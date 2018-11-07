@@ -982,3 +982,11 @@ let ``Pattern match sugar for variant`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Pattern match for list`` () =
+    test
+        "match [1] { [] -> 0, (x :: xs) -> x }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))

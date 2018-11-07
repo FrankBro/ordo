@@ -26,11 +26,12 @@ let str s = pstring s
 let strWs s = str s .>> ws
 let strWs1 s = str s .>> ws1
 
-let opp = new OperatorPrecedenceParser<Expr,unit, unit>()
+let opp = new OperatorPrecedenceParser<Expr, unit, unit>()
 let parseExpr = opp.ExpressionParser
 let parseExprWs = parseExpr .>> ws
 
-let parsePattern, parsePatternRef = createParserForwardedToRef ()
+let patopp = new OperatorPrecedenceParser<Pattern, unit, unit>()
+let parsePattern = patopp.ExpressionParser
 let parsePatternWs = parsePattern .>> ws
 
 let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec" ]
@@ -220,8 +221,21 @@ let parseIfThenElse =
 let parseFix =
     strWs1 "fix" >>. identWs |>> EFix
 
-do parsePatternRef :=
+let parseListEmpty =
+    strWs "[]" |>> fun _ -> EListEmpty
+
+let parseListLiteral content = 
+    strWs "[" >>. sepBy1 content (strWs ",") .>> strWs "]"
+    |>> fun list ->
+        (list, EListEmpty)
+        ||> List.foldBack (fun x state ->
+            EListCons (x, state)
+        )
+
+let parsePatternAll =
     choice [
+        attempt parseListEmpty
+        parseListLiteral parsePatternWs
         parseParen parsePatternWs
         attempt parseBool
         attempt parseFloat
@@ -233,21 +247,14 @@ do parsePatternRef :=
         attempt (parseRecordInit parsePatternWs)
     ]
 
-let parseListEmpty =
-    strWs "[]" |>> fun _ -> EListEmpty
+patopp.AddOperator(InfixOperator("::", ws, 5, Associativity.Right, fun a b -> EListCons (a, b)))
 
-let parseListLiteral = 
-    strWs "[" >>. sepBy1 parseExprWs (strWs ",") .>> strWs "]"
-    |>> fun list ->
-        (list, EListEmpty)
-        ||> List.foldBack (fun x state ->
-            EListCons (x, state)
-        )
+patopp.TermParser <- parsePatternAll
 
 let parseNotCallOrRecordSelect =
     choice [
         attempt parseListEmpty
-        parseListLiteral
+        parseListLiteral parseExprWs
         parseParen parseExprWs
         attempt parseLetRec
         attempt parseFix

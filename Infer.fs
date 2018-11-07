@@ -400,6 +400,14 @@ and inferVariantCases env level returnTy restRowTy cases =
 and inferPattern env level pattern =
     let rec loop env pattern =
         match pattern with
+        | EListEmpty -> TList (newVar level), env
+        | EListCons (x, xs) -> 
+            let singleTy, env = loop env x
+            let xTy = TList singleTy
+            let multipleTy, env = loop env xs
+            let xsTy = multipleTy
+            unify xTy xsTy
+            xTy, env
         | EBool _ -> TBool, env
         | EInt _ -> TInt, env
         | EFloat _ -> TFloat, env

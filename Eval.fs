@@ -222,6 +222,17 @@ and evalPattern (env: Map<string, Value>) pattern (value: Value) : bool * Map<_,
     let initialEnv = env
     let rec loop env pattern (value: Value) =
         match pattern with
+        | EListEmpty -> VList [] = value, env
+        | EListCons (x, xs) ->
+            match value with
+            | VList [] ->
+                false, env
+            | VList (xValue :: xsValue) ->
+                let xValid, env = loop env x xValue
+                let xsValid, env = loop env xs (VList xsValue)
+                xValid && xsValid, env
+            | _ ->
+                raise (evalError InvalidList)
         | EBool b -> VBool b = value, env
         | EInt i -> VInt i = value, env
         | EFloat f -> VFloat f = value, env
