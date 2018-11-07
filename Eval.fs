@@ -133,7 +133,6 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                             match evalExpr guardEnv guard with
                             | VBool value -> value && matches
                             | _ -> raise (genericError (InvalidGuard guard))
-                    printfn "pattern = %O, expr = %O, guard = %O, patternMatches = %b, value = %O" pattern expr oGuard patternMatches value
                     isGuardTrue () && patternMatches
                 )
                 |> Option.map (fun (pattern, expr, _) -> pattern, expr)
