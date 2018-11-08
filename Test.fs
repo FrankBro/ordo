@@ -430,3 +430,11 @@ let ``Pattern match for list`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Sum`` () =
+    test
+        "let rec sum state xs = match xs { [] -> state, x :: xs -> sum (x + state) xs } in sum 10 [1,2,3]"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 16))
