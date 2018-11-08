@@ -10,15 +10,16 @@ open Parser
 open Repl
 
 let test input =
+    Infer.resetId ()
     try
         printfn "Input    : %s" input
         let expr = readExpr input
         printfn "Expr     : %O" expr
         printfn "Raw expr : %s" (stringOfExpr expr)
-        let ty = infer expr
+        let ty = infer Map.empty expr
         printfn "Type     : %O" ty
         printfn "Raw type : %s" (stringOfTy ty)
-        let value = eval expr
+        let value = eval Map.empty expr
         printfn "Value    : %O" value
         printfn "Raw value: %s" (stringOfValue value)
     with 
