@@ -32,9 +32,9 @@ let evalString (env: Env) expr : Env * string =
             env, Map.find name env.Eval |> string
         | _ ->
             let ordoTy = 
-                Infer.inferExpr env.Infer 0 ordoExpr
+                Infer.inferExpr Map.empty env.Infer 0 ordoExpr
                 |> generalize
-            let ordoVal = Eval.evalExpr env.Eval ordoExpr
+            let ordoVal = Eval.evalExpr Map.empty env.Eval ordoExpr
             let env =
                 match ordoExpr with
                 | ELet (EVar name1, _, EVar name2) when name1 = name2 ->
@@ -43,7 +43,7 @@ let evalString (env: Env) expr : Env * string =
                         Eval = Map.add name1 ordoVal env.Eval
                     }
                 | ELet (pat, _, ret) when pat = ret ->
-                    let patTy, infered = inferPattern env.Infer 0 pat
+                    let patTy, infered = inferPattern Map.empty env.Infer 0 pat
                     unify ordoTy patTy
                     let matches, evaled = evalPattern env.Eval pat ordoVal
                     {
@@ -71,7 +71,7 @@ let rec until env pred prompt (action: Env -> string -> Env) =
         until env pred prompt action
 
 let runRepl () =
-    resetId ()
+    Infer.resetId ()
     let env = Env.Empty
     printfn "':type name' for type, type 'quit' to quit."
     until env ((=) "quit") (fun () -> readPrompt "ordo>>> ") evalAndPrint

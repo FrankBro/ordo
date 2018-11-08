@@ -4,14 +4,15 @@ open Error
 open Expr
 open Util
 
-let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
+let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | EOpen filename -> Map.find filename files
     | EListEmpty -> VList []
     | EListCons (x, xs) ->
-        let xsValue = evalExpr env xs
+        let xsValue = evalExpr files env xs
         match xsValue with
         | VList xs ->
-            let xValue = evalExpr env x
+            let xValue = evalExpr files env x
             VList (xValue :: xs)
         | _ ->
             raise (evalError InvalidList)
@@ -23,7 +24,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             )
         match fnValue with
         | VFun (innerEnv, EVar fnName, (EFun(arg, rest) as fn)) ->
-            let fnValue = evalExpr innerEnv fn
+            let fnValue = evalExpr files innerEnv fn
             let env = Map.add fnName fnValue innerEnv
             VFun (env, arg, rest)
             // evalExpr env fn
@@ -38,40 +39,40 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             raise (genericError (VariableNotFound name))
         )
     | ECall (fnExpr, argExpr) -> 
-        let fnValue = evalExpr env fnExpr
+        let fnValue = evalExpr files env fnExpr
         match fnValue with
         | VFun (innerEnv, pattern, bodyExpr) ->
             let mergedEnv = Map.merge env innerEnv
-            let argValue = evalExpr mergedEnv argExpr
+            let argValue = evalExpr files mergedEnv argExpr
             let matches, fnEnv = evalPattern mergedEnv pattern argValue
             if not matches then
                 raise (genericError (InvalidPattern pattern))
-            evalExpr fnEnv bodyExpr
+            evalExpr files fnEnv bodyExpr
         | _ -> raise (evalError (NotAFunction fnExpr))
     | ELet (pattern, valueExpr, bodyExpr) ->
-        let value = evalExpr env valueExpr
+        let value = evalExpr files env valueExpr
         let matches, env = evalPattern env pattern value
         if not matches then
             raise (genericError (InvalidPattern pattern))
-        evalExpr env bodyExpr
+        evalExpr files env bodyExpr
     | ERecordEmpty  -> 
         VRecord Map.empty
     | EVariant (label, expr) ->
-        let value = evalExpr env expr
+        let value = evalExpr files env expr
         VVariant (label, value)
     | ERecordExtend (name, valueExpr, recordExpr) ->
-        let recordValue = evalExpr env recordExpr
+        let recordValue = evalExpr files env recordExpr
         match recordValue with
         | VRecord fields ->
             if Map.containsKey name fields then
                 raise (inferError (RowConstraintFail name))
-            let valueValue = evalExpr env valueExpr
+            let valueValue = evalExpr files env valueExpr
             fields
             |> Map.add name valueValue
             |> VRecord
         | _ -> raise (genericError (NotARecordExpr recordExpr))
     | ERecordRestrict (recordExpr, name) ->
-        let recordValue = evalExpr env recordExpr
+        let recordValue = evalExpr files env recordExpr
         match recordValue with
         | VRecord fields ->
             fields
@@ -79,7 +80,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             |> VRecord
         | _ -> raise (genericError (NotARecordExpr recordExpr))
     | ERecordSelect (recordExpr, label) -> 
-        let recordValue = evalExpr env recordExpr
+        let recordValue = evalExpr files env recordExpr
         match recordValue with
         | VRecord fields ->
             fields
@@ -89,7 +90,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             )
         | _ -> raise (genericError (NotARecordExpr recordExpr))
     | ECase (valueExpr, cases, oDefault) ->
-        let valueValue = evalExpr env valueExpr
+        let valueValue = evalExpr files env valueExpr
         let oCases = tryMakeVariantCases cases
         match valueValue, oCases with
         | VVariant (label, value), Some cases ->
@@ -102,7 +103,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                         | None -> true
                         | Some guard ->
                             let matches, guardEnv = evalPattern env pattern value
-                            match evalExpr guardEnv guard with
+                            match evalExpr files guardEnv guard with
                             | VBool value -> value && matches
                             | _ -> raise (genericError (InvalidGuard guard))
                     caseLabel = label && isGuardTrue () && patternMatches
@@ -118,9 +119,9 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             let matches, fnEnv = evalPattern env pattern value
             if not matches then
                 raise (genericError (InvalidPattern pattern))
-            evalExpr fnEnv expr
+            evalExpr files fnEnv expr
         | _ -> 
-            let value = evalExpr env valueExpr
+            let value = evalExpr files env valueExpr
             let pattern, expr =
                 cases
                 |> List.tryFind (fun (pattern, expr, oGuard) ->
@@ -130,7 +131,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
                         | None -> true
                         | Some guard ->
                             let matches, guardEnv = evalPattern env pattern value
-                            match evalExpr guardEnv guard with
+                            match evalExpr files guardEnv guard with
                             | VBool value -> value && matches
                             | _ -> raise (genericError (InvalidGuard guard))
                     isGuardTrue () && patternMatches
@@ -146,27 +147,27 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             let matches, fnEnv = evalPattern env pattern value
             if not matches then
                 raise (genericError (InvalidPattern pattern))
-            evalExpr fnEnv expr
+            evalExpr files fnEnv expr
     | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
-        let ifValue = evalExpr env ifExpr
+        let ifValue = evalExpr files env ifExpr
         match ifValue with
-        | VBool true -> evalExpr env thenExpr
-        | VBool false -> evalExpr env elseExpr
+        | VBool true -> evalExpr files env thenExpr
+        | VBool false -> evalExpr files env elseExpr
         | _ -> 
             raise (genericError IfValueNotBoolean )
     | EUnOp (op, a) ->
-        let a = evalExpr env a
+        let a = evalExpr files env a
         match op, a with
         | Negative, VInt a -> VInt (-a)
         | Negative, VFloat a -> VFloat (-a)
         | _ -> raise (evalError BadUnOp)
     | EBinOp (a, op, b) ->
-        let a = evalExpr env a
+        let a = evalExpr files env a
         match op with
         | And ->
             match a with
             | VBool true ->
-                let b = evalExpr env b
+                let b = evalExpr files env b
                 match b with
                 | VBool b -> VBool b
                 | _ -> 
@@ -177,7 +178,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
         | Or ->
             match a with
             | VBool false ->
-                let b = evalExpr env b
+                let b = evalExpr files env b
                 match b with
                 | VBool b -> VBool b
                 | _ -> 
@@ -186,7 +187,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
             | _ -> 
                 raise (evalError BadBinOp)
         | _ ->
-            let b = evalExpr env b
+            let b = evalExpr files env b
             match a, op, b with
             | VInt a, Plus, VInt b -> VInt (a + b)
             | VFloat a, Plus, VFloat b -> VFloat (a + b)
@@ -269,5 +270,5 @@ and evalPattern (env: Map<string, Value>) pattern (value: Value) : bool * Map<_,
             raise (genericError (InvalidPattern pattern))
     loop env pattern value
 
-let eval expr : Value =
-    evalExpr Map.empty expr
+let eval files expr : Value =
+    evalExpr files Map.empty expr

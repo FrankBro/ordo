@@ -35,7 +35,7 @@ let test input parserExpected inferExpected evalExpected =
         | PFail e -> IFail e
         | POk expr ->
             try
-                Infer.infer expr
+                Infer.infer Map.empty expr
                 |> stringOfTy
                 |> IOk
             with
@@ -48,7 +48,7 @@ let test input parserExpected inferExpected evalExpected =
         | PFail e -> EFail e
         | POk expr ->
             try
-                Eval.eval expr
+                Eval.eval Map.empty expr
                 |> EOk
             with
             | OrdoException error -> EFail error
