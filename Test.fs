@@ -438,3 +438,35 @@ let ``Sum`` () =
         PSkip
         (IOk "int")
         (EOk (VInt 16))
+
+[<Fact>]
+let ``Bool match`` () =
+    test
+        "match true { false -> 0, true -> 1 }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))
+
+[<Fact>]
+let ``Int match`` () =
+    test
+        "match 1 { 0 -> 0, 1 -> 1 }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))
+
+[<Fact>]
+let ``Float match`` () =
+    test
+        "match 1.0 { 0.0 -> 0, 1.0 -> 1 }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))
+
+[<Fact>]
+let ``String match`` () =
+    test
+        "match \"1\" { \"0\" -> 0, \"1\" -> 1 }"
+        PSkip
+        (IOk "int")
+        (EOk (VInt 1))

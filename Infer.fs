@@ -412,6 +412,7 @@ and inferPattern env level pattern =
         | EBool _ -> TBool, env
         | EInt _ -> TInt, env
         | EFloat _ -> TFloat, env
+        | EString _ -> TString, env
         | EVar name ->
             let var = newVar level
             let env = Map.add name var env
