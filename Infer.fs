@@ -233,7 +233,9 @@ let rec matchFunTy ty =
     | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr files env level = function
-    | EOpen filename -> Map.find filename files
+    | EOpen filename -> 
+        printfn "filename = %s, files = %O" filename files
+        Map.find filename files
     | EListEmpty -> TList (newVar level)
     | EListCons (x, xs) -> 
         let xTy = TList (inferExpr files env level x)
@@ -447,5 +449,6 @@ and inferPattern files (env: Map<Name, Ty>) (level: int) pattern =
     loop env pattern
 
 let infer files expr =
+    printfn "files = %O" files
     inferExpr files Map.empty 0 expr
     |> generalize

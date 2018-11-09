@@ -29,6 +29,7 @@ let compileExprs (exprs: (string * Expr) list) =
         | x :: xs ->
             let ordoTy, ordoVal = extract state x
             let name = fst x
+            printfn "%s = %s : %s" name (stringOfValue ordoVal) (stringOfTy ordoTy)
             let state = 
                 { state with
                     Types = Map.add name ordoTy state.Types

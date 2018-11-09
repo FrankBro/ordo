@@ -2,6 +2,7 @@
 
 open System
 
+open Compiler
 open Error
 open Eval
 open Expr
@@ -44,13 +45,30 @@ let testType input =
         printfn "Exception"
         printfn "%O" e
 
+let testCompiler files =
+    let exprs =
+        files
+        |> List.map (fun (name, input) ->
+            name, Parser.readExpr input
+        )
+    let ordoTy, ordoVal = compileExprs exprs
+    ()
+
+
 [<EntryPoint>]
 let main argv =
-    let input = "match { a = 1 } { { a = 2 } -> 2 | otherwise -> 1 }"
-    test input
+    // let input = "match { a = 1 } { { a = 2 } -> 2 | otherwise -> 1 }"
+    // test input
 
     // let input = "forall a => (a -> a) -> a"
     // testType input
+
+    let inputs =
+        [
+            "lib.ordo", "1"
+            "main.ordo", "let a = open \"lib.ordo\" in a"
+        ]
+    testCompiler inputs
 
     // runRepl ()
 
