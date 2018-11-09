@@ -280,7 +280,7 @@ patopp.AddOperator(InfixOperator("::", ws, 5, Associativity.Right, fun a b -> EL
 patopp.TermParser <- parsePatternAll
 
 let parseOpen =
-    strWs "open" >>. strWs "\"" >>. ident .>> strWs ".ordo\""
+    strWs "open" >>. stringLiteral
     |>> EOpen
 
 let parseNotCallOrRecordSelect =
