@@ -486,3 +486,11 @@ let ``Float LesserEqual false`` () =
         (POk (EBinOp (EFloat 3., LesserEqual, EFloat 2.)))
         (IOk "bool")
         (EOk (VBool false))
+
+[<Fact>]
+let ``String`` () =
+    test
+        "\"a\""
+        (POk (EString "a"))
+        (IOk "string")
+        (EOk (VString "a"))

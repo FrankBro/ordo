@@ -31,6 +31,7 @@ let rec evalExpr (env: Map<string, Value>) (expr: Expr) : Value =
     | EBool b -> VBool b
     | EInt i -> VInt i
     | EFloat f -> VFloat f
+    | EString s -> VString s
     | EFun (pattern, expr) -> VFun (env, pattern, expr)
     | EVar name -> 
         Map.tryFind name env
@@ -235,6 +236,7 @@ and evalPattern (env: Map<string, Value>) pattern (value: Value) : bool * Map<_,
         | EBool b -> VBool b = value, env
         | EInt i -> VInt i = value, env
         | EFloat f -> VFloat f = value, env
+        | EString s -> VString s = value, env
         | EVar var -> true, Map.add var value env
         | ERecordEmpty -> true, env
         | ERecordExtend (label, expr, record) ->

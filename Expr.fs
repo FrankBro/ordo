@@ -43,6 +43,7 @@ type Expr =
     | EBool of bool
     | EInt of int
     | EFloat of float
+    | EString of string
     | EVar of Name
     | ECall of Expr * Expr
     | EFun of Pattern * Expr
@@ -65,6 +66,7 @@ with
         | EBool b -> sprintf "EBool %b" b
         | EInt i -> sprintf "EInt %d" i
         | EFloat f -> sprintf "EFloat %f" f
+        | EString s -> sprintf "EString \"%s\"" s
         | EVar name -> sprintf "EVar %s" name
         | ECall (a, b) -> sprintf "ECall (%O, %O)" a b
         | EFun (a, b) -> sprintf "EFun (%O, %O)" a b
@@ -93,6 +95,7 @@ type Ty =
     | TBool
     | TInt
     | TFloat
+    | TString
     | TList of Ty
     | TApp of Ty * Ty list
     | TArrow of Ty * Ty
@@ -108,6 +111,7 @@ with
         | TBool -> "TBool"
         | TInt -> "TInt"
         | TFloat -> "TFloat"
+        | TString -> "TString"
         | TList ty -> sprintf "TList %O" ty
         | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
         | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
@@ -140,6 +144,7 @@ type Value =
     | VBool of bool
     | VInt of int
     | VFloat of float
+    | VString of string
     | VFun of Map<Name, Value> * Pattern * Expr
     | VRecord of Map<Name, Value>
     | VVariant of Name * Value
@@ -150,6 +155,7 @@ with
         | VBool b -> sprintf "VBool %b" b
         | VInt i -> sprintf "VInt %d" i
         | VFloat f -> sprintf "VFloat %f" f
+        | VString s -> sprintf "VString \"%s\"" s
         | VFun (env, pat, bod) -> sprintf "VFun (%O, %O, %O)" env pat bod
         | VRecord fields -> sprintf "VRecord %O" fields
         | VVariant (name, value) -> sprintf "VVariant (%s, %O)" name value
@@ -178,6 +184,7 @@ let stringOfExpr (x: Expr) : string =
         | EBool bool -> sprintf "%b" bool
         | EInt int -> sprintf "%d" int
         | EFloat float -> sprintf "%f" float
+        | EString string -> string
         | EVar name -> name
         | ECall (fnExpr, argExpr) ->
             let fnStr = f true fnExpr
@@ -292,6 +299,7 @@ let stringOfTy (x: Ty) : string =
         | TBool -> "bool"
         | TInt -> "int"
         | TFloat -> "float"
+        | TString -> "string"
         | TList ty -> sprintf "[%s]" (f false ty)
         | TApp (ty, tyArgList) ->
             tyArgList
@@ -364,6 +372,7 @@ let rec stringOfValue value =
         | VBool b -> string b
         | VInt i -> string i
         | VFloat f -> string f
+        | VString s -> s
         | VFun _ -> "<Lambda>"
         | VRecord fields ->
             fields

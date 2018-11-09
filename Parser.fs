@@ -60,6 +60,33 @@ let parseFloat : Parser<Expr> =
         |> EFloat
     )
 
+let stringLiteral =
+    let escape =  anyOf "\"\\/bfnrt"
+                  |>> function
+                      | 'b' -> "\b"
+                      | 'f' -> "\u000C"
+                      | 'n' -> "\n"
+                      | 'r' -> "\r"
+                      | 't' -> "\t"
+                      | c   -> string c // every other char is mapped to itself
+
+    let unicodeEscape =
+        /// converts a hex char ([0-9a-fA-F]) to its integer number (0-15)
+        let hex2int c = (int c &&& 15) + (int c >>> 6)*9
+
+        str "u" >>. pipe4 hex hex hex hex (fun h3 h2 h1 h0 ->
+            (hex2int h3)*4096 + (hex2int h2)*256 + (hex2int h1)*16 + hex2int h0
+            |> char |> string
+        )
+
+    let escapedCharSnippet = str "\\" >>. (escape <|> unicodeEscape)
+    let normalCharSnippet  = manySatisfy (fun c -> c <> '"' && c <> '\\')
+
+    between (str "\"") (str "\"")
+            (stringsSepBy normalCharSnippet escapedCharSnippet)
+
+let parseString : Parser<Expr> = stringLiteral |>> EString
+    
 let parseFun : Parser<Expr> =
     let p1 = strWs1 "fun" >>. many1 parsePatternWs
     let p2 = strWs "->" >>. parseExprWs
@@ -240,6 +267,7 @@ let parsePatternAll =
         attempt parseBool
         attempt parseFloat
         attempt parseInt
+        attempt parseString
         parseVariant
         attempt parseVar
         attempt parseRecordEmpty
@@ -261,6 +289,7 @@ let parseNotCallOrRecordSelect =
         parseBool
         attempt parseFloat
         attempt parseInt
+        attempt parseString
         parseFun
         parseLet
         attempt parseVar
@@ -400,7 +429,7 @@ let parseTvar =
                 | None -> ty
                 | Some gen -> gen
             | TList ty -> TList (f ty)
-            | TBool | TInt | TFloat -> ty
+            | TBool | TInt | TFloat | TString -> ty
             | TVar _ -> ty
             | TApp(ty, tyArgs) -> TApp(f ty, List.map f tyArgs)
             | TArrow(param, ret) -> TArrow(f param, f ret)
