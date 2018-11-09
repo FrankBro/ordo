@@ -34,7 +34,7 @@ let patopp = new OperatorPrecedenceParser<Pattern, unit, unit>()
 let parsePattern = patopp.ExpressionParser
 let parsePatternWs = parsePattern .>> ws
 
-let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec" ]
+let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec"; "open" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -279,8 +279,13 @@ patopp.AddOperator(InfixOperator("::", ws, 5, Associativity.Right, fun a b -> EL
 
 patopp.TermParser <- parsePatternAll
 
+let parseOpen =
+    strWs "open" >>. stringLiteral
+    |>> EOpen
+
 let parseNotCallOrRecordSelect =
     choice [
+        attempt parseOpen
         attempt parseListEmpty
         parseListLiteral parseExprWs
         parseParen parseExprWs

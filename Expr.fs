@@ -60,6 +60,7 @@ type Expr =
     | EFix of Name
     | EListEmpty
     | EListCons of Expr * Expr
+    | EOpen of string
 with
     override x.ToString () =
         match x with
@@ -83,6 +84,7 @@ with
         | EFix name -> sprintf "EFix %s" name
         | EListEmpty -> "EListEmpty"
         | EListCons (x, xs) -> sprintf "EListCons (%O, %O)" x xs
+        | EOpen filename -> sprintf "EOpen \"%s\"" filename
 
 and Pattern = Expr
 and Guard = Expr
@@ -248,6 +250,7 @@ let stringOfExpr (x: Expr) : string =
             sprintf "%s%s" op a
         | EListEmpty -> "[]"
         | EListCons (x, xs) -> sprintf "%s :: %s" (f false x) (f false xs)
+        | EOpen filename -> sprintf "open \"%s\"" filename
     f false x
 
 type Entry = {

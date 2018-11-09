@@ -18,6 +18,7 @@
     <Compile Include="TestUtil.fs" />
     <Compile Include="TestSimple.fs" />
     <Compile Include="Test.fs" />
+    <Compile Include="TestCompiler.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

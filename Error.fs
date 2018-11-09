@@ -39,11 +39,15 @@ type EvalError =
     | BadUnOp
     | InvalidList
 
+type CompilerError =
+    | NoExprsProvided
+
 type OrdoError =
     | Generic of GenericError
     | Parser of ParserError
     | Infer of InferError
     | Eval of EvalError
+    | Compiler of CompilerError
 
 exception OrdoException of OrdoError
 
@@ -51,3 +55,4 @@ let genericError g = OrdoException (Generic g)
 let parserError p = OrdoException (Parser p)
 let inferError i = OrdoException (Infer i)
 let evalError e = OrdoException (Eval e)
+let compilerError c = OrdoException (Compiler c)
