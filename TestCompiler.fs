@@ -29,3 +29,14 @@ let ``Simple two files`` () =
         ]
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``More complex`` () =
+    testCompiler
+        [
+            "first.ordo", "{ a = 1 }"
+            "second.ordo", "{ b = 2 }"
+            "third.ordo", "let first = open \"first.ordo\" in let second = open \"second.ordo\" in first.a + second.b"
+        ]
+        (IOk "int")
+        (EOk (VInt 3))
