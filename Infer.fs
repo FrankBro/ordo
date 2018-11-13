@@ -233,6 +233,10 @@ let rec matchFunTy ty =
     | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr files env level = function
+    | EType (e, t) ->
+        let infered = inferExpr files env level e
+        unify infered t
+        infered
     | EOpen filename -> Map.find filename files
     | EListEmpty -> TList (newVar level)
     | EListCons (x, xs) -> 
@@ -402,6 +406,10 @@ and inferVariantCases files env level returnTy restRowTy cases =
 and inferPattern files (env: Map<Name, Ty>) (level: int) pattern =
     let rec loop env pattern =
         match pattern with
+        | EType (e, t) ->
+            let infered, env = loop env e
+            unify infered t
+            infered, env
         | EListEmpty -> TList (newVar level), env
         | EListCons (x, xs) -> 
             let singleTy, env = loop env x

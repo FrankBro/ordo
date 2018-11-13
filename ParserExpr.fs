@@ -9,6 +9,7 @@ open FParsec.Primitives
 open Error
 open Expr
 open Infer
+open ParserType
 open ParserUtil
 open Util 
 
@@ -245,8 +246,13 @@ let parseListLiteral content =
             EListCons (x, state)
         )
 
+let parseType content =
+    strWs "(" >>. content .>> strWs ":" .>>. parseTyWs .>> strWs ")"
+    |>> EType
+
 let parsePatternAll =
     choice [
+        attempt (parseType parsePatternWs)
         attempt parseListEmpty
         parseListLiteral parsePatternWs
         parseParen parsePatternWs
@@ -271,6 +277,7 @@ let parseOpen =
 
 let parseNotCallOrRecordSelect =
     choice [
+        attempt (parseType parseExprWs)
         attempt parseOpen
         attempt parseListEmpty
         parseListLiteral parseExprWs

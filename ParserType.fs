@@ -8,7 +8,7 @@ open Expr
 open Infer
 open ParserUtil
 
-let reserved = []
+let reserved = [ "forall" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)

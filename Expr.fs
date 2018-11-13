@@ -7,6 +7,59 @@ open System.Collections.Generic
 
 type Name = String
 
+type Id = int
+type Level = int
+
+type Ty =
+    | TConst of Name
+    | TBool
+    | TInt
+    | TFloat
+    | TString
+    | TList of Ty
+    | TApp of Ty * Ty list
+    | TArrow of Ty * Ty
+    | TVar of Tvar ref
+    | TRecord of Row
+    | TVariant of Row
+    | TRowEmpty
+    | TRowExtend of Name * Ty * Row
+with
+    override x.ToString () =
+        match x with
+        | TConst name -> name
+        | TBool -> "TBool"
+        | TInt -> "TInt"
+        | TFloat -> "TFloat"
+        | TString -> "TString"
+        | TList ty -> sprintf "TList %O" ty
+        | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
+        | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
+        | TVar a -> sprintf "TVar %O" (!a)
+        | TRecord a -> sprintf "TRecord %O" a
+        | TVariant a -> sprintf "TVariant %O" a
+        | TRowEmpty -> "TRowEmpty"
+        | TRowExtend (name, a, b) -> sprintf "TRowExtend (%s, %O, %O)" name a b
+
+and Row = Ty
+
+and Constraints = Set<Name>
+
+and Tvar =
+    | Unbound of Id * Level
+    | UnboundRow of Id * Level * Constraints
+    | Link of Ty
+    | Generic of Id
+    | GenericRow of Id * Constraints
+with
+    override x.ToString () =
+        match x with
+        | Unbound (id, level) -> sprintf "Unbound (%d, %d)" id level
+        | UnboundRow (id, level, constraints) -> sprintf "UnboundRow (%d, %d, %O)" id level constraints
+        | Link a -> sprintf "Link %O" a
+        | Generic id -> sprintf "Generic %d" id
+        | GenericRow (id, constraints) -> sprintf "GenericRow (%d, %O)" id constraints
+
 type BinOp =
     | Plus
     | Minus
@@ -61,6 +114,7 @@ type Expr =
     | EListEmpty
     | EListCons of Expr * Expr
     | EOpen of string
+    | EType of Expr * Ty
 with
     override x.ToString () =
         match x with
@@ -85,62 +139,10 @@ with
         | EListEmpty -> "EListEmpty"
         | EListCons (x, xs) -> sprintf "EListCons (%O, %O)" x xs
         | EOpen filename -> sprintf "EOpen \"%s\"" filename
+        | EType (e, t) -> sprintf "EType (%O, %O)" e t
 
 and Pattern = Expr
 and Guard = Expr
-
-type Id = int
-type Level = int
-
-type Ty =
-    | TConst of Name
-    | TBool
-    | TInt
-    | TFloat
-    | TString
-    | TList of Ty
-    | TApp of Ty * Ty list
-    | TArrow of Ty * Ty
-    | TVar of Tvar ref
-    | TRecord of Row
-    | TVariant of Row
-    | TRowEmpty
-    | TRowExtend of Name * Ty * Row
-with
-    override x.ToString () =
-        match x with
-        | TConst name -> name
-        | TBool -> "TBool"
-        | TInt -> "TInt"
-        | TFloat -> "TFloat"
-        | TString -> "TString"
-        | TList ty -> sprintf "TList %O" ty
-        | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
-        | TArrow (a, b) -> sprintf "TArrow (%O, %O)" a b
-        | TVar a -> sprintf "TVar %O" (!a)
-        | TRecord a -> sprintf "TRecord %O" a
-        | TVariant a -> sprintf "TVariant %O" a
-        | TRowEmpty -> "TRowEmpty"
-        | TRowExtend (name, a, b) -> sprintf "TRowExtend (%s, %O, %O)" name a b
-
-and Row = Ty
-
-and Constraints = Set<Name>
-
-and Tvar =
-    | Unbound of Id * Level
-    | UnboundRow of Id * Level * Constraints
-    | Link of Ty
-    | Generic of Id
-    | GenericRow of Id * Constraints
-with
-    override x.ToString () =
-        match x with
-        | Unbound (id, level) -> sprintf "Unbound (%d, %d)" id level
-        | UnboundRow (id, level, constraints) -> sprintf "UnboundRow (%d, %d, %O)" id level constraints
-        | Link a -> sprintf "Link %O" a
-        | Generic id -> sprintf "Generic %d" id
-        | GenericRow (id, constraints) -> sprintf "GenericRow (%d, %O)" id constraints
 
 type Value =
     | VBool of bool
@@ -162,96 +164,6 @@ with
         | VRecord fields -> sprintf "VRecord %O" fields
         | VVariant (name, value) -> sprintf "VVariant (%s, %O)" name value
         | VList xs -> sprintf "VList %O" xs
-
-let stringOfBinOp = function
-    | Plus -> "+"
-    | Minus -> "-"
-    | Multiply -> "*"
-    | Divide -> "/"
-    | And -> "&&"
-    | Or -> "||"
-    | Equal -> "="
-    | NotEqual -> "<>"
-    | Greater -> ">"
-    | GreaterEqual -> ">="
-    | Lesser -> "<"
-    | LesserEqual -> "<="
-
-let stringOfUnOp = function
-    | Negative -> "-"
-
-let stringOfExpr (x: Expr) : string =
-    let rec f isSimple = function
-        | EFix name -> sprintf "fix %s" name
-        | EBool bool -> sprintf "%b" bool
-        | EInt int -> sprintf "%d" int
-        | EFloat float -> sprintf "%f" float
-        | EString string -> string
-        | EVar name -> name
-        | ECall (fnExpr, argExpr) ->
-            let fnStr = f true fnExpr
-            let argStr = f false argExpr
-            sprintf "%s %s" fnStr argStr
-        | EFun (pattern, bodyExpr) ->
-            let funStr = 
-                sprintf "fun %s -> %s" 
-                    (f false pattern)
-                    (f false bodyExpr)
-            if isSimple then "(" + funStr + ")" else funStr
-        | ELet (pattern, valueExpr, bodyExpr) ->
-            let letStr =
-                sprintf "let %s = %s in %s"
-                    (f false pattern)
-                    (f false valueExpr)
-                    (f false bodyExpr)
-            if isSimple then "(" + letStr + ")" else letStr
-        | ERecordEmpty -> "{}"
-        | EVariant (label, value) ->
-            let variantStr = ":" + label + " " + f true value 
-            if isSimple then "(" + variantStr + ")" else variantStr
-        | ERecordSelect (recordExpr, label) -> f true recordExpr + "." + label
-        | ERecordRestrict (recordExpr, label) -> "{" + f false recordExpr + " - " + label + "}"
-        | ERecordExtend (name, valueExpr, restExpr) ->
-            let rec g str = function
-                | ERecordEmpty -> str
-                | ERecordExtend (label, valueExpr, restExpr) ->
-                    g (str + ", " + label + " = " + f false valueExpr) restExpr
-                | otherExpr -> str + " | " + f false otherExpr
-            "{" + g (name + " = " + f false valueExpr) restExpr + "}"
-        | ECase (expr, cases, oDefault) ->
-            let caseStrList = 
-                cases
-                |> List.map (fun (pattern, expr, oGuard) ->
-                    let guard =
-                        match oGuard with
-                        | None -> ""
-                        | Some guard -> sprintf " when %O" (f false guard)
-                    f false pattern + guard + " -> " + f false expr
-                )
-                |> String.concat ", "
-            let defaultStr =
-                match oDefault with
-                | None -> ""
-                | Some (name, expr) -> sprintf "| %s -> %s" name (f false expr)
-            "match " + f false expr + " { " + caseStrList + defaultStr + " } "
-        | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
-            let a = f false ifExpr
-            let b = f false thenExpr
-            let c = f false elseExpr
-            sprintf "if %s then %s else %s" a b c
-        | EBinOp (a, op, b) ->
-            let a = f false a
-            let op = stringOfBinOp op
-            let b = f false b
-            sprintf "%s %s %s" a op b
-        | EUnOp (op, a) ->
-            let a = f false a
-            let op = stringOfUnOp op
-            sprintf "%s%s" op a
-        | EListEmpty -> "[]"
-        | EListCons (x, xs) -> sprintf "%s :: %s" (f false x) (f false xs)
-        | EOpen filename -> sprintf "open \"%s\"" filename
-    f false x
 
 type Entry = {
     Name: Name
@@ -368,6 +280,97 @@ let stringOfTy (x: Ty) : string =
         "forall " + args + constraints + tyStr
     else
         tyStr
+
+let stringOfBinOp = function
+    | Plus -> "+"
+    | Minus -> "-"
+    | Multiply -> "*"
+    | Divide -> "/"
+    | And -> "&&"
+    | Or -> "||"
+    | Equal -> "="
+    | NotEqual -> "<>"
+    | Greater -> ">"
+    | GreaterEqual -> ">="
+    | Lesser -> "<"
+    | LesserEqual -> "<="
+
+let stringOfUnOp = function
+    | Negative -> "-"
+
+let stringOfExpr (x: Expr) : string =
+    let rec f isSimple = function
+        | EFix name -> sprintf "fix %s" name
+        | EBool bool -> sprintf "%b" bool
+        | EInt int -> sprintf "%d" int
+        | EFloat float -> sprintf "%f" float
+        | EString string -> string
+        | EVar name -> name
+        | ECall (fnExpr, argExpr) ->
+            let fnStr = f true fnExpr
+            let argStr = f false argExpr
+            sprintf "%s %s" fnStr argStr
+        | EFun (pattern, bodyExpr) ->
+            let funStr = 
+                sprintf "fun %s -> %s" 
+                    (f false pattern)
+                    (f false bodyExpr)
+            if isSimple then "(" + funStr + ")" else funStr
+        | ELet (pattern, valueExpr, bodyExpr) ->
+            let letStr =
+                sprintf "let %s = %s in %s"
+                    (f false pattern)
+                    (f false valueExpr)
+                    (f false bodyExpr)
+            if isSimple then "(" + letStr + ")" else letStr
+        | ERecordEmpty -> "{}"
+        | EVariant (label, value) ->
+            let variantStr = ":" + label + " " + f true value 
+            if isSimple then "(" + variantStr + ")" else variantStr
+        | ERecordSelect (recordExpr, label) -> f true recordExpr + "." + label
+        | ERecordRestrict (recordExpr, label) -> "{" + f false recordExpr + " - " + label + "}"
+        | ERecordExtend (name, valueExpr, restExpr) ->
+            let rec g str = function
+                | ERecordEmpty -> str
+                | ERecordExtend (label, valueExpr, restExpr) ->
+                    g (str + ", " + label + " = " + f false valueExpr) restExpr
+                | otherExpr -> str + " | " + f false otherExpr
+            "{" + g (name + " = " + f false valueExpr) restExpr + "}"
+        | ECase (expr, cases, oDefault) ->
+            let caseStrList = 
+                cases
+                |> List.map (fun (pattern, expr, oGuard) ->
+                    let guard =
+                        match oGuard with
+                        | None -> ""
+                        | Some guard -> sprintf " when %O" (f false guard)
+                    f false pattern + guard + " -> " + f false expr
+                )
+                |> String.concat ", "
+            let defaultStr =
+                match oDefault with
+                | None -> ""
+                | Some (name, expr) -> sprintf "| %s -> %s" name (f false expr)
+            "match " + f false expr + " { " + caseStrList + defaultStr + " } "
+        | EIfThenElse (ifExpr, thenExpr, elseExpr) ->
+            let a = f false ifExpr
+            let b = f false thenExpr
+            let c = f false elseExpr
+            sprintf "if %s then %s else %s" a b c
+        | EBinOp (a, op, b) ->
+            let a = f false a
+            let op = stringOfBinOp op
+            let b = f false b
+            sprintf "%s %s %s" a op b
+        | EUnOp (op, a) ->
+            let a = f false a
+            let op = stringOfUnOp op
+            sprintf "%s%s" op a
+        | EListEmpty -> "[]"
+        | EListCons (x, xs) -> sprintf "%s :: %s" (f false x) (f false xs)
+        | EOpen filename -> sprintf "open \"%s\"" filename
+        | EType (e, t) -> sprintf "(%s: %s)" (f false e) (stringOfTy t)
+    f false x
 
 let rec stringOfValue value =
     let rec f isSimple value =
