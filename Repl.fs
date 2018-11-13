@@ -22,7 +22,7 @@ let readPrompt prompt =
 
 let evalString (env: Env) expr : Env * string =
     try
-        let ordoExpr = Parser.readExpr expr
+        let ordoExpr = ParserExpr.readExpr expr
         match ordoExpr with
         | EVariant ("rawtype", EVar name) ->
             env, Map.find name env.Infer |> string

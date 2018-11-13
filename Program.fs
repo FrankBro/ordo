@@ -7,7 +7,8 @@ open Error
 open Eval
 open Expr
 open Infer
-open Parser
+open ParserExpr
+open ParserType
 open Repl
 
 let test input =
@@ -49,7 +50,7 @@ let testCompiler files =
     let exprs =
         files
         |> List.map (fun (name, input) ->
-            name, Parser.readExpr input
+            name, ParserExpr.readExpr input
         )
     let ordoTy, ordoVal = compileExprs exprs
     ()

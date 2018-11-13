@@ -11,7 +11,7 @@ let testCompiler files (inferExpected: InferResult) (evalExpected: EvalResult) =
     let exprs =
         files
         |> List.map (fun (name, input) ->
-            name, Parser.readExpr input
+            name, ParserExpr.readExpr input
         )
     let ordoTy, ordoVal = compileExprs exprs
     if inferExpected <> ISkip then

@@ -23,7 +23,7 @@ type EvalResult =
 let test input parserExpected inferExpected evalExpected =
     let parserResult = 
         try
-            Parser.readExpr input
+            ParserExpr.readExpr input
             |> POk
         with
         | OrdoException error -> PFail error
