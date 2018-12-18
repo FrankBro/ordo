@@ -58,8 +58,8 @@ let testCompiler files =
 
 [<EntryPoint>]
 let main argv =
-    let input = "let (a: int) = 1 in a"
-    test input
+    // let input = "let (a: int) = 1 in a"
+    // test input
 
     // let input = "forall a => (a -> a) -> a"
     // testType input
@@ -71,6 +71,6 @@ let main argv =
     //     ]
     // testCompiler inputs
 
-    // runRepl ()
+    runRepl ()
 
     0 // return an integer exit code
