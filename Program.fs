@@ -61,7 +61,8 @@ let testEmitter expected input =
     let expr = ParserExpr.readExpr input
     let ty = Infer.infer Map.empty expr
     let emit = Emit.emitExpr expr
-    File.WriteAllText("output.lua", emit)
+    let fullEmit = Emit.emitPrelude + "\n" + emit
+    File.WriteAllText("output.lua", fullEmit)
 
 [<EntryPoint>]
 let main argv =
@@ -86,7 +87,9 @@ let main argv =
         "let f = 3.14 in"
         "let s = \"string\" in"
         "let add a b = a + b in"
-        "let c = add i 5 in"
+        "let ra = {a = 1, b = 2} in"
+        "let rb = ra\\b in"
+        "let c = add i (rb.a) in"
         "print c"
     ]
     |> String.concat "\n"
