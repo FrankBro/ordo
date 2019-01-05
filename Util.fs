@@ -20,3 +20,6 @@ module Option =
         | Some _ -> None
 
 let (|>!) x f = f x; x
+
+module Tuple =
+    let append a b = a, b
