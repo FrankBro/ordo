@@ -17,11 +17,13 @@
     <Compile Include="Optimizer.fs" />
     <Compile Include="Compiler.fs" />
     <Compile Include="Repl.fs" />
+    <Compile Include="Emit.fs" />
     <Compile Include="TestUtil.fs" />
     <Compile Include="TestSimple.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="TestAnnotation.fs" />
     <Compile Include="TestCompiler.fs" />
+    <Compile Include="TestEmitter.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

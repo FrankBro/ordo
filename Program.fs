@@ -1,6 +1,7 @@
 ﻿module Program
 
 open System
+open System.IO
 
 open Compiler
 open Error
@@ -10,6 +11,7 @@ open Infer
 open ParserExpr
 open ParserType
 open Repl
+open Util
 
 let test input =
     Infer.resetId ()
@@ -55,6 +57,11 @@ let testCompiler files =
     let ordoTy, ordoVal = compileExprs exprs
     ()
 
+let testEmitter expected input =
+    let expr = ParserExpr.readExpr input
+    let ty = Infer.infer Map.empty expr
+    let emit = Emit.emitExpr expr
+    File.WriteAllText("output.lua", emit)
 
 [<EntryPoint>]
 let main argv =
@@ -71,6 +78,16 @@ let main argv =
     //     ]
     // testCompiler inputs
 
-    runRepl ()
+    // runRepl ()
+    [
+        "let btrue = true in"
+        "let bfalse = false in"
+        "let i = 10 in"
+        "let f = 3.14 in"
+        "let s = \"string\" in"
+        "print i"
+    ]
+    |> String.concat "\n"
+    |> testEmitter "10"
 
     0 // return an integer exit code
