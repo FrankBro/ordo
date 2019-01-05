@@ -48,7 +48,8 @@ let rec emitExpr expr =
     | ERecordEmpty -> "{}"
     // | EVariant of Name * Expr
     // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
-    // | EIfThenElse of Expr * Expr * Expr
+    | EIfThenElse (i, t, e) ->
+        sprintf "if %s then %s else %s end" (emitExpr i) (emitExpr t) (emitExpr e)
     | EBinOp (l, op, r) ->
         sprintf "%s %s %s" (emitExpr l) (emitBinop op) (emitExpr r)
     // | EUnOp of UnOp * Expr

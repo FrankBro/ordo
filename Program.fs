@@ -90,7 +90,10 @@ let main argv =
         "let ra = {a = 1, b = 2} in"
         "let rb = ra\\b in"
         "let c = add i (rb.a) in"
-        "print c"
+        "if c > 10 then"
+        "    print \"c is greater than 10\""
+        "else"
+        "    print \"c is not greater than 10\""
     ]
     |> String.concat "\n"
     |> testEmitter "10"
