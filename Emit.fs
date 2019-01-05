@@ -5,6 +5,21 @@ open Expr
 open Infer
 open Util
 
+let emitBinop op =
+    match op with
+    | Plus -> "+"
+    | Minus -> "-"
+    | Multiply -> "*"
+    | Divide -> "/"
+    | And -> "and"
+    | Or -> "or"
+    | Equal -> "=="
+    | NotEqual -> "~="
+    | Greater -> ">"
+    | GreaterEqual -> ">="
+    | Lesser -> "<"
+    | LesserEqual -> "<="
+
 let emitPattern pattern =
     match pattern with
     | EVar name -> name
@@ -18,8 +33,10 @@ let rec emitExpr expr =
     | EFloat f -> string f
     | EString s -> sprintf "'%s'" s
     | EVar name -> name
-    // | ECall of Expr * Expr
-    // | EFun of Pattern * Expr
+    | ECall (fn, arg) ->
+        sprintf "%s(%s)" (emitExpr fn) (emitExpr arg)
+    | EFun (pattern, body) ->
+        sprintf "function(%s) return %s end" (emitPattern pattern) (emitExpr body)
     | ELet (pattern, value, body) ->
         sprintf "local %s = %s\n%s" (emitPattern pattern) (emitExpr value) (emitExpr body)
     // | ERecordSelect of Expr * Name
@@ -29,7 +46,8 @@ let rec emitExpr expr =
     // | EVariant of Name * Expr
     // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
     // | EIfThenElse of Expr * Expr * Expr
-    // | EBinOp of Expr * BinOp * Expr
+    | EBinOp (l, op, r) ->
+        sprintf "%s %s %s" (emitExpr l) (emitBinop op) (emitExpr r)
     // | EUnOp of UnOp * Expr
     // | EFix of Name
     // | EListEmpty

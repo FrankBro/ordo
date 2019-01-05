@@ -85,7 +85,9 @@ let main argv =
         "let i = 10 in"
         "let f = 3.14 in"
         "let s = \"string\" in"
-        "print i"
+        "let add a b = a + b in"
+        "let c = add i 5 in"
+        "print c"
     ]
     |> String.concat "\n"
     |> testEmitter "10"
