@@ -493,3 +493,11 @@ let ``String`` () =
         (POk (EString "a"))
         (IOk "string")
         (EOk (VString "a"))
+
+[<Fact>]
+let ``Print`` () =
+    test
+        "print 3"
+        (POk (EPrint (EInt 3)))
+        (IOk "{}")
+        (EOk (VRecord Map.empty))

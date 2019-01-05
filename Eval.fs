@@ -6,6 +6,9 @@ open Util
 
 let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | EPrint e ->
+        printfn "%O" (evalExpr files env e)
+        VRecord Map.empty
     | EType (e, _) -> evalExpr files env e
     | EOpen filename -> Map.find filename files
     | EListEmpty -> VList []

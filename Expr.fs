@@ -93,6 +93,7 @@ type UnOp =
     | Negative
 
 type Expr =
+    | EPrint of Expr
     | EBool of bool
     | EInt of int
     | EFloat of float
@@ -118,6 +119,7 @@ type Expr =
 with
     override x.ToString () =
         match x with
+        | EPrint e -> sprintf "EPrint %O" e
         | EBool b -> sprintf "EBool %b" b
         | EInt i -> sprintf "EInt %d" i
         | EFloat f -> sprintf "EFloat %f" f
@@ -300,6 +302,7 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | EPrint e -> sprintf "print %s" (f false e)
         | EFix name -> sprintf "fix %s" name
         | EBool bool -> sprintf "%b" bool
         | EInt int -> sprintf "%d" int

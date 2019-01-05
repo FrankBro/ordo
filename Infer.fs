@@ -233,6 +233,7 @@ let rec matchFunTy ty =
     | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr files env level = function
+    | EPrint e -> TRecord TRowEmpty
     | EType (e, t) ->
         let infered = inferExpr files env level e
         unify infered t

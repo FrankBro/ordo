@@ -21,7 +21,7 @@ let patopp = new OperatorPrecedenceParser<Pattern, unit, unit>()
 let parsePattern = patopp.ExpressionParser
 let parsePatternWs = parsePattern .>> ws
 
-let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec"; "open" ]
+let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec"; "open"; "print" ]
 
 let ident: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
@@ -275,6 +275,10 @@ let parseOpen =
     strWs "open" >>. stringLiteral
     |>> EOpen
 
+let parsePrint =
+    strWs "print" >>. parseExprWs
+    |>> EPrint
+
 let parseNotCallOrRecordSelect =
     choice [
         attempt (parseType parseExprWs)
@@ -297,6 +301,7 @@ let parseNotCallOrRecordSelect =
         attempt parseRecordExtendOrUpdate 
         attempt (parseRecordInit parseExprWs)
         attempt parseIfThenElse
+        attempt parsePrint
     ]
 
 let parseExprOrCall =
