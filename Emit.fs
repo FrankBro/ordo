@@ -20,6 +20,10 @@ let emitBinop op =
     | Lesser -> "<"
     | LesserEqual -> "<="
 
+let emitUnop op =
+    match op with
+    | Negative -> "-"
+
 let emitPattern pattern =
     match pattern with
     | EVar name -> name
@@ -52,7 +56,8 @@ let rec emitExpr expr =
         sprintf "if %s then %s else %s end" (emitExpr i) (emitExpr t) (emitExpr e)
     | EBinOp (l, op, r) ->
         sprintf "%s %s %s" (emitExpr l) (emitBinop op) (emitExpr r)
-    // | EUnOp of UnOp * Expr
+    | EUnOp (op, e) ->
+        sprintf "%s%s" (emitUnop op) (emitExpr e)
     // | EFix of Name
     // | EListEmpty
     // | EListCons of Expr * Expr

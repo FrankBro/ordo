@@ -87,7 +87,7 @@ let main argv =
         "let f = 3.14 in"
         "let s = \"string\" in"
         "let add a b = a + b in"
-        "let ra = {a = 1, b = 2} in"
+        "let ra = {a = 1, b = -2} in"
         "let rb = ra\\b in"
         "let c = add i (rb.a) in"
         "if c > 10 then"
