@@ -50,7 +50,8 @@ let rec emitExpr expr =
     | ERecordRestrict (record, field) ->
         sprintf "table.remove(%s, '%s')" (emitExpr record) field
     | ERecordEmpty -> "{}"
-    // | EVariant of Name * Expr
+    | EVariant (name, value) ->
+        sprintf "{ variant_name = '%s', variant_value = %s }" name (emitExpr value)
     // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
     | EIfThenElse (i, t, e) ->
         sprintf "if %s then %s else %s end" (emitExpr i) (emitExpr t) (emitExpr e)

@@ -1,6 +1,7 @@
 ﻿module Program
 
 open System
+open System.Diagnostics
 open System.IO
 
 open Compiler
@@ -63,6 +64,17 @@ let testEmitter expected input =
     let emit = Emit.emitExpr expr
     let fullEmit = Emit.emitPrelude + "\n" + emit
     File.WriteAllText("output.lua", fullEmit)
+    let p = new Process()
+    p.StartInfo.UseShellExecute <- false
+    p.StartInfo.RedirectStandardOutput <- true
+    // p.StartInfo.FileName <- "lua/lua53.exe output.lua"
+    p.StartInfo.FileName <- "PowerShell.exe"
+    p.StartInfo.Arguments <- "/Command \"lua\\lua53.exe output.lua\""
+    p.Start() |> ignore<bool>
+    let output = p.StandardOutput.ReadToEnd()
+    p.WaitForExit()
+    printfn "Output = %s" output
+    ()
 
 [<EntryPoint>]
 let main argv =
@@ -81,19 +93,8 @@ let main argv =
 
     // runRepl ()
     [
-        "let btrue = true in"
-        "let bfalse = false in"
-        "let i = 10 in"
-        "let f = 3.14 in"
-        "let s = \"string\" in"
-        "let add a b = a + b in"
-        "let ra = {a = 1, b = -2} in"
-        "let rb = ra\\b in"
-        "let c = add i (rb.a) in"
-        "if c > 10 then"
-        "    print \"c is greater than 10\""
-        "else"
-        "    print \"c is not greater than 10\""
+        "let v = :variant 10 in"
+        "print 10"
     ]
     |> String.concat "\n"
     |> testEmitter "10"
