@@ -6,6 +6,8 @@ open Util
 
 let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | EError s ->
+        failwith s
     | EPrint e ->
         printfn "%O" (evalExpr files env e)
         VRecord Map.empty

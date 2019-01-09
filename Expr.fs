@@ -116,6 +116,7 @@ type Expr =
     | EListCons of Expr * Expr
     | EOpen of string
     | EType of Expr * Ty
+    | EError of string
 with
     override x.ToString () =
         match x with
@@ -142,6 +143,7 @@ with
         | EListCons (x, xs) -> sprintf "EListCons (%O, %O)" x xs
         | EOpen filename -> sprintf "EOpen \"%s\"" filename
         | EType (e, t) -> sprintf "EType (%O, %O)" e t
+        | EError s -> sprintf "EError %s" s
 
 and Pattern = Expr
 and Guard = Expr
@@ -302,6 +304,7 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | EError s -> sprintf "error \"%s\"" s
         | EPrint e -> sprintf "print %s" (f false e)
         | EFix name -> sprintf "fix %s" name
         | EBool bool -> sprintf "%b" bool
