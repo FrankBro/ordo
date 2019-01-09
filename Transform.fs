@@ -4,19 +4,34 @@ open Expr
 
 // Expand pattern matching
 
+// Binding:
+
 // Before 
 // let { a = a } = { a = 1 } in body
 // After
-// let _r0 = { a = 1 } in
-// let a = _r0.a in body
+// let _var0 = { a = 1 } in
+// let a = _var0.a in body
 
 // Before
 // let (:a a) = (:a 1) in body
 // After
-// let _r0 = (:a 1) in
-// match _r0 { :a a -> body }
+// let _var0 = (:a 1) in
+// match _var0 { :a a -> body }
 
 // Before
+// let (:a { b = b }) = (:a { b = 1 }) in body
+// After
+// let _var0 = (:a { b = 1 }) in
+// match _var0 { :a _var1 ->
+//     let b = _var1.b in body
+// }
+
+// Before
+// let { a = (:b b) } = { a = (:b 1) } in body
+// After
+// let _var0 = { a = (:b 1) } in
+// let _var1 = _var0.a in
+// match _var1 { :b _var1 -> body }
 
 let getId =
     let mutable i = 0
@@ -27,7 +42,7 @@ let getId =
 
 let getNewVar () =
     let id = getId ()
-    sprintf "_r%d" id
+    sprintf "_var%d" id
 
 let transformRow var rest expr =
     match expr with
