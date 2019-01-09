@@ -86,7 +86,6 @@ let ``Variant pattern`` () =
         (IOk "int")
         (EOk (VInt 1))
 
-// TODO This probably should infer correctly, even if it makes little sense, should be generic
 [<Fact>]
 let ``Bad variant pattern`` () =
     test
@@ -102,6 +101,14 @@ let ``Variant pattern in lambda`` () =
         (POk (ELet (EVar "f", EFun (EVariant ("a", EVar "a"), EVar "a"), ECall (EVar "f", EVariant ("a", EInt 1)))))
         (IOk "int")
         (EOk (VInt 1))
+
+[<Fact>]
+let ``Bad variant pattern in lambda`` () =
+    test
+        "let f = fun (:b b) -> b in f (:a 1)"
+        (POk (ELet (EVar "f", EFun (EVariant ("b", EVar "b"), EVar "b"), ECall (EVar "f", EVariant ("a", EInt 1)))))
+        (IFail (i RowTypeExpected))
+        (EFail (e (BadVariantPattern ("b", "a"))))
 
 [<Fact>]
 let ``Record pattern in match`` () =

@@ -10,6 +10,7 @@
     <Compile Include="Expr.fs" />
     <Compile Include="Error.fs" />
     <Compile Include="Infer.fs" />
+    <Compile Include="Transform.fs" />
     <Compile Include="ParserUtil.fs" />
     <Compile Include="ParserType.fs" />
     <Compile Include="ParserExpr.fs" />

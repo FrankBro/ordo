@@ -62,7 +62,7 @@ let testEmitter expected input =
     let expr = ParserExpr.readExpr input
     let ty = Infer.infer Map.empty expr
     let emit = Emit.emitExpr expr
-    let fullEmit = Emit.emitPrelude + "\n" + emit
+    let fullEmit = Emit.emitPrelude + "\n\n" + emit
     File.WriteAllText("output.lua", fullEmit)
     let p = new Process()
     p.StartInfo.UseShellExecute <- false
@@ -93,8 +93,8 @@ let main argv =
 
     // runRepl ()
     [
-        "let v = :variant 10 in"
-        "print 10"
+        "let {a = a} = {a = 1} in"
+        "print a"
     ]
     |> String.concat "\n"
     |> testEmitter "10"
