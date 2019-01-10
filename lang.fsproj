@@ -21,6 +21,7 @@
     <Compile Include="Emit.fs" />
     <Compile Include="TestUtil.fs" />
     <Compile Include="TestSimple.fs" />
+    <Compile Include="TestTransform.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="TestAnnotation.fs" />
     <Compile Include="TestCompiler.fs" />

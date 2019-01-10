@@ -76,8 +76,27 @@ let testEmitter expected input =
     printfn "Output = %s" output
     ()
 
+let testTransform parse transform =
+    let parsed = ParserExpr.readExpr parse
+    try
+        let transformed = Transform.transform parsed
+        let parsedTransform = ParserExpr.readExpr transform
+        if transformed <> parsedTransform then
+            printfn "%s" (stringOfExpr transformed)
+            printfn "%s" (stringOfExpr parsedTransform)
+    with 
+        | OrdoException e ->
+            printfn "%O" e
+        | e ->
+            printfn "%O" e
+
 [<EntryPoint>]
 let main argv =
+    testTransform
+        "let { a = { b = b } } = { a = { b = 1 } } in b"
+        "let _var0 = { a = { b = 1 } } in let _var1 = _var0.a in let b = _var1.b in b"
+        // "let _var0 = { a = (:b 1) } in match _var0.a { :b b -> b }"
+
     // let input = "let (a: int) = 1 in a"
     // test input
 
@@ -92,11 +111,11 @@ let main argv =
     // testCompiler inputs
 
     // runRepl ()
-    [
-        "let {a = a} = {a = 1} in"
-        "print a"
-    ]
-    |> String.concat "\n"
-    |> testEmitter "10"
+    // [
+    //     "let {a = a} = {a = 1} in"
+    //     "print a"
+    // ]
+    // |> String.concat "\n"
+    // |> testEmitter "10"
 
     0 // return an integer exit code
