@@ -10,6 +10,7 @@
     <Compile Include="Expr.fs" />
     <Compile Include="Error.fs" />
     <Compile Include="Infer.fs" />
+    <Compile Include="Transform.fs" />
     <Compile Include="ParserUtil.fs" />
     <Compile Include="ParserType.fs" />
     <Compile Include="ParserExpr.fs" />
@@ -20,6 +21,7 @@
     <Compile Include="Emit.fs" />
     <Compile Include="TestUtil.fs" />
     <Compile Include="TestSimple.fs" />
+    <Compile Include="TestTransform.fs" />
     <Compile Include="Test.fs" />
     <Compile Include="TestAnnotation.fs" />
     <Compile Include="TestCompiler.fs" />

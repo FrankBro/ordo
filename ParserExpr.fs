@@ -23,13 +23,23 @@ let parsePatternWs = parsePattern .>> ws
 
 let reserved = [ "let"; "in"; "fun"; "match"; "if"; "then"; "else"; "true"; "false"; "when"; "fix"; "rec"; "open"; "print"; "error" ]
 
-let ident: Parser<string> =
+let internalIdent: Parser<string> =
+    pstring "_" >>. many1 (lower <|> digit) |>> (Array.ofList >> String)
+    >>= fun s ->
+        if reserved |> List.exists ((=) s) then 
+            fail "reserved"
+        else
+            preturn ("_" + s)
+
+let externalIdent: Parser<string> =
     many1 lower |>> (Array.ofList >> String)
     >>= fun s ->
         if reserved |> List.exists ((=) s) then 
             fail "reserved"
         else
             preturn s
+
+let ident = attempt internalIdent <|> externalIdent 
 let identWs = ident .>> ws
 
 let parseBool : Parser<Expr> =
