@@ -30,12 +30,12 @@ let rec transformRowBinding var body expr =
         let recordBody = transformRowBinding var body record
         let subVar = getNewVar ()
         let subBody = transformRowBinding subVar recordBody sub
-        // let subVar = getNewVar ()
-        // let subBody = transformRowBinding subVar record sub
-        // let recordBody = transformRowBinding var body subBody
         ELet (EVar subVar, ERecordSelect (EVar var, name), subBody)
     | ERecordEmpty -> body
     | _ -> raise (genericError (InvalidPattern expr))
+
+let rec transformRowMatch var body expr =
+    failwith ""
 
 let rec transformExpr expr =
     match expr with
@@ -52,7 +52,18 @@ let rec transformExpr expr =
             let var = getNewVar ()
             let body = transformRowBinding var body pattern
             ELet (EVar var, value, body)
-    // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
+    | ECase (value, cases, oDefault) ->
+        let fixedCases = 
+            cases
+            |> List.map (fun (pattern, body, oGuard) ->
+                let pattern, guards = transformRowMatch a b c
+                let fullGuards =
+                    match oGuard with
+                    | None -> guards
+                    | Some previousGuards -> EBinOp (guards, BinOp.And, previousGuards)
+                pattern, body, Some fullGuards
+            )
+        ECase (value, fixedCases, oDefault)
     | _ -> expr
 
 let transform expr =
