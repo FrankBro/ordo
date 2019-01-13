@@ -88,6 +88,13 @@ let rec extractGuards pattern guards =
     | ERecordEmpty -> pattern, guards
     | _ -> raise (genericError (InvalidPattern pattern))
 
+let isRowType expr =
+    match expr with
+    | EVariant _
+    | ERecordExtend _
+    | ERecordEmpty -> true
+    | _ -> false
+
 let rec transformExpr expr =
     match expr with
     | EFun (pattern, body) ->
@@ -99,7 +106,7 @@ let rec transformExpr expr =
             let body = transformRowBinding var body pattern
             EFun (EVar var, body)
         | _ -> raise (genericError (InvalidPattern pattern))
-    | ELet (pattern, value, body) ->
+    | ELet (pattern, value, body) when isRowType pattern ->
             let var = getNewVar ()
             let body = transformRowBinding var body pattern
             ELet (EVar var, value, body)

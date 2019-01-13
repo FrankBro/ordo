@@ -109,3 +109,9 @@ let ``Extract guards in variant`` () =
     testTransform
         "match x { :a 1 -> 1 }"
         "match x { :a _var0 when _var0 = 1 -> 1 }"
+
+[<Fact>]
+let ``Transform does not mess with functions`` () =
+    testTransform
+        "let add a b = a + b"
+        "let add a b = a + b"
