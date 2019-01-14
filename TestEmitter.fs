@@ -9,7 +9,7 @@ open Xunit.Abstractions
 let testEmitter expected input =
     let expr = ParserExpr.readExpr input
     let ty = Infer.infer Map.empty expr
-    let emit = Emit.emitExpr expr
+    let emit = Emit.emit expr
     File.WriteAllText("output.lua", emit)
 
 // [<Fact>]

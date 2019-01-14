@@ -61,9 +61,8 @@ let testCompiler files =
 let testEmitter expected input =
     let expr = ParserExpr.readExpr input
     let ty = Infer.infer Map.empty expr
-    let emit = Emit.emitExpr expr
-    let fullEmit = Emit.emitPrelude + "\n\n" + emit
-    File.WriteAllText("output.lua", fullEmit)
+    let emit = Emit.emit expr
+    File.WriteAllText("output.lua", emit)
     let p = new Process()
     p.StartInfo.UseShellExecute <- false
     p.StartInfo.RedirectStandardOutput <- true
@@ -92,10 +91,10 @@ let testTransform parse transform =
 
 [<EntryPoint>]
 let main argv =
-    testTransform
-        "let { a = { b = b } } = { a = { b = 1 } } in b"
-        "let _var0 = { a = { b = 1 } } in let _var1 = _var0.a in let b = _var1.b in b"
-        // "let _var0 = { a = (:b 1) } in match _var0.a { :b b -> b }"
+    // testTransform
+    //     "let { a = { b = b } } = { a = { b = 1 } } in b"
+    //     "let _var0 = { a = { b = 1 } } in let _var1 = _var0.a in let b = _var1.b in b"
+    //     "let _var0 = { a = (:b 1) } in match _var0.a { :b b -> b }"
 
     // let input = "let (a: int) = 1 in a"
     // test input
@@ -111,11 +110,18 @@ let main argv =
     // testCompiler inputs
 
     // runRepl ()
-    // [
-    //     "let {a = a} = {a = 1} in"
-    //     "print a"
-    // ]
-    // |> String.concat "\n"
-    // |> testEmitter "10"
+
+    [
+        "let yfact fact n ="
+        "    if n > 0 then"
+        "        n * fact(n-1)"
+        "    else"
+        "        1 "
+        "in"
+        "let fact = fix yfact in"
+        "print (fact 5)"
+    ]
+    |> String.concat "\n"
+    |> testEmitter "10"
 
     0 // return an integer exit code
