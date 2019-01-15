@@ -116,7 +116,7 @@ let main argv =
         "    if n > 0 then"
         "        n * fact(n-1)"
         "    else"
-        "        1 "
+        "        1"
         "in"
         "let fact = fix yfact in"
         "print (fact 5)"
