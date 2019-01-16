@@ -84,11 +84,29 @@ let isStatement expr =
     | EOpen _
     | EError _ -> false
     | ELet _
-    // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
+    | ECase _
     | EIfThenElse _ -> true
     // | EListEmpty
     // | EListCons of Expr * Expr
     // | EType of Expr * Ty
+
+let rec extractCaseConditions case value =
+
+let emitCaseExpr oAssignVar value cases oDefault =
+    let valueVar =
+        match value with
+        | EVar name -> name
+        | _ -> failwith "value is not a var"
+    let cases =
+        cases
+        |> List.map (fun case ->
+            case
+        )
+    let def =
+        match oDefault with
+        | Some var -> sprintf "else\nlocal var = "
+        | None -> sprintf "else\nerror('no match')\nend"
+    failwith ""
 
 let rec emitExpr oAssignVar expr =
     match expr with
@@ -118,12 +136,15 @@ let rec emitExpr oAssignVar expr =
     | ERecordEmpty -> "{}"
     | EVariant (name, value) ->
         sprintf "{ variant_name = '%s', variant_value = %s }" name (emitExpr None value)
-    // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
+    | ECase (value, cases, oDefault) ->
+        emitCaseExpr oAssignVar value cases oDefault
     | EIfThenElse (i, t, e) ->
-        let var = getNewVar ()
         match oAssignVar with
-        | None -> sprintf "local %s\nif %s then\n%s\nelse\n%s\nend" var (emitExpr None i) (emitExpr (Some var) t) (emitExpr (Some var) e)
-        | Some var -> sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None i) (emitExpr (Some var) t) (emitExpr (Some var) e)
+        | None -> 
+            let var = getNewVar ()
+            sprintf "local %s\nif %s then\n%s\nelse\n%s\nend" var (emitExpr None i) (emitExpr (Some var) t) (emitExpr (Some var) e)
+        | Some var -> 
+            sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None i) (emitExpr (Some var) t) (emitExpr (Some var) e)
     | EBinOp (l, op, r) ->
         sprintf "%s %s %s" (emitExpr None l) (emitBinop op) (emitExpr None r)
     | EUnOp (op, e) ->
@@ -135,6 +156,7 @@ let rec emitExpr oAssignVar expr =
     // | EType of Expr * Ty
     | EPrint e -> sprintf "print(%s)" (emitExpr None e)
     | _ -> failwithf "impossible, got %O" expr
+
     |> (fun result ->
         match oAssignVar with
         // | Some assignVar when isSingleLineExpr expr -> sprintf "%s = %s" assignVar result
