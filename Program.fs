@@ -91,10 +91,9 @@ let testTransform parse transform =
 
 [<EntryPoint>]
 let main argv =
-    // testTransform
-    //     "let { a = { b = b } } = { a = { b = 1 } } in b"
-    //     "let _var0 = { a = { b = 1 } } in let _var1 = _var0.a in let b = _var1.b in b"
-    //     "let _var0 = { a = (:b 1) } in match _var0.a { :b b -> b }"
+    testTransform
+        "match x { { a = 1 } -> 1 }"
+        "match x { { a = _var0 } when _var0 = 1 -> (let _var0 = x.a in 1) }"
 
     // let input = "let (a: int) = 1 in a"
     // test input
@@ -111,17 +110,17 @@ let main argv =
 
     // runRepl ()
 
-    [
-        "let yfact fact n ="
-        "    if n > 0 then"
-        "        n * fact(n-1)"
-        "    else"
-        "        1"
-        "in"
-        "let fact = fix yfact in"
-        "print (fact 5)"
-    ]
-    |> String.concat "\n"
-    |> testEmitter "10"
+    // [
+    //     "let yfact fact n ="
+    //     "    if n > 0 then"
+    //     "        n * fact(n-1)"
+    //     "    else"
+    //     "        1"
+    //     "in"
+    //     "let fact = fix yfact in"
+    //     "print (fact 5)"
+    // ]
+    // |> String.concat "\n"
+    // |> testEmitter "10"
 
     0 // return an integer exit code

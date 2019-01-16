@@ -102,13 +102,13 @@ let ``Fun record multiple fields`` () =
 let ``Extract guards in record`` () =
     testTransform
         "match x { { a = 1 } -> 1 }"
-        "match x { { a = _var0 } when _var0 = 1 -> 1 }"
+        "match x { { a = _var0 } when _var0 = 1 -> (let _var0 = x.a in 1) }"
 
 [<Fact>]
 let ``Extract guards in variant`` () =
     testTransform
         "match x { :a 1 -> 1 }"
-        "match x { :a _var0 when _var0 = 1 -> 1 }"
+        "match x { :a _var0 when _var0 = 1 -> (match x { :a _var0 -> 1 }) }"
 
 [<Fact>]
 let ``Transform does not mess with functions`` () =

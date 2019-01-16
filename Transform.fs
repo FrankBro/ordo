@@ -3,16 +3,6 @@ module Transform
 open Error
 open Expr
 
-// Before
-// let { a = 1 } = { a = 1 } in 1
-// After
-// let _var0 = { a = 1 } in let _var1 = _var0.a in if a = 1 then 1 else error "bad match"
-
-// Before
-// match a { :a 1 -> 1 }
-// After
-//
-
 let currentId = ref 0
 
 let nextId () =
@@ -107,10 +97,19 @@ let rec transformExpr expr =
             EFun (EVar var, body)
         | _ -> raise (genericError (InvalidPattern pattern))
     | ELet (pattern, value, body) when isRowType pattern ->
-            let var = getNewVar ()
+            let var = 
+                match value with
+                | EVar var -> var
+                | _ -> getNewVar ()
             let body = transformRowBinding var body pattern
-            ELet (EVar var, value, body)
+            match value with
+            | EVar _ -> body
+            | _ -> ELet (EVar var, value, body)
     | ECase (value, cases, oDefault) ->
+        let var =
+            match value with
+            | EVar name -> name
+            | _ -> getNewVar ()
         let fixedCases = 
             cases
             |> List.map (fun (pattern, body, oGuard) ->
@@ -129,9 +128,14 @@ let rec transformExpr expr =
                             EBinOp (state, BinOp.And, guard)
                         )
                         |> Some
+                let body = 
+                    ELet (pattern, EVar var, body)
+                    |> transformExpr
                 pattern, body, oGuard
             )
-        ECase (value, fixedCases, oDefault)
+        match value with
+        | EVar name -> ECase (value, fixedCases, oDefault)
+        | _ -> ELet (EVar var, value, ECase (EVar var, fixedCases, oDefault))
     | _ -> expr
 
 let transform expr =
