@@ -4,6 +4,9 @@ open Error
 open Expr
 open Infer
 open Util
+open Transform
+open Transform
+open Transform
 
 let currentId = ref 0
 
@@ -90,25 +93,57 @@ let isStatement expr =
     // | EListCons of Expr * Expr
     // | EType of Expr * Ty
 
-let rec extractCaseConditions case value =
+let rec extractBindingsAndVariantGuards pattern var bindings guards =
+    match pattern with
+    | EVar name -> Map.add var name bindings, guards
+    | ERecordEmpty -> bindings, guards
+    | ERecordExtend (field, fieldPattern, record) ->
+        let fieldAccess = sprintf "%s.%s" var field
+        let map, guards = extractBindingsAndVariantGuards fieldPattern fieldAccess bindings guards
+        extractBindingsAndVariantGuards record var map guards
+    | EVariant (name, variant) ->
+        let fieldAccess = sprintf "%s.variant_%s" var name
+        let guard = sprintf "%s.variant_name = %s" var name
+        let guards = guard :: guards
+        extractBindingsAndVariantGuards variant fieldAccess bindings guards
+    | _ -> failwithf "impossible, got pattern %O" pattern
 
-let emitCaseExpr oAssignVar value cases oDefault =
+let extractValueGuard guard bindings =
+    match guard with
+    | EVar name -> Map.find name bindings
+    | EBool b -> string b
+    | EInt i -> string i
+    | EFloat f -> string f
+    | EString s -> sprintf "'%s'" s
+    | _ -> failwith "impossible, got guard %O" guard
+
+let rec extractGuards guard bindings guards =
+    match guard with
+    | EBinOp (a, BinOp.Equal, b) -> sprintf "%s == %s" (extractValueGuard a bindings) (extractValueGuard b bindings)
+
+let rec emitCaseExpr oAssignVar value (cases: (Pattern * Expr * Guard option) list) (oDefault: (Name * Expr) option) =
     let valueVar =
         match value with
         | EVar name -> name
         | _ -> failwith "value is not a var"
     let cases =
         cases
-        |> List.map (fun case ->
+        |> List.map (fun (pattern, body, oGuard) ->
+            let bindings, guards = extractBindingsAndVariantGuards pattern valueVar Map.empty []
+            let guards =
+                match oGuard with
+                | None -> guards
+                | Some guard -> extractGuards guard bindings guards
             case
         )
     let def =
         match oDefault with
-        | Some var -> sprintf "else\nlocal var = "
+        | Some (var, body) -> 
+            sprintf "else\nlocal %s = %s\n%s\nend" var valueVar (emitExpr (Some var) body)
         | None -> sprintf "else\nerror('no match')\nend"
     failwith ""
 
-let rec emitExpr oAssignVar expr =
+and emitExpr oAssignVar expr =
     match expr with
     | EBool false -> "false"
     | EBool true -> "true"
@@ -135,7 +170,7 @@ let rec emitExpr oAssignVar expr =
         sprintf "table.remove(%s, '%s')" (emitExpr None record) field
     | ERecordEmpty -> "{}"
     | EVariant (name, value) ->
-        sprintf "{ variant_name = '%s', variant_value = %s }" name (emitExpr None value)
+        sprintf "{ variant_name = '%s', variant_%s = %s }" name name (emitExpr None value)
     | ECase (value, cases, oDefault) ->
         emitCaseExpr oAssignVar value cases oDefault
     | EIfThenElse (i, t, e) ->
