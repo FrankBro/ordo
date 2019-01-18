@@ -59,12 +59,18 @@ let testCompiler files =
     ()
 
 let testEmitter expected input =
-    let expr = ParserExpr.readExpr input
-    // let ty = Infer.infer Map.empty expr
-    let transformed = Transform.transform expr
-    printfn "%s" (stringOfExpr transformed)
-    let emit = Emit.emit transformed
-    File.WriteAllText("output.lua", emit)
+    try
+        let expr = ParserExpr.readExpr input
+        // let ty = Infer.infer Map.empty expr
+        let transformed = Transform.transform expr
+        printfn "%s" (stringOfExpr transformed)
+        let emit = Emit.emit transformed
+        File.WriteAllText("output.lua", emit)
+    with 
+        | OrdoException e ->
+            printfn "OrdoException: %O" e
+        | e ->
+            printfn "Exception: %O" e
     // let p = new Process()
     // p.StartInfo.UseShellExecute <- false
     // p.StartInfo.RedirectStandardOutput <- true
@@ -113,11 +119,13 @@ let main argv =
     //     "let _var0 = (:a 1) in match _var0 { :a a -> a }"
 
     [
+        "let add a b = a + b in "
+        "let add_one = add 1 in "
         "let value = "
         "    match { a = 1 } { "
         "        { a = 1 } -> 1 "
         "    } in "
-        "print(value)"
+        "print(add_one value)"
     ]
     |> String.concat "\n"
     |> testEmitter "10"
