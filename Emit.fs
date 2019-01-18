@@ -112,13 +112,17 @@ let extractValueGuard guard bindings =
     | EInt i -> string i
     | EFloat f -> string f
     | EString s -> sprintf "'%s'" s
-    | _ -> failwith "impossible, got guard %O" guard
+    | _ -> failwithf "impossible, got guard %O" guard
 
 let rec emitCaseExpr oAssignVar map value (cases: (Pattern * Expr * Guard option) list) (oDefault: (Name * Expr) option) =
     let valueVar =
         match value with
         | EVar name -> name
         | _ -> failwith "value is not a var"
+    let assignVar =
+        match oAssignVar with
+        | Some var -> var
+        | None -> getNewVar ()
     let cases =
         cases
         |> List.map (fun (pattern, body, oGuard) ->
@@ -134,7 +138,7 @@ let rec emitCaseExpr oAssignVar map value (cases: (Pattern * Expr * Guard option
                 | guards -> 
                     guards
                     |> String.concat " and "
-            sprintf "if %s then\n%s\n" guard (emitExpr None bindings body)
+            sprintf "if %s then\n%s\n" guard (emitExpr (Some assignVar) bindings body)
         )
         |> String.concat "else"
     let def =
@@ -142,7 +146,9 @@ let rec emitCaseExpr oAssignVar map value (cases: (Pattern * Expr * Guard option
         | Some (var, body) -> 
             sprintf "else\nlocal %s = %s\n%s\nend" var valueVar (emitExpr (Some var) map body)
         | None -> sprintf "else\nerror('no match')\nend"
-    cases + def
+    match oAssignVar with
+    | Some _ -> cases + def
+    | None -> sprintf "local %s\n%s%s" assignVar cases def
 
 and emitExpr oAssignVar map expr =
     let getVar var =
@@ -163,7 +169,7 @@ and emitExpr oAssignVar map expr =
         sprintf "function(%s)\nlocal %s\n%s\nreturn %s\nend" name var (emitExpr (Some var) map body) var
     | ELet (EVar name, value, body) ->
         let emittedValue = emitExpr None map value
-        let emittedBody = emitExpr None map body
+        let emittedBody = emitExpr oAssignVar map body
         match oAssignVar with
         | None -> sprintf "local %s = %s\n%s" name emittedValue emittedBody
         | Some _ -> sprintf "%s = %s\n%s" name emittedValue emittedBody
