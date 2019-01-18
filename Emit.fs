@@ -192,9 +192,7 @@ and emitExpr oAssignVar map expr =
             let var = getNewVar ()
             sprintf "local %s\nif %s then\n%s\nelse\n%s\nend" var (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
         | Some var -> 
-            printfn "var = %s" var
             let var = getVar var
-            printfn "var = %s" var
             sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
     | EBinOp (l, op, r) ->
         printfn "%O" expr
