@@ -92,7 +92,7 @@ let isStatement expr =
 
 let rec extractBindingsAndVariantGuards pattern var bindings guards =
     match pattern with
-    | EVar name -> Map.add var name bindings, guards
+    | EVar name -> Map.add name var bindings, guards
     | ERecordEmpty -> bindings, guards
     | ERecordExtend (field, fieldPattern, record) ->
         let fieldAccess = sprintf "%s.%s" var field
@@ -161,7 +161,7 @@ and emitExpr oAssignVar map expr =
     | EInt i -> string i
     | EFloat f -> string f
     | EString s -> sprintf "'%s'" s
-    | EVar name -> name
+    | EVar name -> getVar name
     | ECall (fn, arg) ->
         sprintf "%s(%s)" (emitExpr None map fn) (emitExpr None map arg)
     | EFun (EVar name, body) ->
@@ -190,9 +190,12 @@ and emitExpr oAssignVar map expr =
             let var = getNewVar ()
             sprintf "local %s\nif %s then\n%s\nelse\n%s\nend" var (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
         | Some var -> 
+            printfn "var = %s" var
             let var = getVar var
+            printfn "var = %s" var
             sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
     | EBinOp (l, op, r) ->
+        printfn "%O" expr
         sprintf "%s %s %s" (emitExpr None map l) (emitBinop op) (emitExpr None map r)
     | EUnOp (op, e) ->
         sprintf "%s%s" (emitUnop op) (emitExpr None map e)
