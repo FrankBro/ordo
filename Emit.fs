@@ -195,7 +195,6 @@ and emitExpr oAssignVar map expr =
             let var = getVar var
             sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
     | EBinOp (l, op, r) ->
-        printfn "%O" expr
         sprintf "%s %s %s" (emitExpr None map l) (emitBinop op) (emitExpr None map r)
     | EUnOp (op, e) ->
         sprintf "%s%s" (emitUnop op) (emitExpr None map e)
