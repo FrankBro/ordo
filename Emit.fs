@@ -171,12 +171,10 @@ and emitExpr oAssignVar map expr =
         match oAssignVar with
         | None when isStatement value ->
             sprintf "local %s\n%s\n%s" name (emitExpr (Some name) map value) (emitExpr oAssignVar map body)
-        | None -> 
-            sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
-        | Some assignName when assignName <> name -> 
-            sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
-        | Some assignName -> 
+        | Some assignName when assignName = name -> 
             sprintf "%s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
+        | _ ->
+            sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
     | ERecordSelect (record, field) ->
         sprintf "%s.%s" (emitExpr None map record) field
     | ERecordExtend (field, value, record) ->
