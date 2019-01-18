@@ -92,7 +92,7 @@ let isStatement expr =
 
 let rec extractBindingsAndVariantGuards pattern var bindings guards =
     match pattern with
-    | EVar name -> Map.add var name bindings, guards
+    | EVar name -> Map.add name var bindings, guards
     | ERecordEmpty -> bindings, guards
     | ERecordExtend (field, fieldPattern, record) ->
         let fieldAccess = sprintf "%s.%s" var field
@@ -119,6 +119,10 @@ let rec emitCaseExpr oAssignVar map value (cases: (Pattern * Expr * Guard option
         match value with
         | EVar name -> name
         | _ -> failwith "value is not a var"
+    let assignVar =
+        match oAssignVar with
+        | Some var -> var
+        | None -> getNewVar ()
     let cases =
         cases
         |> List.map (fun (pattern, body, oGuard) ->
@@ -134,7 +138,9 @@ let rec emitCaseExpr oAssignVar map value (cases: (Pattern * Expr * Guard option
                 | guards -> 
                     guards
                     |> String.concat " and "
-            sprintf "if %s then\n%s\n" guard (emitExpr None bindings body)
+            printfn "guard = %O" guard
+            printfn "bindings = %O" bindings
+            sprintf "if %s then\n%s\n" guard (emitExpr (Some assignVar) bindings body)
         )
         |> String.concat "else"
     let def =
@@ -142,7 +148,7 @@ let rec emitCaseExpr oAssignVar map value (cases: (Pattern * Expr * Guard option
         | Some (var, body) -> 
             sprintf "else\nlocal %s = %s\n%s\nend" var valueVar (emitExpr (Some var) map body)
         | None -> sprintf "else\nerror('no match')\nend"
-    cases + def
+    sprintf "local %s\n%s%s" assignVar cases def
 
 and emitExpr oAssignVar map expr =
     let getVar var =
@@ -155,7 +161,7 @@ and emitExpr oAssignVar map expr =
     | EInt i -> string i
     | EFloat f -> string f
     | EString s -> sprintf "'%s'" s
-    | EVar name -> name
+    | EVar name -> getVar name
     | ECall (fn, arg) ->
         sprintf "%s(%s)" (emitExpr None map fn) (emitExpr None map arg)
     | EFun (EVar name, body) ->
@@ -184,9 +190,12 @@ and emitExpr oAssignVar map expr =
             let var = getNewVar ()
             sprintf "local %s\nif %s then\n%s\nelse\n%s\nend" var (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
         | Some var -> 
+            printfn "var = %s" var
             let var = getVar var
+            printfn "var = %s" var
             sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
     | EBinOp (l, op, r) ->
+        printfn "%O" expr
         sprintf "%s %s %s" (emitExpr None map l) (emitBinop op) (emitExpr None map r)
     | EUnOp (op, e) ->
         sprintf "%s%s" (emitUnop op) (emitExpr None map e)
