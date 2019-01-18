@@ -60,19 +60,21 @@ let testCompiler files =
 
 let testEmitter expected input =
     let expr = ParserExpr.readExpr input
-    let ty = Infer.infer Map.empty expr
-    let emit = Emit.emit expr
+    // let ty = Infer.infer Map.empty expr
+    let transformed = Transform.transform expr
+    printfn "%s" (stringOfExpr transformed)
+    let emit = Emit.emit transformed
     File.WriteAllText("output.lua", emit)
-    let p = new Process()
-    p.StartInfo.UseShellExecute <- false
-    p.StartInfo.RedirectStandardOutput <- true
+    // let p = new Process()
+    // p.StartInfo.UseShellExecute <- false
+    // p.StartInfo.RedirectStandardOutput <- true
     // p.StartInfo.FileName <- "lua/lua53.exe output.lua"
-    p.StartInfo.FileName <- "PowerShell.exe"
-    p.StartInfo.Arguments <- "/Command \"lua\\lua53.exe output.lua\""
-    p.Start() |> ignore<bool>
-    let output = p.StandardOutput.ReadToEnd()
-    p.WaitForExit()
-    printfn "Output = %s" output
+    // p.StartInfo.FileName <- "PowerShell.exe"
+    // p.StartInfo.Arguments <- "/Command \"lua\\lua53.exe output.lua\""
+    // p.Start() |> ignore<bool>
+    // let output = p.StandardOutput.ReadToEnd()
+    // p.WaitForExit()
+    // printfn "Output = %s" output
     ()
 
 let testTransform parse transform =
@@ -91,10 +93,6 @@ let testTransform parse transform =
 
 [<EntryPoint>]
 let main argv =
-    testTransform
-        "match x { { a = 1 } -> 1 }"
-        "match x { { a = _var0 } when _var0 = 1 -> (let _var0 = x.a in 1) }"
-
     // let input = "let (a: int) = 1 in a"
     // test input
 
@@ -110,17 +108,18 @@ let main argv =
 
     // runRepl ()
 
-    // [
-    //     "let yfact fact n ="
-    //     "    if n > 0 then"
-    //     "        n * fact(n-1)"
-    //     "    else"
-    //     "        1"
-    //     "in"
-    //     "let fact = fix yfact in"
-    //     "print (fact 5)"
-    // ]
-    // |> String.concat "\n"
-    // |> testEmitter "10"
+    // testTransform
+    //     "let (:a a) = (:a 1) in a"
+    //     "let _var0 = (:a 1) in match _var0 { :a a -> a }"
+
+    [
+        "let value = "
+        "    match { a = 1 } { "
+        "        { a = 1 } -> 1 "
+        "    } in "
+        "print(value)"
+    ]
+    |> String.concat "\n"
+    |> testEmitter "10"
 
     0 // return an integer exit code
