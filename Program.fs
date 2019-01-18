@@ -93,10 +93,6 @@ let testTransform parse transform =
 
 [<EntryPoint>]
 let main argv =
-    // testTransform
-    //     "match x { { a = 1 } -> 1 }"
-    //     "match x { { a = _var0 } when _var0 = 1 -> (let _var0 = x.a in 1) }"
-
     // let input = "let (a: int) = 1 in a"
     // test input
 
@@ -112,8 +108,16 @@ let main argv =
 
     // runRepl ()
 
+    // testTransform
+    //     "let (:a a) = (:a 1) in a"
+    //     "let _var0 = (:a 1) in match _var0 { :a a -> a }"
+
     [
-        "match { a = 1 } { { a = 1 } -> 1 }"
+        "let value = "
+        "    match { a = 1 } { "
+        "        { a = 1 } -> 1 "
+        "    } in "
+        "print(value)"
     ]
     |> String.concat "\n"
     |> testEmitter "10"

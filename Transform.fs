@@ -87,15 +87,23 @@ let isRowType expr =
 
 let rec transformExpr expr =
     match expr with
+    | EIfThenElse (i, t, e) ->
+        match i with
+        | EVar _ -> EIfThenElse (i, transformExpr t, transformExpr e)
+        | _ -> 
+            let var = getNewVar ()
+            ELet (EVar var, i, EIfThenElse (EVar var, transformExpr t, transformExpr e))
     | EFun (pattern, body) ->
         match pattern with
-        | EVar _  -> EFun (pattern, expr)
+        | EVar _  -> EFun (pattern, transformExpr body)
         | EVariant _ 
         | ERecordExtend _ -> 
             let var = getNewVar ()
             let body = transformRowBinding var body pattern
             EFun (EVar var, body)
         | _ -> raise (genericError (InvalidPattern pattern))
+    | ELet (EVar var, value, body) ->
+        ELet (EVar var, transformExpr value, transformExpr body)
     | ELet (pattern, value, body) when isRowType pattern ->
             let var = 
                 match value with
@@ -103,8 +111,8 @@ let rec transformExpr expr =
                 | _ -> getNewVar ()
             let body = transformRowBinding var body pattern
             match value with
-            | EVar _ -> body
-            | _ -> ELet (EVar var, value, body)
+            | EVar _ -> transformExpr body
+            | _ -> ELet (EVar var, transformExpr value, transformExpr body)
     | ECase (value, cases, oDefault) ->
         let var =
             match value with
@@ -128,9 +136,6 @@ let rec transformExpr expr =
                             EBinOp (state, BinOp.And, guard)
                         )
                         |> Some
-                let body = 
-                    ELet (pattern, EVar var, body)
-                    |> transformExpr
                 pattern, body, oGuard
             )
         match value with

@@ -168,11 +168,15 @@ and emitExpr oAssignVar map expr =
         let var = getNewVar ()
         sprintf "function(%s)\nlocal %s\n%s\nreturn %s\nend" name var (emitExpr (Some var) map body) var
     | ELet (EVar name, value, body) ->
-        let emittedValue = emitExpr None map value
-        let emittedBody = emitExpr oAssignVar map body
         match oAssignVar with
-        | None -> sprintf "local %s = %s\n%s" name emittedValue emittedBody
-        | Some _ -> sprintf "%s = %s\n%s" name emittedValue emittedBody
+        | None when isStatement value ->
+            sprintf "local %s\n%s\n%s" name (emitExpr (Some name) map value) (emitExpr oAssignVar map body)
+        | None -> 
+            sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
+        | Some assignName when assignName <> name -> 
+            sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
+        | Some assignName -> 
+            sprintf "%s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
     | ERecordSelect (record, field) ->
         sprintf "%s.%s" (emitExpr None map record) field
     | ERecordExtend (field, value, record) ->
