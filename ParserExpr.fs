@@ -100,6 +100,17 @@ let parseVar =
 let parseParen element = 
     between (strWs "(") (strWs ")") element
 
+let parseSet =
+    let p1 = identWs
+    let p2 = strWs "<-" >>. parseExprWs
+    let p3 = opt (strWs1 "in" >>. parseExprWs)
+    pipe3 p1 p2 p3 (fun var value oBody ->
+        let body =
+            oBody
+            |> Option.defaultValue (EVar var)
+        ESet (var, value, body)
+    )
+
 let parseLet = 
     let p1 = strWs1 "let" >>. many1 parsePatternWs
     let p2 = strWs "=" >>. parseExprWs
@@ -301,6 +312,7 @@ let parseNotCallOrRecordSelect =
         parseListLiteral parseExprWs
         parseParen parseExprWs
         attempt parseLetRec
+        attempt parseSet
         attempt parseFix
         parseBool
         attempt parseFloat
@@ -346,6 +358,7 @@ opp.AddOperator(InfixOperator("\\", ws, 8, Associativity.Left, fun a b ->
 ))
 
 let notArrow : Parser<unit> = notFollowedBy (str ">") >>. ws
+let notSet : Parser<unit> = notFollowedBy (str "-") >>. ws
 
 opp.AddOperator(PrefixOperator("-", notArrow, 8, true, fun a -> EUnOp (Negative, a)))
 
@@ -357,7 +370,7 @@ opp.AddOperator(InfixOperator("+", ws, 6, Associativity.Left, fun a b -> EBinOp 
 opp.AddOperator(InfixOperator("-", notArrow, 6, Associativity.Left, fun a b -> EBinOp (a, Minus, b)))
 
 opp.AddOperator(InfixOperator("::", ws, 5, Associativity.Right, fun a b -> EListCons (a, b)))
-opp.AddOperator(InfixOperator("<", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
+opp.AddOperator(InfixOperator("<", notSet, 5, Associativity.Left, fun a b -> EBinOp (a, Lesser, b)))
 opp.AddOperator(InfixOperator("<=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, LesserEqual, b)))
 opp.AddOperator(InfixOperator(">", ws, 5, Associativity.Left, fun a b -> EBinOp (a, Greater, b)))
 opp.AddOperator(InfixOperator(">=", ws, 5, Associativity.Left, fun a b -> EBinOp (a, GreaterEqual, b)))

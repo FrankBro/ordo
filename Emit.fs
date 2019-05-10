@@ -56,6 +56,7 @@ let isSingleLineExpr expr =
     | EError _ -> true
     | EFun _
     | ELet _
+    | ESet _
     | EIfThenElse _ -> false
     | _ -> failwith "TODO"
     // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
@@ -85,6 +86,7 @@ let isStatement expr =
     | EError _ -> false
     | ELet _
     | ECase _
+    | ESet _
     | EIfThenElse _ -> true
     // | EListEmpty
     // | EListCons of Expr * Expr
@@ -175,6 +177,8 @@ and emitExpr oAssignVar map expr =
             sprintf "%s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
         | _ ->
             sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
+    | ESet (name, value, body) ->
+        sprintf "%s = %s\n%s" name (emitExpr None map value) (emitExpr None map body)
     | ERecordSelect (record, field) ->
         sprintf "%s.%s" (emitExpr None map record) field
     | ERecordExtend (field, value, record) ->

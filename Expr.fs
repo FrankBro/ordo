@@ -102,6 +102,7 @@ type Expr =
     | ECall of Expr * Expr
     | EFun of Pattern * Expr
     | ELet of Pattern * Expr * Expr
+    | ESet of Name * Expr * Expr
     | ERecordSelect of Expr * Name
     | ERecordExtend of Name * Expr * Expr
     | ERecordRestrict of Expr * Name
@@ -120,6 +121,7 @@ type Expr =
 with
     override x.ToString () =
         match x with
+        | ESet (name, value, body) -> sprintf "ESet (%s, %O, %O)" name value body
         | EPrint e -> sprintf "EPrint %O" e
         | EBool b -> sprintf "EBool %b" b
         | EInt i -> sprintf "EInt %d" i
@@ -304,6 +306,7 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | ESet (name, value, body) -> sprintf "%s <- %s in %s" name (f false value) (f false body)
         | EError s -> sprintf "error \"%s\"" s
         | EPrint e -> sprintf "print %s" (f false e)
         | EFix name -> sprintf "fix %s" name

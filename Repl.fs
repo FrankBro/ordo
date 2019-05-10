@@ -50,6 +50,14 @@ let evalString (env: Env) expr : Env * string =
                         Infer = infered
                         Eval = evaled
                     }
+                | ESet (name, _, EVar ret) when name = ret ->
+                    let patTy, infered = inferPattern Map.empty env.Infer 0 (EVar name)
+                    unify ordoTy patTy
+                    let matches, evaled = evalPattern env.Eval (EVar name) ordoVal
+                    {
+                        Infer = infered
+                        Eval = evaled
+                    }
                 | _ ->
                     env
             env, stringOfValue ordoVal

@@ -6,6 +6,13 @@ open Util
 
 let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | ESet (name, value, body) ->
+        if not (Map.containsKey name env) then
+            raise (genericError (VariableNotFound name))
+        let env =
+            env
+            |> Map.add name (evalExpr files env value)
+        evalExpr files env body
     | EError s ->
         failwith s
     | EPrint e ->

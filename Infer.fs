@@ -233,6 +233,17 @@ let rec matchFunTy ty =
     | _ -> raise (inferError (FunctionExpected ty))
 
 let rec inferExpr files env level = function
+    | ESet (name, value, body) ->
+        let ty =
+            env
+            |> Map.tryFind name
+            |> Option.defaultWith (fun () ->
+                raise (genericError (VariableNotFound name))
+            )
+        let valueTy = inferExpr files env level value
+        unify ty valueTy
+        inferExpr files env level body
+    | EFile _ -> TList TString
     | EError _ -> newVar level
     | EPrint e -> TRecord TRowEmpty
     | EType (e, t) ->
