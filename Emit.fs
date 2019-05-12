@@ -205,13 +205,15 @@ and emitExpr oAssignVar map expr =
     | ECase (value, cases, oDefault) ->
         emitCaseExpr oAssignVar map value cases oDefault
     | EFor (key, value, target, body, rest) ->
-        let forLine = sprintf "for %s, %s in pairs(%s) do" key value (emitExpr None map target)
+        let var = getNewVar ()
+        let prepareLine = sprintf "%s = prepare_for(%s)" var (emitExpr None map target)
+        let forLine = sprintf "for %s, %s in pairs(%s) do" key value var
         let body = emitExpr None map body
         let rest = 
             match rest with
             | ERecordEmpty -> ""
             | _ -> emitExpr None map rest
-        sprintf "%s\n%s\nend\n%s" forLine body rest
+        sprintf "%s\n%s\n%s\nend\n%s" prepareLine forLine body rest
     | EIfThenElse (i, t, e) ->
         match oAssignVar with
         | None ->

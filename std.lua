@@ -34,3 +34,14 @@ function lines_from(file)
     end
     return lines
 end
+function prepare_for(x)
+    if type(x) == "string" then
+        elements = {}
+        for i = 1, #x do
+            elements[#elements + 1] = x:sub(i,i)
+        end
+        return elements
+    else
+        return x
+    end
+end
