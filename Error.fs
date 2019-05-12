@@ -29,6 +29,7 @@ type InferError =
     | RowTypeExpected
     | FunctionExpected of Ty
     | RowConstraintFail of Name
+    | ForTypeExpected
 
 type EvalError =
     | NotAFunction of Expr

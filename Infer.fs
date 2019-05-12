@@ -232,7 +232,22 @@ let rec matchFunTy ty =
     | TVar ({contents = UnboundRow(id, level, constraints)} as tvar) -> raise (inferError (FunctionExpected ty))
     | _ -> raise (inferError (FunctionExpected ty))
 
-let rec inferExpr files env level = function
+let rec inferExpr files env level expr =
+    match expr with
+    | EFor (key, value, target, body, rest) ->
+        let targetTy = inferExpr files env level target
+        let keyTy, valueTy =
+            match targetTy with
+            | TList valueTy -> TInt, valueTy
+            | TString -> TInt, TChar
+            | _ -> raise (inferError ForTypeExpected)
+        let forEnv =
+            env
+            |> Map.add key keyTy
+            |> Map.add value valueTy
+        let bodyTy = inferExpr files forEnv level body
+        unify bodyTy (TRecord TRowEmpty)
+        inferExpr files env level rest
     | ESet (name, value, body) ->
         let ty =
             env
