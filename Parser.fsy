@@ -1,0 +1,262 @@
+%{
+
+open Error
+open Expr
+
+let handleLetRec patterns value oBody =
+    let name, value =
+        match patterns with
+        | [pattern] -> raise (parserError InvalidLetRec)
+        | EVar name :: rest ->
+            let wrappedValue =
+                (rest, value)
+                ||> List.foldBack (fun pattern state ->
+                    EFun (pattern, state)
+                )
+            name, wrappedValue
+        | _ -> raise (parserError InvalidFunctionDeclaration)
+    let body =
+        oBody
+        |> Option.defaultWith (fun () ->
+            match patterns with
+            | [] -> raise (parserError InvalidFunctionDeclaration)
+            | pattern :: _ -> pattern
+        )
+    ELet (EVar ("_" + name), EFun (EVar name, value), ELet (EVar name, EFix ("_" + name), body))
+
+let handleSet name value oBody =
+    let body =
+        oBody
+        |> Option.defaultValue (EVar name)
+    ESet (name, value, body)
+
+let handleFun patterns body =
+    (patterns, body)
+    ||> List.foldBack (fun pattern state ->
+        EFun (pattern, state)
+    )
+
+let handleLet patterns value oBody =
+    let pattern, value =
+        match patterns with
+        | [pattern] -> pattern, value
+        | EVar name :: rest ->
+            let wrappedValue =
+                (rest, value)
+                ||> List.foldBack (fun pattern state ->
+                    EFun (pattern, state)
+                )
+            EVar name, wrappedValue
+        | _ -> raise (parserError InvalidFunctionDeclaration)
+    let body =
+        oBody
+        |> Option.defaultWith (fun () ->
+            match patterns with
+            | [] -> raise (parserError InvalidFunctionDeclaration)
+            | pattern :: _ -> pattern
+        )
+    ELet (pattern, value, body)
+
+let handleFor key value target body oRest =
+    let rest =
+        oRest
+        |> Option.defaultValue ERecordEmpty
+    EFor(key, value, target, body, rest)
+
+type RecordAction =
+    | Set
+    | Update
+
+let handleRecord labelsOrUpdate oRecord =
+    let record =
+        oRecord
+        |> Option.defaultValue ERecordEmpty
+    let labels =
+        labelsOrUpdate
+        |> List.map (fun (label, expr, _) -> label, expr)
+    let toRemove =
+        labelsOrUpdate
+        |> List.choose (fun (label, _, action) ->
+            match action with
+            | Set -> None
+            | Update -> Some label
+        )
+    let restrictedRecord =
+        (record, toRemove)
+        ||> List.fold (fun record label ->
+            ERecordRestrict (record, label)
+        )
+    (restrictedRecord, labels)
+    ||> List.fold (fun record (label, expr) ->
+        ERecordExtend (label, expr, record)
+    )
+
+let handleListCons exprs =
+    (exprs, EListEmpty)
+    ||> List.foldBack (fun expr state ->
+        EListCons (expr, state)
+    )
+
+%}
+
+%type <Expr.Expr option> start
+%type <Expr.Expr option> prog
+%type <Expr.Expr> expr
+%type <Expr.Expr list> listExprs
+%type <(Expr.Pattern * Expr.Expr * Expr.Guard option) list> cases
+%type <(Expr.Pattern * Expr.Expr * Expr.Guard option)> case
+%type <Expr.Name * Expr.Expr> defaultCase
+%type <(Expr.Name * Expr.Expr * RecordAction) list> updateLabels
+%type <Expr.Name * Expr.Expr * RecordAction> updateLabel
+%type <(Expr.Name * Expr.Expr * RecordAction) list> createLabels
+%type <Expr.Name * Expr.Expr * RecordAction> createLabel
+%type <Expr.Pattern list> patterns
+%type <Expr.Pattern> pattern
+%type <Expr.Pattern list> listPatterns
+
+%start start
+
+%token EOF
+
+%token <bool> BOOL
+%token <int> INT
+%token <float> FLOAT
+%token <string> ID
+%token <string> STRING
+%token <string> NAME
+%token LET
+%token IN
+%token FUN
+%token MATCH
+%token IF
+%token THEN
+%token ELSE
+%token WHEN
+%token FIX
+%token REC
+%token OPEN
+%token PRINT
+%token ERROR
+%token FILE
+%token FOR
+%token END
+%token DO
+%token PLUS
+%token MINUS
+%token MULTIPLY
+%token DIVIDE
+%token CONS
+%token LT
+%token LTE
+%token GT
+%token GTE
+%token EQUAL
+%token NOTEQUAL
+%token AND
+%token OR
+%token DOT
+%token COMMA
+%token COLON
+%token LPAREN
+%token RPAREN
+%token LCURLY
+%token RCURLY
+%token LSQUARE
+%token RSQUARE
+%token BAR
+%token LARROW
+%token RARROW
+%token COLONEQUAL
+%%
+
+start: prog { $1 }
+
+prog:
+    | EOF   { None }
+    | expr  { Some $1 }
+
+expr:
+    // Type
+    | OPEN STRING                                       { EOpen $2 }
+    | LSQUARE RSQUARE                                   { EListEmpty }
+    | LSQUARE listExprs RSQUARE                         { handleListCons $2 }
+    | LPAREN expr RPAREN                                { $2 }
+    | LET REC patterns EQUAL expr IN expr               { handleLetRec $3 $5 (Some $7) }
+    | LET REC patterns EQUAL expr                       { handleLetRec $3 $5 None }
+    | NAME LARROW expr IN expr                          { handleSet $1 $3 (Some $5) }
+    | NAME LARROW expr                                  { handleSet $1 $3 None }
+    | FIX NAME                                          { EFix $2 }
+    | BOOL                                              { EBool $1 }
+    | INT                                               { EInt $1 }
+    | FLOAT                                             { EFloat $1 }
+    | STRING                                            { EString $1 }
+    | FUN patterns RARROW expr                          { handleFun $2 $4 }
+    | LET patterns EQUAL expr IN expr                   { handleLet $2 $4 (Some $6) }
+    | LET patterns EQUAL expr                           { handleLet $2 $4 None }
+    | FOR NAME COMMA NAME IN expr DO expr END expr      { handleFor $2 $4 $6 $8 (Some $10) }
+    | FOR NAME COMMA NAME IN expr DO expr END           { handleFor $2 $4 $6 $8 None }
+    | NAME                                              { EVar $1 }
+    | COLON NAME expr                                   { EVariant($2, $3) }
+    | MATCH expr LCURLY cases BAR defaultCase RCURLY    { ECase($2, $4, Some $6) }
+    | MATCH expr LCURLY cases RCURLY                    { ECase($2, $4, None) }
+    | LCURLY RCURLY                                     { ERecordEmpty }
+    | LCURLY updateLabels BAR expr RCURLY               { handleRecord $2 (Some $4) }
+    | LCURLY createLabels RCURLY                        { handleRecord $2 None }
+    | IF expr THEN expr ELSE expr                       { EIfThenElse ($2, $4, $6) }
+    | PRINT expr expr                                   { EPrint ($2, $3) }
+    | PRINT expr                                        { EPrint ($2, ERecordEmpty) }
+    | ERROR STRING                                      { EError $2 }
+    | FILE STRING                                       { EFile $2 }
+
+listExprs:
+    | expr                                              { [$1] }
+    | listExprs COMMA expr                              { $3 :: $1 }
+
+cases:
+    | case                                              { [$1] }
+    | cases COMMA case                                  { $3 :: $1 }
+
+case:
+    | pattern WHEN expr RARROW expr                     { ($1, $5, Some $3) }
+    | pattern RARROW expr                               { ($1, $3, None) }
+
+defaultCase:
+    | NAME RARROW expr                                  { ($1, $3) }
+
+updateLabels:
+    | updateLabel                                       { [$1] }
+    | updateLabels COMMA updateLabel                    { $3 :: $1 }
+
+updateLabel:
+    | NAME EQUAL expr                                   { ($1, $3, RecordAction.Set) }
+    | NAME COLONEQUAL expr                              { ($1, $3, RecordAction.Update) }
+
+createLabels:
+    | createLabel                                       { [$1] }
+    | createLabels COMMA createLabel                    { $3 :: $1 }
+
+createLabel:
+    | NAME EQUAL expr                                   { ($1, $3, RecordAction.Set) }
+
+patterns:
+    | pattern                                           { [$1] }
+    | patterns pattern                                  { $2 :: $1 }
+
+pattern:
+    // Type
+    | LSQUARE RSQUARE                                   { EListEmpty }
+    | LSQUARE listPatterns RSQUARE                      { handleListCons $2 }
+    | LPAREN pattern RPAREN                             { $2 }
+    | BOOL                                              { EBool $1 }
+    | INT                                               { EInt $1 }
+    | FLOAT                                             { EFloat $1 }
+    | STRING                                            { EString $1 }
+    | COLON NAME pattern                                { EVariant ($2, $3) }
+    | NAME                                              { EVar $1 }
+    | LCURLY RCURLY                                     { ERecordEmpty }
+    | LCURLY createLabels BAR expr RCURLY               { handleRecord $2 (Some $4) }
+    | LCURLY createLabels RCURLY                        { handleRecord $2 None }
+
+listPatterns:
+    | pattern                                           { [$1] }
+    | listPatterns COMMA pattern                        { $3 :: $1 }

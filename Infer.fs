@@ -245,7 +245,7 @@ let rec inferExpr files env level = function
         inferExpr files env level body
     | EFile _ -> TList TString
     | EError _ -> newVar level
-    | EPrint e -> TRecord TRowEmpty
+    | EPrint (e, rest) -> inferExpr files env level rest
     | EType (e, t) ->
         let infered = inferExpr files env level e
         unify infered t

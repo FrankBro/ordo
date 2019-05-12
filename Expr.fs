@@ -93,7 +93,8 @@ type UnOp =
     | Negative
 
 type Expr =
-    | EPrint of Expr
+    | EFor of Name * Name * Expr * Expr * Expr
+    | EPrint of Expr * Expr
     | EBool of bool
     | EInt of int
     | EFloat of float
@@ -118,11 +119,13 @@ type Expr =
     | EOpen of string
     | EType of Expr * Ty
     | EError of string
+    | EFile of string
 with
     override x.ToString () =
         match x with
+        | EFor (key, value, target, body, rest) -> sprintf "EFor (%s, %s, %O, %O, %O)" key value target body rest
         | ESet (name, value, body) -> sprintf "ESet (%s, %O, %O)" name value body
-        | EPrint e -> sprintf "EPrint %O" e
+        | EPrint (e, rest) -> sprintf "EPrint (%O, %O)" e rest
         | EBool b -> sprintf "EBool %b" b
         | EInt i -> sprintf "EInt %d" i
         | EFloat f -> sprintf "EFloat %f" f
@@ -146,6 +149,7 @@ with
         | EOpen filename -> sprintf "EOpen \"%s\"" filename
         | EType (e, t) -> sprintf "EType (%O, %O)" e t
         | EError s -> sprintf "EError %s" s
+        | EFile s -> sprintf "EFileReadLines %s" s
 
 and Pattern = Expr
 and Guard = Expr
@@ -306,9 +310,10 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | EFor (key, value, target, body, rest) -> sprintf "for %s, %s in %s do %s in %s" key value (f false target) (f false body) (f false rest)
         | ESet (name, value, body) -> sprintf "%s <- %s in %s" name (f false value) (f false body)
         | EError s -> sprintf "error \"%s\"" s
-        | EPrint e -> sprintf "print %s" (f false e)
+        | EPrint (e, body) -> sprintf "print %s" (f false e)
         | EFix name -> sprintf "fix %s" name
         | EBool bool -> sprintf "%b" bool
         | EInt int -> sprintf "%d" int
@@ -379,6 +384,7 @@ let stringOfExpr (x: Expr) : string =
         | EListCons (x, xs) -> sprintf "%s :: %s" (f false x) (f false xs)
         | EOpen filename -> sprintf "open \"%s\"" filename
         | EType (e, t) -> sprintf "(%s: %s)" (f false e) (stringOfTy t)
+        | EFile filename -> sprintf "file \"%s\"" filename
     f false x
 
 let rec stringOfValue value =

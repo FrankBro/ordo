@@ -1,0 +1,81 @@
+{
+
+open System
+open FSharp.Text.Lexing
+
+let lexeme lexbuf = LexBuffer<char>.LexemeString lexbuf
+
+let newline (lexbuf: LexBuffer<_>) =
+    lexbuf.StartPos <- lexbuf.StartPos.NextLine
+
+}
+
+// Regular expressions
+let whitespace = [' ' '\t' ]
+let newline = ('\n' | '\r' '\n')
+let digit = ['0'-'9']
+
+rule tokenize = 
+    parse
+    // --------------------------
+    | "let"                 { Parser.LET }
+    | "in"                  { Parser.IN }
+    | "fun"                 { Parser.FUN }
+    | "match"               { Parser.MATCH }
+    | "if"                  { Parser.IF }
+    | "then"                { Parser.THEN }
+    | "else"                { Parser.ELSE }
+    | "when"                { Parser.WHEN }
+    | "fix"                 { Parser.FIX }
+    | "rec"                 { Parser.REC }
+    | "open"                { Parser.OPEN }
+    | "print"               { Parser.PRINT }
+    | "error"               { Parser.ERROR }
+    | "file"                { Parser.FILE }
+    | "for"                 { Parser.FOR }
+    | "do"                  { Parser.DO }
+    | "end"                 { Parser.END }
+    // --------------------------
+    | "+"                   { Parser.PLUS }
+    | "-"                   { Parser.MINUS }
+    | "*"                   { Parser.MULTIPLY }
+    | "/"                   { Parser.DIVIDE }
+    | "::"                  { Parser.CONS }
+    | "<"                   { Parser.LT }
+    | "<="                  { Parser.LTE }
+    | ">"                   { Parser.GT }
+    | ">="                  { Parser.GTE }
+    | "="                   { Parser.EQUAL }
+    | "<>"                  { Parser.NOTEQUAL }
+    | "&&"                  { Parser.AND }
+    | "||"                  { Parser.OR }
+    | "."                   { Parser.DOT }
+    | ","                   { Parser.COMMA }
+    | ":"                   { Parser.COLON }
+    | "("                   { Parser.LPAREN }
+    | ")"                   { Parser.RPAREN }
+    | "{"                   { Parser.LCURLY }
+    | "}"                   { Parser.RCURLY }
+    | "["                   { Parser.LSQUARE }
+    | "]"                   { Parser.RSQUARE }
+    | "|"                   { Parser.BAR }
+    | "->"                  { Parser.RARROW }
+    | "<-"                  { Parser.LARROW }
+    | ":="                  { Parser.COLONEQUAL }
+    // --------------------------
+    | whitespace            { tokenize lexbuf }
+    | newline               { newline lexbuf; tokenize lexbuf }
+    | ("true"|"false")
+        { Parser.BOOL (Boolean.Parse(lexeme lexbuf)) }
+    | ['-']?digit+
+        { Parser.INT (Int32.Parse(lexeme lexbuf)) }
+    | ['-']?digit+('.'digit+)?(['e''E']digit+)?
+        { Parser.FLOAT (Double.Parse(lexeme lexbuf)) }
+    |'\"' [^ '\"']+ '\"'
+        { Parser.STRING (let s = lexeme lexbuf in s.Substring(1, s.Length - 2)) }
+    | ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9' '_']*
+        { Parser.NAME (lexeme lexbuf) }
+
+    // --------------------------
+    | _             { failwith ("ParseError" + LexBuffer<_>.LexemeString lexbuf) }
+    | eof           { Parser.EOF }

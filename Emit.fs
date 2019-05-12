@@ -1,5 +1,7 @@
 module Emit
 
+open System.IO
+
 open Error
 open Expr
 open Infer
@@ -57,6 +59,7 @@ let isSingleLineExpr expr =
     | EFun _
     | ELet _
     | ESet _
+    | EFor _
     | EIfThenElse _ -> false
     | _ -> failwith "TODO"
     // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
@@ -83,10 +86,12 @@ let isStatement expr =
     | EUnOp _
     | EFix _
     | EOpen _
+    | EFile _
     | EError _ -> false
     | ELet _
     | ECase _
     | ESet _
+    | EFor _
     | EIfThenElse _ -> true
     // | EListEmpty
     // | EListCons of Expr * Expr
@@ -158,6 +163,7 @@ and emitExpr oAssignVar map expr =
         |> Map.tryFind var
         |> Option.defaultValue var
     match expr with
+    | EFile filename -> sprintf "lines_from(%s)" filename
     | EBool false -> "false"
     | EBool true -> "true"
     | EInt i -> string i
@@ -190,12 +196,17 @@ and emitExpr oAssignVar map expr =
         sprintf "{ variant_name = '%s', variant_%s = %s }" name name (emitExpr None map value)
     | ECase (value, cases, oDefault) ->
         emitCaseExpr oAssignVar map value cases oDefault
+    | EFor (key, value, target, body, rest) ->
+        let forLine = sprintf "for %s, %s in pairs(%s) do" key value (emitExpr None map target)
+        let body = emitExpr None map body
+        let rest = emitExpr None map rest
+        sprintf "%s\n%s\nend\n%s" forLine body rest
     | EIfThenElse (i, t, e) ->
         match oAssignVar with
-        | None -> 
+        | None ->
             let var = getNewVar ()
             sprintf "local %s\nif %s then\n%s\nelse\n%s\nend" var (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
-        | Some var -> 
+        | Some var ->
             let var = getVar var
             sprintf "if %s then\n%s\nelse\n%s\nend" (emitExpr None map i) (emitExpr (Some var) map t) (emitExpr (Some var) map e)
     | EBinOp (l, op, r) ->
@@ -207,44 +218,20 @@ and emitExpr oAssignVar map expr =
     // | EListCons of Expr * Expr
     // | EOpen of string
     // | EType of Expr * Ty
-    | EPrint e -> sprintf "print(%s)" (emitExpr None map e)
+    | EPrint (e, rest) -> sprintf "print(%s)\n%s" (emitExpr None map e) (emitExpr None map rest)
     | _ -> failwithf "impossible, got %O" expr
 
     |> (fun result ->
         match oAssignVar with
         // | Some assignVar when isSingleLineExpr expr -> sprintf "%s = %s" assignVar result
-        | Some assignVar when not (isStatement expr) -> 
+        | Some assignVar when not (isStatement expr) ->
             let assignVar = getVar assignVar
             sprintf "%s = %s" assignVar result
         | _ -> result
     )
 
 let emitPrelude =
-    [
-        "function table.copy(t)"
-        "    local u = {}"
-        "    for k, v in pairs(t) do u[k] = v end"
-        "    return u"
-        "end"
-        "function table.add(t, k, v)"
-        "    local u = table.copy(t)"
-        "    u[k] = v"
-        "    return u"
-        "end"
-        "function table.remove(t, k)"
-        "    local u = table.copy(t)"
-        "    u[k] = nil"
-        "    return u"
-        "end"
-        "function table.inspect(t)"
-        "    for k, v in pairs(t) do print(k, v) end"
-        "end"
-        "function fix(f)"
-        "    return function(...)"
-        "        return (function(x) return x(x) end)(function(x) return f(function(y) return x(x)(y) end) end)(...)"
-        "    end"
-        "end"
-    ]
+    File.ReadAllLines("std.lua")
     |> String.concat " "
 
 let emit expr =

@@ -9,16 +9,16 @@ open Error
 open Eval
 open Expr
 open Infer
-open ParserExpr
-open ParserType
+open Parse
 open Repl
 open Util
+open TestEmitter
 
 let test input =
     Infer.resetId ()
     try
         printfn "Input    : %s" input
-        let expr = readExpr input
+        let expr = parse input
         printfn "Expr     : %O" expr
         printfn "Raw expr : %s" (stringOfExpr expr)
         let ty = infer Map.empty expr
@@ -35,32 +35,32 @@ let test input =
         printfn "Exception"
         printfn "%O" e
 
-let testType input =
-    try
-        printfn "Input    : %s" input
-        let ty = readType input
-        printfn "Type     : %O" ty
-        printfn "Raw type : %s" (stringOfTy ty)
-    with 
-    | OrdoException e ->
-        printfn "Exception"
-        printfn "%O" e
-    | e ->
-        printfn "Exception"
-        printfn "%O" e
+// let testType input =
+//     try
+//         printfn "Input    : %s" input
+//         let ty = parse input
+//         printfn "Type     : %O" ty
+//         printfn "Raw type : %s" (stringOfTy ty)
+//     with 
+//     | OrdoException e ->
+//         printfn "Exception"
+//         printfn "%O" e
+//     | e ->
+//         printfn "Exception"
+//         printfn "%O" e
 
 let testCompiler files =
     let exprs =
         files
         |> List.map (fun (name, input) ->
-            name, ParserExpr.readExpr input
+            name, parse input
         )
     let ordoTy, ordoVal = compileExprs exprs
     ()
 
 let testEmitter expected input =
     try
-        let expr = ParserExpr.readExpr input
+        let expr = parse input
         // let ty = Infer.infer Map.empty expr
         let transformed = Transform.transform expr
         printfn "%s" (stringOfExpr transformed)
@@ -83,11 +83,11 @@ let testEmitter expected input =
     // printfn "Output = %s" output
     ()
 
-let testTransform parse transform =
-    let parsed = ParserExpr.readExpr parse
+let testTransform input transform =
+    let parsed = parse input
     try
         let transformed = Transform.transform parsed
-        let parsedTransform = ParserExpr.readExpr transform
+        let parsedTransform = parse transform
         if transformed <> parsedTransform then
             printfn "%s" (stringOfExpr transformed)
             printfn "%s" (stringOfExpr parsedTransform)
@@ -118,16 +118,20 @@ let main argv =
     //     "let (:a a) = (:a 1) in a"
     //     "let _var0 = (:a 1) in match _var0 { :a a -> a }"
 
-    [
-        "let add a b = a + b in "
-        "let add_one = add 1 in "
-        "let value = "
-        "    match { a = 1 } { "
-        "        { a = 1 } -> 1 "
-        "    } in "
-        "print(add_one value)"
-    ]
+    // [
+    //     "let add a b = a + b in "
+    //     "let add_one = add 1 in "
+    //     "let value = "
+    //     "    match { a = 1 } { "
+    //     "        { a = 1 } -> 1 "
+    //     "    } in "
+    //     "print(add_one value)"
+    // ]
+    // |> String.concat "\n"
+    // |> testEmitter "10"
+
+    File.ReadAllLines "bootstrap/main.ordo"
     |> String.concat "\n"
-    |> testEmitter "10"
+    |> testEmitter ""
 
     0 // return an integer exit code

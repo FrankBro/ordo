@@ -498,6 +498,6 @@ let ``String`` () =
 let ``Print`` () =
     test
         "print 3"
-        (POk (EPrint (EInt 3)))
+        (POk (EPrint (EInt 3, ERecordEmpty)))
         (IOk "{}")
         (EOk (VRecord Map.empty))

@@ -5,13 +5,14 @@ open Xunit
 open Compiler
 open Error
 open Expr
+open Parse
 open TestUtil
 
 let testCompiler files (inferExpected: InferResult) (evalExpected: EvalResult) =
     let exprs =
         files
         |> List.map (fun (name, input) ->
-            name, ParserExpr.readExpr input
+            name, parse input
         )
     let ordoTy, ordoVal = compileExprs exprs
     if inferExpected <> ISkip then

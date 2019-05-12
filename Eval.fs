@@ -6,6 +6,8 @@ open Util
 
 let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
+    | EFor (key, value, target, body, rest) -> failwith "EFor not supported"
+    | EFile filename -> failwith "EFile not supported"
     | ESet (name, value, body) ->
         if not (Map.containsKey name env) then
             raise (genericError (VariableNotFound name))
@@ -15,9 +17,9 @@ let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
         evalExpr files env body
     | EError s ->
         failwith s
-    | EPrint e ->
+    | EPrint (e, rest) ->
         printfn "%O" (evalExpr files env e)
-        VRecord Map.empty
+        evalExpr files env rest
     | EType (e, _) -> evalExpr files env e
     | EOpen filename -> Map.find filename files
     | EListEmpty -> VList []

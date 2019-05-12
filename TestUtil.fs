@@ -4,6 +4,7 @@ open Xunit
 
 open Error
 open Expr
+open Parse
 
 type ParseResult =
     | POk of Expr
@@ -23,7 +24,7 @@ type EvalResult =
 let test input parserExpected inferExpected evalExpected =
     let parserResult = 
         try
-            ParserExpr.readExpr input
+            parse input
             |> POk
         with
         | OrdoException error -> PFail error

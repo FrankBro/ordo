@@ -7,11 +7,12 @@ open Xunit
 open Xunit.Abstractions
 
 open Expr
+open Parse
 
-let testTransform parse transform =
-    let parsed = ParserExpr.readExpr parse
+let testTransform input transform =
+    let parsed = parse input
     let transformed = Transform.transform parsed
-    let parsedTransform = ParserExpr.readExpr transform
+    let parsedTransform = parse transform
     Assert.StrictEqual(parsedTransform, transformed)
 
 [<Fact>]

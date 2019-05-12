@@ -1,8 +1,9 @@
 module Repl
 
+open Eval
 open Expr
 open Infer
-open Eval
+open Parse
 
 type Env = {
     Infer: Map<Name, Ty>
@@ -22,7 +23,7 @@ let readPrompt prompt =
 
 let evalString (env: Env) expr : Env * string =
     try
-        let ordoExpr = ParserExpr.readExpr expr
+        let ordoExpr = parse expr
         match ordoExpr with
         | EVariant ("rawtype", EVar name) ->
             env, Map.find name env.Infer |> string
