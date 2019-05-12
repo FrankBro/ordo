@@ -61,7 +61,8 @@ let testCompiler files =
 let testEmitter expected input =
     try
         let expr = parse input
-        // let ty = Infer.infer Map.empty expr
+        let ty = Infer.infer Map.empty expr
+        printfn "%s" (stringOfTy ty)
         let transformed = Transform.transform expr
         printfn "%s" (stringOfExpr transformed)
         let emit = Emit.emit transformed
