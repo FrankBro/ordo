@@ -40,6 +40,7 @@ let emitUnop op =
 let isSingleLineExpr expr =
     match expr with
     | EPrint _
+    | EDebug _
     | EBool _
     | EInt _
     | EFloat _
@@ -70,6 +71,7 @@ let isSingleLineExpr expr =
 
 let isStatement expr =
     match expr with
+    | EDebug _
     | EPrint _
     | EBool _
     | EInt _
@@ -239,6 +241,16 @@ and emitExpr oAssignVar map expr =
             | ERecordEmpty -> ""
             | _ -> emitExpr None map body
         sprintf "print(%s)\n%s" (emitExpr None map e) body
+    | EDebug (e, body) ->
+        let e =
+            match !e with
+            | EType (e, ty) ->  sprintf "%s, \"%s\"" (emitExpr None map e) (stringOfTy ty)
+            | _ -> raise (compilerError DebugNotTyped)
+        let body =
+            match body with
+            | ERecordEmpty -> ""
+            | _ -> emitExpr None map body
+        sprintf "print(%s)\n%s" e body
     | _ -> failwithf "impossible, got %O" expr
 
     |> (fun result ->

@@ -42,6 +42,7 @@ type EvalError =
 
 type CompilerError =
     | NoExprsProvided
+    | DebugNotTyped
 
 type OrdoError =
     | Generic of GenericError

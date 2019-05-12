@@ -234,6 +234,10 @@ let rec matchFunTy ty =
 
 let rec inferExpr files env level expr =
     match expr with
+    | EDebug (expr, body) ->
+        let exprTy = inferExpr files env level !expr
+        expr := EType (!expr, exprTy)
+        inferExpr files env level body
     | EFor (key, value, target, body, rest) ->
         let targetTy = inferExpr files env level target
         let keyTy, valueTy =

@@ -142,6 +142,7 @@ let handleListCons exprs =
 %token FOR
 %token END
 %token DO
+%token DEBUG
 %token PLUS
 %token MINUS
 %token MULTIPLY
@@ -209,6 +210,8 @@ expr:
     | PRINT expr                                        { EPrint ($2, ERecordEmpty) }
     | ERROR STRING                                      { EError $2 }
     | FILE STRING                                       { EFile $2 }
+    | DEBUG expr expr                                   { EDebug (ref $2, $3) }
+    | DEBUG expr                                        { EDebug (ref $2, ERecordEmpty) }
 
 listExprs:
     | expr                                              { [$1] }
