@@ -176,15 +176,23 @@ and emitExpr oAssignVar map expr =
         let var = getNewVar ()
         sprintf "function(%s)\nlocal %s\n%s\nreturn %s\nend" name var (emitExpr (Some var) map body) var
     | ELet (EVar name, value, body) ->
+        let body =
+            match body with
+            | ERecordEmpty -> ""
+            | _ -> emitExpr oAssignVar map body
         match oAssignVar with
         | None when isStatement value ->
-            sprintf "local %s\n%s\n%s" name (emitExpr (Some name) map value) (emitExpr oAssignVar map body)
+            sprintf "local %s\n%s\n%s" name (emitExpr (Some name) map value) body
         | Some assignName when assignName = name -> 
-            sprintf "%s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
+            sprintf "%s = %s\n%s" name (emitExpr None map value) body
         | _ ->
-            sprintf "local %s = %s\n%s" name (emitExpr None map value) (emitExpr oAssignVar map body)
+            sprintf "local %s = %s\n%s" name (emitExpr None map value) body
     | ESet (name, value, body) ->
-        sprintf "%s = %s\n%s" name (emitExpr None map value) (emitExpr None map body)
+        let body =
+            match body with
+            | ERecordEmpty -> ""
+            | _ -> emitExpr None map body
+        sprintf "%s = %s\n%s" name (emitExpr None map value) body
     | ERecordSelect (record, field) ->
         sprintf "%s.%s" (emitExpr None map record) field
     | ERecordExtend (field, value, record) ->
@@ -199,7 +207,10 @@ and emitExpr oAssignVar map expr =
     | EFor (key, value, target, body, rest) ->
         let forLine = sprintf "for %s, %s in pairs(%s) do" key value (emitExpr None map target)
         let body = emitExpr None map body
-        let rest = emitExpr None map rest
+        let rest = 
+            match rest with
+            | ERecordEmpty -> ""
+            | _ -> emitExpr None map rest
         sprintf "%s\n%s\nend\n%s" forLine body rest
     | EIfThenElse (i, t, e) ->
         match oAssignVar with
@@ -218,7 +229,12 @@ and emitExpr oAssignVar map expr =
     // | EListCons of Expr * Expr
     // | EOpen of string
     // | EType of Expr * Ty
-    | EPrint (e, rest) -> sprintf "print(%s)\n%s" (emitExpr None map e) (emitExpr None map rest)
+    | EPrint (e, body) -> 
+        let body =
+            match body with
+            | ERecordEmpty -> ""
+            | _ -> emitExpr None map body
+        sprintf "print(%s)\n%s" (emitExpr None map e) body
     | _ -> failwithf "impossible, got %O" expr
 
     |> (fun result ->
