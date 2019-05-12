@@ -122,6 +122,7 @@ let handleListCons exprs =
 %token <int> INT
 %token <float> FLOAT
 %token <string> ID
+%token <char> CHAR
 %token <string> STRING
 %token <string> NAME
 %token LET
@@ -189,6 +190,7 @@ expr:
     | BOOL                                              { EBool $1 }
     | INT                                               { EInt $1 }
     | FLOAT                                             { EFloat $1 }
+    | CHAR                                              { EChar $1 }
     | STRING                                            { EString $1 }
     | FUN patterns RARROW expr                          { handleFun $2 $4 }
     | LET patterns EQUAL expr IN expr                   { handleLet $2 $4 (Some $6) }
@@ -250,6 +252,7 @@ pattern:
     | BOOL                                              { EBool $1 }
     | INT                                               { EInt $1 }
     | FLOAT                                             { EFloat $1 }
+    | CHAR                                              { EChar $1 }
     | STRING                                            { EString $1 }
     | COLON NAME pattern                                { EVariant ($2, $3) }
     | NAME                                              { EVar $1 }

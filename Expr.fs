@@ -15,6 +15,7 @@ type Ty =
     | TBool
     | TInt
     | TFloat
+    | TChar
     | TString
     | TList of Ty
     | TApp of Ty * Ty list
@@ -31,6 +32,7 @@ with
         | TBool -> "TBool"
         | TInt -> "TInt"
         | TFloat -> "TFloat"
+        | TChar -> "TChar"
         | TString -> "TString"
         | TList ty -> sprintf "TList %O" ty
         | TApp (x, xs) -> sprintf "TApp (%O, %s)" x (xs |> List.map string |> String.concat ", ")
@@ -98,6 +100,7 @@ type Expr =
     | EBool of bool
     | EInt of int
     | EFloat of float
+    | EChar of char
     | EString of string
     | EVar of Name
     | ECall of Expr * Expr
@@ -129,6 +132,7 @@ with
         | EBool b -> sprintf "EBool %b" b
         | EInt i -> sprintf "EInt %d" i
         | EFloat f -> sprintf "EFloat %f" f
+        | EChar c -> sprintf "EChar '%c'" c
         | EString s -> sprintf "EString \"%s\"" s
         | EVar name -> sprintf "EVar %s" name
         | ECall (a, b) -> sprintf "ECall (%O, %O)" a b
@@ -224,6 +228,7 @@ let stringOfTy (x: Ty) : string =
         | TBool -> "bool"
         | TInt -> "int"
         | TFloat -> "float"
+        | TChar -> "char"
         | TString -> "string"
         | TList ty -> sprintf "[%s]" (f false ty)
         | TApp (ty, tyArgList) ->
@@ -318,7 +323,8 @@ let stringOfExpr (x: Expr) : string =
         | EBool bool -> sprintf "%b" bool
         | EInt int -> sprintf "%d" int
         | EFloat float -> sprintf "%f" float
-        | EString string -> string
+        | EChar char -> sprintf "'%c'" char
+        | EString string -> sprintf "\"%s\"" string
         | EVar name -> name
         | ECall (fnExpr, argExpr) ->
             let fnStr = f true fnExpr

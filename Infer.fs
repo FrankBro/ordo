@@ -54,13 +54,13 @@ let occursCheckAdjustLevels tvarId tvarLevel ty =
             f fieldTy
             f row
         | TList ty -> f ty
-        | TConst _ | TBool | TInt | TFloat | TString | TRowEmpty -> ()
+        | TConst _ | TBool | TInt | TFloat | TChar | TString | TRowEmpty -> ()
     f ty
 
 let injectConstraints isVariant constraints1 ty =
     let rec f isVariant ty =
         match ty with
-        | TBool | TInt | TFloat | TString | TConst _ -> ()
+        | TBool | TInt | TFloat | TChar | TString | TConst _ -> ()
         | TList ty -> f isVariant ty
         | TVar {contents = Link ty} -> f false ty
         | TArrow (a, b) -> 
@@ -178,7 +178,7 @@ let rec generalizeTy level = function
     | TVar {contents = GenericRow _ }
     | TVar {contents = Unbound _ }
     | TVar {contents = UnboundRow _ }
-    | TConst _ | TBool | TInt | TFloat | TString
+    | TConst _ | TBool | TInt | TFloat | TChar | TString
     | TRowEmpty as ty -> ty
 
 let generalize ty =
@@ -188,7 +188,7 @@ let instantiate level ty =
     let mutable idVarMap = Map.empty
     let rec f ty =
         match ty with
-        | TConst _ | TBool | TInt | TFloat | TString -> ty
+        | TConst _ | TBool | TInt | TFloat | TChar | TString -> ty
         | TList ty -> TList (f ty)
         | TVar {contents = Link ty} -> f ty
         | TVar {contents = Generic id} ->
@@ -274,6 +274,7 @@ let rec inferExpr files env level = function
     | EBool _ -> TBool
     | EInt _ -> TInt
     | EFloat _ -> TFloat
+    | EChar _ -> TChar
     | EString _ -> TString
     | EVar name ->
         env

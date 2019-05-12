@@ -43,6 +43,7 @@ let isSingleLineExpr expr =
     | EBool _
     | EInt _
     | EFloat _
+    | EChar _
     | EString _
     | EVar _
     | ECall _
@@ -73,6 +74,7 @@ let isStatement expr =
     | EBool _
     | EInt _
     | EFloat _
+    | EChar _
     | EString _
     | EVar _
     | ECall _

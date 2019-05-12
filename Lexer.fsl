@@ -71,6 +71,8 @@ rule tokenize =
         { Parser.INT (Int32.Parse(lexeme lexbuf)) }
     | ['-']?digit+('.'digit+)?(['e''E']digit+)?
         { Parser.FLOAT (Double.Parse(lexeme lexbuf)) }
+    |'\'' [^ '\''] '\''
+        { Parser.CHAR (let s = lexeme lexbuf in s.Chars(1)) }
     |'\"' [^ '\"']+ '\"'
         { Parser.STRING (let s = lexeme lexbuf in s.Substring(1, s.Length - 2)) }
     | ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9' '_']*
