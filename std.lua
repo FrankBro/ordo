@@ -45,3 +45,26 @@ function prepare_for(x)
         return x
     end
 end
+function table.slice(tbl, first, last, step)
+    local sliced = {}
+
+    for i = first or 1, last or #tbl, step or 1 do
+        sliced[#sliced+1] = tbl[i]
+    end
+
+    return sliced
+end
+function table.rev(tbl)
+    revved = {}
+    for i = #tbl, 1, -1 do
+        revved[#revved + 1] = tbl[i]
+    end
+    return revved
+end
+function table.cons(tbl, x)
+    consed = {x}
+    for i = 1, #tbl do
+        consed[#consed + 1] = tbl[i]
+    end
+    return consed
+end
