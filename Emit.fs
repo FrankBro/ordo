@@ -163,7 +163,7 @@ and emitExpr oAssignVar map expr =
         |> Map.tryFind var
         |> Option.defaultValue var
     match expr with
-    | EFile filename -> sprintf "lines_from(%s)" filename
+    | EFile filename -> sprintf "lines_from(\"%s\")" filename
     | EBool false -> "false"
     | EBool true -> "true"
     | EInt i -> string i
