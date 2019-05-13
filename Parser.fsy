@@ -38,7 +38,7 @@ let handleFun patterns body =
 
 let handleLet patterns value oBody =
     let pattern, value =
-        match patterns with
+        match List.rev patterns with
         | [pattern] -> pattern, value
         | EVar name :: rest ->
             let wrappedValue =
