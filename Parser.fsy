@@ -212,6 +212,20 @@ expr:
     | FILE STRING                                       { EFile $2 }
     | DEBUG expr expr                                   { EDebug (ref $2, $3) }
     | DEBUG expr                                        { EDebug (ref $2, ERecordEmpty) }
+    | MINUS expr                                        { EUnOp (Negative, $2) }
+    | expr MULTIPLY expr                                { EBinOp ($1, Multiply, $3)}
+    | expr DIVIDE expr                                  { EBinOp ($1, Divide, $3)}
+    | expr PLUS expr                                    { EBinOp ($1, Plus, $3)}
+    | expr MINUS expr                                   { EBinOp ($1, Minus, $3)}
+    | expr CONS expr                                    { EListCons ($1, $3)}
+    | expr LT expr                                      { EBinOp ($1, Lesser, $3)}
+    | expr LTE expr                                     { EBinOp ($1, LesserEqual, $3)}
+    | expr GT expr                                      { EBinOp ($1, Greater, $3)}
+    | expr GTE expr                                     { EBinOp ($1, GreaterEqual, $3)}
+    | expr EQUAL expr                                   { EBinOp ($1, Equal, $3)}
+    | expr NOTEQUAL expr                                { EBinOp ($1, NotEqual, $3)}
+    | expr AND expr                                     { EBinOp ($1, And, $3)}
+    | expr OR expr                                      { EBinOp ($1, Or, $3)}
 
 listExprs:
     | expr                                              { [$1] }
