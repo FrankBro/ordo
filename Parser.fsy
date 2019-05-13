@@ -228,7 +228,6 @@ expr:
     | FILE STRING                                       { EFile $2 }
     | DEBUG expr expr                                   { EDebug (ref $2, $3) }
     | DEBUG expr                                        { EDebug (ref $2, ERecordEmpty) }
-    | MINUS expr                                        { EUnOp (Negative, $2) }
     | expr MULTIPLY expr                                { EBinOp ($1, Multiply, $3)}
     | expr DIVIDE expr                                  { EBinOp ($1, Divide, $3)}
     | expr PLUS expr                                    { EBinOp ($1, Plus, $3)}
@@ -242,6 +241,7 @@ expr:
     | expr NOTEQUAL expr                                { EBinOp ($1, NotEqual, $3)}
     | expr AND expr                                     { EBinOp ($1, And, $3)}
     | expr OR expr                                      { EBinOp ($1, Or, $3)}
+    | MINUS expr                                        { EUnOp (Negative, $2) }
 
 listExprs:
     | expr                                              { [$1] }
