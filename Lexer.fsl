@@ -7,7 +7,6 @@ let lexeme lexbuf = LexBuffer<char>.LexemeString lexbuf
 
 let newline (lexbuf: LexBuffer<_>) =
     lexbuf.StartPos <- lexbuf.StartPos.NextLine
-
 }
 
 // Regular expressions
@@ -15,7 +14,7 @@ let whitespace = [' ' '\t' ]
 let newline = ('\n' | '\r' '\n')
 let digit = ['0'-'9']
 
-rule tokenize = 
+rule tokenize =
     parse
     // --------------------------
     | "let"                 { Parser.LET }
@@ -70,7 +69,7 @@ rule tokenize =
         { Parser.BOOL (Boolean.Parse(lexeme lexbuf)) }
     | ['-']?digit+
         { Parser.INT (Int32.Parse(lexeme lexbuf)) }
-    | ['-']?digit+('.'digit+)?(['e''E']digit+)?
+    | ['-']?digit+('.'digit*)?(['e''E']digit+)?
         { Parser.FLOAT (Double.Parse(lexeme lexbuf)) }
     |'\'' [^ '\''] '\''
         { Parser.CHAR (let s = lexeme lexbuf in s.Chars(1)) }
