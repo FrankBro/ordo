@@ -13,6 +13,7 @@ let parse input =
         let column = pos.Column
         let message = e.Message
         let lastToken = new System.String(tokenized.Lexeme)
+        printf "Message: %s\n" message
         printf "Parse failed at line %d, column %d:\n" line column
         printf "Last loken: %s" lastToken
         printf "\n"
