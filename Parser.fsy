@@ -91,9 +91,9 @@ let handleRecord labelsOrUpdate oRecord =
         ERecordExtend (label, expr, record)
     )
 
-let handleListCons exprs =
-    (exprs, EListEmpty)
-    ||> List.foldBack (fun expr state ->
+let handleListLiteral exprs =
+    (EListEmpty, exprs)
+    ||> List.fold(fun state expr ->
         EListCons (expr, state)
     )
 
@@ -181,7 +181,7 @@ expr:
     // Type
     | OPEN STRING                                       { EOpen $2 }
     | LSQUARE RSQUARE                                   { EListEmpty }
-    | LSQUARE listExprs RSQUARE                         { handleListCons $2 }
+    | LSQUARE listExprs RSQUARE                         { handleListLiteral $2 }
     | LPAREN expr RPAREN                                { $2 }
     | LET REC patterns EQUAL expr IN expr               { handleLetRec $3 $5 (Some $7) }
     | LET REC patterns EQUAL expr                       { handleLetRec $3 $5 None }
@@ -265,7 +265,7 @@ patterns:
 pattern:
     // Type
     | LSQUARE RSQUARE                                   { EListEmpty }
-    | LSQUARE listPatterns RSQUARE                      { handleListCons $2 }
+    | LSQUARE listPatterns RSQUARE                      { handleListLiteral $2 }
     | LPAREN pattern RPAREN                             { $2 }
     | BOOL                                              { EBool $1 }
     | INT                                               { EInt $1 }
