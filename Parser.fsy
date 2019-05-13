@@ -97,6 +97,20 @@ let handleListLiteral exprs =
         EListCons (expr, state)
     )
 
+let handleCall fn arg =
+    let rec loop arg state =
+        match arg with
+        | ECall (a, b) ->
+            b :: loop a state
+        | _ -> arg :: state
+    let argList =
+        loop arg []
+        |> List.rev
+    (fn, argList)
+    ||> List.fold (fun fn arg ->
+        ECall (fn, arg)
+    )
+
 %}
 
 %type <Expr.Expr option> start
@@ -179,6 +193,7 @@ prog:
 
 expr:
     // Type
+    | expr expr                                         { handleCall $1 $2 }
     | OPEN STRING                                       { EOpen $2 }
     | LSQUARE RSQUARE                                   { EListEmpty }
     | LSQUARE listExprs RSQUARE                         { handleListLiteral $2 }
