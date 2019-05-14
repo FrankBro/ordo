@@ -5,7 +5,7 @@ open Expr
 
 let handleLetRec patterns value oBody =
     let name, value =
-        match patterns with
+        match List.rev patterns with
         | [pattern] -> raise (parserError InvalidLetRec)
         | EVar name :: rest ->
             let wrappedValue =
