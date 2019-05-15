@@ -157,6 +157,7 @@ let handleCall fn arg =
 %token END
 %token DO
 %token DEBUG
+%token SPRINTF
 %token PLUS
 %token MINUS
 %token MULTIPLY
@@ -242,6 +243,11 @@ expr:
     | expr AND expr                                     { EBinOp ($1, And, $3)}
     | expr OR expr                                      { EBinOp ($1, Or, $3)}
     | MINUS expr                                        { EUnOp (Negative, $2) }
+    | SPRINTF STRING exprs                              { ESprintf ($2, $3) }
+
+exprs:
+    | expr                                              { [$1] }
+    | exprs expr                                        { $2 :: $1 }
 
 listExprs:
     | expr                                              { [$1] }

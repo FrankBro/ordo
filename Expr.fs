@@ -124,6 +124,7 @@ type Expr =
     | EError of string
     | EFile of string
     | EDebug of Expr ref * Expr
+    | ESprintf of string * Expr list
 with
     override x.ToString () =
         match x with
@@ -156,6 +157,7 @@ with
         | EError s -> sprintf "EError %s" s
         | EFile s -> sprintf "EFileReadLines %s" s
         | EDebug (e, body) -> sprintf "EDebug (%O, %O)" !e body
+        | ESprintf (s, args) -> sprintf "ESprinf (%s, %O)" s args
 
 and Pattern = Expr
 and Guard = Expr
@@ -317,6 +319,7 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | ESprintf (s, args) -> sprintf "sprintf %s %O" s (args |> List.map (f false))
         | EDebug (e, body) -> sprintf "debug %s; %s" (f false !e) (f false body)
         | EFor (key, value, target, body, rest) -> sprintf "for %s, %s in %s do %s in %s" key value (f false target) (f false body) (f false rest)
         | ESet (name, value, body) -> sprintf "%s <- %s in %s" name (f false value) (f false body)

@@ -35,6 +35,7 @@ rule tokenize =
     | "do"                  { Parser.DO }
     | "end"                 { Parser.END }
     | "debug"               { Parser.DEBUG }
+    | "sprintf"             { Parser.SPRINTF }
     // --------------------------
     | "+"                   { Parser.PLUS }
     | "-"                   { Parser.MINUS }

@@ -51,12 +51,13 @@ let isSingleLineExpr expr =
     | ERecordSelect _
     | ERecordExtend _
     | ERecordRestrict _
-    | ERecordEmpty 
+    | ERecordEmpty
     | EVariant _
     | EFix _
     | EBinOp _
     | EUnOp _
     | EOpen _
+    | ESprintf _
     | EError _ -> true
     | EFun _
     | ELet _
@@ -91,6 +92,7 @@ let isStatement expr =
     | EFix _
     | EOpen _
     | EFile _
+    | ESprintf _
     | EError _ -> false
     | ELet _
     | ECase _
@@ -111,7 +113,7 @@ let rec extractBindingsAndVariantGuards pattern var bindings guards =
         extractBindingsAndVariantGuards record var map guards
     | EVariant (name, variant) ->
         let fieldAccess = sprintf "%s.variant_%s" var name
-        let guard = sprintf "%s.variant_name = %s" var name
+        let guard = sprintf "%s.variant_name == '%s'" var name
         let guards = guard :: guards
         extractBindingsAndVariantGuards variant fieldAccess bindings guards
     | _ -> failwithf "impossible, got pattern %O" pattern
@@ -167,6 +169,12 @@ and emitExpr oAssignVar map expr =
         |> Map.tryFind var
         |> Option.defaultValue var
     match expr with
+    | ESprintf (s, args) -> 
+        let args  =
+            args
+            |> List.map (emitExpr None map)
+            |> String.concat ", "
+        sprintf "string.format('%s', %s)" s args
     | EFile filename -> sprintf "lines_from(\"%s\")" filename
     | EBool false -> "false"
     | EBool true -> "true"

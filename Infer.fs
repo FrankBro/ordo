@@ -234,6 +234,7 @@ let rec matchFunTy ty =
 
 let rec inferExpr files env level expr =
     match expr with
+    | ESprintf _ -> TString
     | EDebug (expr, body) ->
         let exprTy = inferExpr files env level !expr
         expr := EType (!expr, exprTy)
