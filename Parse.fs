@@ -24,14 +24,14 @@ let parse (file: string) (input: string) =
         let split = input.Split('\n')
         let rec loop (line, column) (xs: string list) =
             match xs with
-            | [] -> line, column
+            | [] -> line - 1, column + 1
             | x :: xs ->
                 let len = x.Length
                 let diff = column - len
                 if column < len then
-                    line, column
+                    line, column + 1
                 else
-                    loop (line + 1, diff) xs
+                    loop (line + 1, diff - 1) xs
         let line, column =
             split
             |> List.ofArray

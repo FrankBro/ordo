@@ -36,6 +36,14 @@ rule tokenize =
     | "end"                 { Parser.END }
     | "debug"               { Parser.DEBUG }
     | "sprintf"             { Parser.SPRINTF }
+    | "type"                { Parser.TYPE }
+    | "with"                { Parser.WITH }
+    // --------------------------
+    | "bool"                { Parser.BOOL_TYPE }
+    | "int"                 { Parser.INT_TYPE }
+    | "float"               { Parser.FLOAT_TYPE }
+    | "char"                { Parser.CHAR_TYPE }
+    | "string"              { Parser.STRING_TYPE }
     // --------------------------
     | "+"                   { Parser.PLUS }
     | "-"                   { Parser.MINUS }
@@ -76,8 +84,10 @@ rule tokenize =
         { Parser.CHAR (let s = lexeme lexbuf in s.Chars(1)) }
     |'\"' [^ '\"']+ '\"'
         { Parser.STRING (let s = lexeme lexbuf in s.Substring(1, s.Length - 2)) }
-    | ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9' '_']*
+    | ['a'-'z']['a'-'z' '0'-'9' '_']*
         { Parser.NAME (lexeme lexbuf) }
+    | ['A'-'Z']['a'-'z' '0'-'9' '_']*
+        { Parser.VARIANT_NAME (lexeme lexbuf) }
 
     // --------------------------
     // | _             { failwith ("ParseError" + LexBuffer<_>.LexemeString lexbuf) }

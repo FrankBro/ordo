@@ -111,6 +111,13 @@ let handleCall fn arg =
         ECall (fn, arg)
     )
 
+let handleRow cons fields =
+    (TRowEmpty, fields)
+    ||> List.fold (fun state (name, ty) ->
+        TRowExtend (name, ty, state)
+    )
+    |> cons
+
 %}
 
 %type <Expr.Expr option> start
@@ -127,6 +134,7 @@ let handleCall fn arg =
 %type <Expr.Pattern list> patterns
 %type <Expr.Pattern> pattern
 %type <Expr.Pattern list> listPatterns
+%type <Expr.Ty> type
 
 %start start
 
@@ -139,6 +147,7 @@ let handleCall fn arg =
 %token <char> CHAR
 %token <string> STRING
 %token <string> NAME
+%token <string> VARIANT_NAME
 %token LET
 %token IN
 %token FUN
@@ -158,6 +167,9 @@ let handleCall fn arg =
 %token DO
 %token DEBUG
 %token SPRINTF
+%token WITH
+%token TYPE
+%token BOOL_TYPE INT_TYPE FLOAT_TYPE CHAR_TYPE STRING_TYPE
 %token PLUS
 %token MINUS
 %token MULTIPLY
@@ -193,8 +205,7 @@ prog:
     | expr  { Some $1 }
 
 expr:
-    // Type
-    | expr expr                                         { handleCall $1 $2 }
+    | TYPE NAME EQUAL type IN expr                      { EType ($2, $4, $6) }
     | OPEN STRING                                       { EOpen $2 }
     | LSQUARE RSQUARE                                   { EListEmpty }
     | LSQUARE listExprs RSQUARE                         { handleListLiteral $2 }
@@ -215,13 +226,13 @@ expr:
     | FOR NAME COMMA NAME IN expr DO expr END expr      { handleFor $2 $4 $6 $8 (Some $10) }
     | FOR NAME COMMA NAME IN expr DO expr END           { handleFor $2 $4 $6 $8 None }
     | NAME                                              { EVar $1 }
-    | COLON NAME expr                                   { EVariant($2, $3) }
+    | VARIANT_NAME expr                                 { EVariant($1, $2) }
     | MATCH expr LCURLY cases BAR defaultCase RCURLY    { ECase($2, List.rev $4, Some $6) }
     | MATCH expr LCURLY cases RCURLY                    { ECase($2, List.rev $4, None) }
     | LCURLY RCURLY                                     { ERecordEmpty }
-    | LCURLY updateLabels BAR expr RCURLY               { handleRecord $2 (Some $4) }
     | LCURLY createLabels RCURLY                        { handleRecord $2 None }
-    | expr DOT NAME                                     { ERecordSelect ($1, $3) }
+    // | LCURLY updateLabels BAR expr RCURLY               { handleRecord $2 (Some $4) }
+    | LCURLY expr WITH updateLabels RCURLY              { handleRecord $4 (Some $2) }
     | IF expr THEN expr ELSE expr                       { EIfThenElse ($2, $4, $6) }
     | PRINT expr expr                                   { EPrint ($2, $3) }
     | PRINT expr                                        { EPrint ($2, ERecordEmpty) }
@@ -229,6 +240,8 @@ expr:
     | FILE_READ STRING                                  { EFfi (Ffi.FileRead $2) }
     | DEBUG expr expr                                   { EDebug (ref $2, $3) }
     | DEBUG expr                                        { EDebug (ref $2, ERecordEmpty) }
+    | SPRINTF STRING exprs                              { ESprintf ($2, $3) }
+    | MINUS expr                                        { EUnOp (Negative, $2) }
     | expr MULTIPLY expr                                { EBinOp ($1, Multiply, $3)}
     | expr DIVIDE expr                                  { EBinOp ($1, Divide, $3)}
     | expr PLUS expr                                    { EBinOp ($1, Plus, $3)}
@@ -242,8 +255,8 @@ expr:
     | expr NOTEQUAL expr                                { EBinOp ($1, NotEqual, $3)}
     | expr AND expr                                     { EBinOp ($1, And, $3)}
     | expr OR expr                                      { EBinOp ($1, Or, $3)}
-    | MINUS expr                                        { EUnOp (Negative, $2) }
-    | SPRINTF STRING exprs                              { ESprintf ($2, $3) }
+    | expr DOT NAME                                     { ERecordSelect ($1, $3) }
+    | expr expr                                         { handleCall $1 $2 }
 
 exprs:
     | expr                                              { [$1] }
@@ -293,7 +306,7 @@ pattern:
     | FLOAT                                             { EFloat $1 }
     | CHAR                                              { EChar $1 }
     | STRING                                            { EString $1 }
-    | COLON NAME pattern                                { EVariant ($2, $3) }
+    | VARIANT_NAME pattern                              { EVariant ($1, $2) }
     | NAME                                              { EVar $1 }
     | LCURLY RCURLY                                     { ERecordEmpty }
     | LCURLY createLabels BAR expr RCURLY               { handleRecord $2 (Some $4) }
@@ -302,3 +315,26 @@ pattern:
 listPatterns:
     | pattern                                           { [$1] }
     | listPatterns COMMA pattern                        { $3 :: $1 }
+
+type:
+    | BOOL_TYPE                                         { TBool }
+    | INT_TYPE                                          { TInt }
+    | FLOAT_TYPE                                        { TFloat }
+    | CHAR_TYPE                                         { TChar }
+    | STRING_TYPE                                       { TString }
+    | LCURLY type_record_labels RCURLY                  { handleRow TRecord $2 }
+    | LT type_variant_labels GT                         { handleRow TVariant $2 }
+
+type_record_labels:
+    | type_record_label                                 { [$1] }
+    | type_record_labels COMMA type_record_label        { $3 :: $1 }
+
+type_record_label:
+    | NAME COLON type                                   { ($1, $3) }
+
+type_variant_labels:
+    | type_variant_label                                { [$1] }
+    | type_variant_labels COMMA type_variant_label      { $3 :: $1 }
+
+type_variant_label:
+    | VARIANT_NAME COLON type                           { ($1, $3) }

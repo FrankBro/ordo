@@ -1,17 +1,18 @@
-type ty =
-    | ty_const of string
+type ty = <
+    ty_const: string
+>
 in
 let to_string ty =
     match ty {
-        :ty_const name -> name
-      | :ty_bool {} -> "bool"
-      | :ty_int {} -> "int"
-      | :ty_float {} -> "float"
-      | :ty_char {} -> "char"
-      | :ty_string {} -> "string"
+        :ty_const name -> name,
+        :ty_bool {} -> "bool",
+        :ty_int {} -> "int",
+        :ty_float {} -> "float",
+        :ty_char {} -> "char",
+        :ty_string {} -> "string"
     }
 in
 {
-    ty = ty
+    ty = ty,
     to_string = to_string
 }
