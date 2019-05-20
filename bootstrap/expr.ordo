@@ -1,0 +1,11 @@
+let ffi = open "ffi" in
+
+let to_string expr =
+    match expr {
+        :expr_ffi f -> ffi.to_string f
+      , :expr_int i -> sprintf "%d" i
+    }
+in
+{
+    to_string = to_string
+}

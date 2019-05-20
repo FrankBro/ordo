@@ -26,7 +26,13 @@ function file_exists(file)
     if f then f:close() end
     return f ~= nil
 end
-function lines_from(file)
+local function file_read(file)
+    local f = io.open(file)
+    local s = f:read("*a")
+    f:close()
+    return s
+end
+function file_lines(file)
     if not file_exists(file) then return {} end
     lines = {}
     for line in io.lines(file) do

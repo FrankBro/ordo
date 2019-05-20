@@ -1,0 +1,9 @@
+let to_string ffi =
+    match ffi {
+        :ffi_file_read_lines filename -> (sprintf "ffi_file_read_lines %s" filename)
+      , :ffi_file_read filename -> sprintf "ffi_file_read %s" filename
+    }
+in
+{
+    to_string = to_string
+}

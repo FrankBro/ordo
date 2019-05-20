@@ -1,38 +1,38 @@
 module Compiler
 
+open System.IO
+
 open Error
 open Expr
 open Infer
+open Parse
 
-type State = {
-    Types: Map<string, Ty>
-    Values: Map<string, Value>
-}
-with
-    static member New = {
-        Types = Map.empty
-        Values = Map.empty
-    }
-
-let compileExprs (exprs: (string * Expr) list) =
+let compile (folder: string) (files: string list) =
     Infer.resetId ()
     let extract state (name: string, expr: Expr) =
-        let ordoTy = 
-            Infer.infer state.Types expr
+        let ordoTy =
+            Infer.infer state expr
             |> generalize
-        let ordoVal = Eval.eval state.Values expr
+        let ordoVal = Emit.emit expr
         ordoTy, ordoVal
-    let rec loop (state: State) exprs =
-        match exprs with
-        | [] -> raise (compilerError NoExprsProvided)
-        | [x] -> extract state x
-        | x :: xs ->
-            let ordoTy, ordoVal = extract state x
-            let name = fst x
-            let state = 
-                { state with
-                    Types = Map.add name ordoTy state.Types
-                    Values = Map.add name ordoVal state.Values
-                }
-            loop state xs
-    loop State.New exprs
+    let rec loop (types: Map<string, Ty>) files =
+        match files with
+        | [] -> ()
+        | file :: files ->
+            let inputFile = sprintf "%s/%s.ordo" folder file
+            let text =
+                File.ReadAllLines(inputFile)
+                |> String.concat "\n"
+            let expr = parse file text
+            let ty =
+                Infer.infer types expr
+                |> generalize
+            let output = Emit.emit expr
+            let outputFile = sprintf "output/%s.lua" file
+            File.WriteAllText(outputFile, output)
+            let types = Map.add file ty types
+            loop types files
+    Directory.Delete("output", true)
+    Directory.CreateDirectory("output") |> ignore
+    File.Copy("std.lua", "output/std.lua")
+    loop Map.empty files

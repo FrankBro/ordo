@@ -7,7 +7,7 @@ open Util
 let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     match expr with
     | EFor (key, value, target, body, rest) -> failwith "EFor not supported"
-    | EFile filename -> failwith "EFile not supported"
+    // | EFile filename -> failwith "EFile not supported"
     | ESet (name, value, body) ->
         if not (Map.containsKey name env) then
             raise (genericError (VariableNotFound name))
@@ -20,7 +20,7 @@ let rec evalExpr files (env: Map<string, Value>) (expr: Expr) : Value =
     | EPrint (e, rest) ->
         printfn "%O" (evalExpr files env e)
         evalExpr files env rest
-    | EType (e, _) -> evalExpr files env e
+    // | EType (e, _) -> evalExpr files env e
     | EOpen filename -> Map.find filename files
     | EListEmpty -> VList []
     | EListCons (x, xs) ->
@@ -238,7 +238,7 @@ and evalPattern (env: Map<string, Value>) pattern (value: Value) : bool * Map<_,
     let initialEnv = env
     let rec loop env pattern (value: Value) =
         match pattern with
-        | EType (e, _) -> loop env e value
+        // | EType (e, _) -> loop env e value
         | EListEmpty -> VList [] = value, env
         | EListCons (x, xs) ->
             match value with

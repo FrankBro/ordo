@@ -10,9 +10,9 @@ open Expr
 open Parse
 
 let testTransform input transform =
-    let parsed = parse input
+    let parsed = parse "test" input
     let transformed = Transform.transform parsed
-    let parsedTransform = parse transform
+    let parsedTransform = parse "test" transform
     Assert.StrictEqual(parsedTransform, transformed)
 
 [<Fact>]

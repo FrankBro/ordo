@@ -97,7 +97,7 @@ let rec unify ty1 ty2 =
     if ty1 = ty2 then () else
     let rec f isVariant ty1 ty2 =
         match ty1, ty2 with
-        | TBool, TBool | TInt, TInt | TFloat, TFloat -> ()
+        | TBool, TBool | TInt, TInt | TFloat, TFloat | TChar, TChar | TString, TString -> ()
         | TApp (ty1, tyArgList1), TApp (ty2, tyArgList2) ->
             f isVariant ty1 ty2
             List.iter2 (f isVariant) tyArgList1 tyArgList2
@@ -232,12 +232,23 @@ let rec matchFunTy ty =
     | TVar ({contents = UnboundRow(id, level, constraints)} as tvar) -> raise (inferError (FunctionExpected ty))
     | _ -> raise (inferError (FunctionExpected ty))
 
+let inferFfi f =
+    match f with
+    | FileReadLines _ -> TList TString
+    | FileRead _ -> TString
+
 let rec inferExpr files env level expr =
     match expr with
+    | EType (name, ty, body) ->
+        let env = Map.add name ty env
+        inferExpr files env level body
     | ESprintf _ -> TString
     | EDebug (expr, body) ->
-        let exprTy = inferExpr files env level !expr
-        expr := EType (!expr, exprTy)
+        let exprTy =
+            inferExpr files env level !expr
+            |>! printfn "DEBUG: %O"
+            |> generalize
+        expr := ETyped (!expr, exprTy)
         inferExpr files env level body
     | EFor (key, value, target, body, rest) ->
         let targetTy = inferExpr files env level target
@@ -263,10 +274,10 @@ let rec inferExpr files env level expr =
         let valueTy = inferExpr files env level value
         unify ty valueTy
         inferExpr files env level body
-    | EFile _ -> TList TString
+    | EFfi f -> inferFfi f
     | EError _ -> newVar level
     | EPrint (e, rest) -> inferExpr files env level rest
-    | EType (e, t) ->
+    | ETyped (e, t) ->
         let infered = inferExpr files env level e
         unify infered t
         infered
@@ -440,7 +451,7 @@ and inferVariantCases files env level returnTy restRowTy cases =
 and inferPattern files (env: Map<Name, Ty>) (level: int) pattern =
     let rec loop env pattern =
         match pattern with
-        | EType (e, t) ->
+        | ETyped (e, t) ->
             let infered, env = loop env e
             unify infered t
             infered, env

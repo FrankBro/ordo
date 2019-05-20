@@ -23,9 +23,9 @@
     <Compile Include="Parse.fs" />
     <Compile Include="Eval.fs" />
     <Compile Include="Optimizer.fs" />
+    <Compile Include="Emit.fs" />
     <Compile Include="Compiler.fs" />
     <Compile Include="Repl.fs" />
-    <Compile Include="Emit.fs" />
     <Compile Include="TestUtil.fs" />
     <Compile Include="TestSimple.fs" />
     <Compile Include="TestTransform.fs" />

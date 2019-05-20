@@ -152,7 +152,7 @@ let handleCall fn arg =
 %token OPEN
 %token PRINT
 %token ERROR
-%token FILE
+%token FILE_READ
 %token FOR
 %token END
 %token DO
@@ -216,8 +216,8 @@ expr:
     | FOR NAME COMMA NAME IN expr DO expr END           { handleFor $2 $4 $6 $8 None }
     | NAME                                              { EVar $1 }
     | COLON NAME expr                                   { EVariant($2, $3) }
-    | MATCH expr LCURLY cases BAR defaultCase RCURLY    { ECase($2, $4, Some $6) }
-    | MATCH expr LCURLY cases RCURLY                    { ECase($2, $4, None) }
+    | MATCH expr LCURLY cases BAR defaultCase RCURLY    { ECase($2, List.rev $4, Some $6) }
+    | MATCH expr LCURLY cases RCURLY                    { ECase($2, List.rev $4, None) }
     | LCURLY RCURLY                                     { ERecordEmpty }
     | LCURLY updateLabels BAR expr RCURLY               { handleRecord $2 (Some $4) }
     | LCURLY createLabels RCURLY                        { handleRecord $2 None }
@@ -226,7 +226,7 @@ expr:
     | PRINT expr expr                                   { EPrint ($2, $3) }
     | PRINT expr                                        { EPrint ($2, ERecordEmpty) }
     | ERROR STRING                                      { EError $2 }
-    | FILE STRING                                       { EFile $2 }
+    | FILE_READ STRING                                  { EFfi (Ffi.FileRead $2) }
     | DEBUG expr expr                                   { EDebug (ref $2, $3) }
     | DEBUG expr                                        { EDebug (ref $2, ERecordEmpty) }
     | expr MULTIPLY expr                                { EBinOp ($1, Multiply, $3)}

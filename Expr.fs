@@ -11,6 +11,7 @@ type Id = int
 type Level = int
 
 type Ty =
+    | TType of Ty
     | TConst of Name
     | TBool
     | TInt
@@ -28,6 +29,7 @@ type Ty =
 with
     override x.ToString () =
         match x with
+        | TType ty -> sprintf "TType %O" ty
         | TConst name -> name
         | TBool -> "TBool"
         | TInt -> "TInt"
@@ -94,7 +96,18 @@ with
 type UnOp =
     | Negative
 
+type Ffi =
+    | FileReadLines of string
+    | FileRead of string
+with
+    override x.ToString () =
+        match x with
+        | FileReadLines s -> sprintf "FileReadLines %s" s
+        | FileRead s -> sprintf "FileRead %s" s
+
 type Expr =
+    | ETyped of Expr * Ty
+    | EType of Name * Ty * Expr
     | EFor of Name * Name * Expr * Expr * Expr
     | EPrint of Expr * Expr
     | EBool of bool
@@ -120,14 +133,14 @@ type Expr =
     | EListEmpty
     | EListCons of Expr * Expr
     | EOpen of string
-    | EType of Expr * Ty
     | EError of string
-    | EFile of string
+    | EFfi of Ffi
     | EDebug of Expr ref * Expr
     | ESprintf of string * Expr list
 with
     override x.ToString () =
         match x with
+        | ETyped (e, t) -> sprintf "ETyped (%O, %O)" e t
         | EFor (key, value, target, body, rest) -> sprintf "EFor (%s, %s, %O, %O, %O)" key value target body rest
         | ESet (name, value, body) -> sprintf "ESet (%s, %O, %O)" name value body
         | EPrint (e, rest) -> sprintf "EPrint (%O, %O)" e rest
@@ -153,9 +166,9 @@ with
         | EListEmpty -> "EListEmpty"
         | EListCons (x, xs) -> sprintf "EListCons (%O, %O)" x xs
         | EOpen filename -> sprintf "EOpen \"%s\"" filename
-        | EType (e, t) -> sprintf "EType (%O, %O)" e t
+        | EType (name, t, e) -> sprintf "EType (%O, %O, %O)" name t e
         | EError s -> sprintf "EError %s" s
-        | EFile s -> sprintf "EFileReadLines %s" s
+        | EFfi f -> sprintf "EFfi %O" f
         | EDebug (e, body) -> sprintf "EDebug (%O, %O)" !e body
         | ESprintf (s, args) -> sprintf "ESprinf (%s, %O)" s args
 
@@ -228,6 +241,7 @@ let stringOfTy (x: Ty) : string =
             name
         )
     let rec f isSimple = function
+        | TType ty -> sprintf "type(%s)" (f false ty)
         | TConst name -> name
         | TBool -> "bool"
         | TInt -> "int"
@@ -319,6 +333,7 @@ let stringOfUnOp = function
 
 let stringOfExpr (x: Expr) : string =
     let rec f isSimple = function
+        | ETyped (e, t) -> sprintf "(%s: %s)" (f false e) (stringOfTy t)
         | ESprintf (s, args) -> sprintf "sprintf %s %O" s (args |> List.map (f false))
         | EDebug (e, body) -> sprintf "debug %s; %s" (f false !e) (f false body)
         | EFor (key, value, target, body, rest) -> sprintf "for %s, %s in %s do %s in %s" key value (f false target) (f false body) (f false rest)
@@ -395,8 +410,8 @@ let stringOfExpr (x: Expr) : string =
         | EListEmpty -> "[]"
         | EListCons (x, xs) -> sprintf "%s :: %s" (f false x) (f false xs)
         | EOpen filename -> sprintf "open \"%s\"" filename
-        | EType (e, t) -> sprintf "(%s: %s)" (f false e) (stringOfTy t)
-        | EFile filename -> sprintf "file \"%s\"" filename
+        | EType (name, t, e) -> sprintf "type %s = %s in %s" name (stringOfTy t) (f false e)
+        | EFfi f -> sprintf "ffi %O" f
     f false x
 
 let rec stringOfValue value =

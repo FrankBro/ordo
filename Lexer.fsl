@@ -30,7 +30,7 @@ rule tokenize =
     | "open"                { Parser.OPEN }
     | "print"               { Parser.PRINT }
     | "error"               { Parser.ERROR }
-    | "file"                { Parser.FILE }
+    | "file.read"           { Parser.FILE_READ }
     | "for"                 { Parser.FOR }
     | "do"                  { Parser.DO }
     | "end"                 { Parser.END }
@@ -80,5 +80,7 @@ rule tokenize =
         { Parser.NAME (lexeme lexbuf) }
 
     // --------------------------
-    | _             { failwith ("ParseError" + LexBuffer<_>.LexemeString lexbuf) }
+    // | _             { failwith ("ParseError" + LexBuffer<_>.LexemeString lexbuf) }
     | eof           { Parser.EOF }
+    | _ { raise (Exception (sprintf "SyntaxError: Unexpected char: '%s' Line: %d Column: %d" (lexeme lexbuf) (lexbuf.StartPos.Line+1) lexbuf.StartPos.Column)) }
+

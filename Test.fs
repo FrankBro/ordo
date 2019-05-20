@@ -6,7 +6,6 @@ open System.IO
 open Xunit
 open Xunit.Abstractions
 
-open Eval
 open Error
 open Expr
 open TestUtil

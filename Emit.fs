@@ -37,8 +37,10 @@ let emitUnop op =
     match op with
     | Negative -> "-"
 
-let isSingleLineExpr expr =
+let rec isSingleLineExpr expr =
     match expr with
+    | ETyped (e, _) -> isSingleLineExpr e
+    | EFfi _
     | EPrint _
     | EDebug _
     | EBool _
@@ -64,11 +66,10 @@ let isSingleLineExpr expr =
     | ESet _
     | EFor _
     | EIfThenElse _ -> false
-    | _ -> failwith "TODO"
-    // | ECase of Expr * (Pattern * Expr * Guard option) list * (Name * Expr) option
-    // | EListEmpty
-    // | EListCons of Expr * Expr
-    // | EType of Expr * Ty
+    | ECase _
+    | EListEmpty
+    | EListCons _
+    | EType _ -> failwith "TODO"
 
 let isStatement expr =
     match expr with
@@ -91,17 +92,18 @@ let isStatement expr =
     | EUnOp _
     | EFix _
     | EOpen _
-    | EFile _
+    | EFfi _
     | ESprintf _
+    | EType _
     | EError _ -> false
     | ELet _
     | ECase _
     | ESet _
     | EFor _
     | EIfThenElse _ -> true
-    // | EListEmpty
-    // | EListCons of Expr * Expr
-    // | EType of Expr * Ty
+    | EListEmpty
+    | EListCons _
+    | ETyped _ -> failwith "TODO"
 
 let rec extractBindingsAndVariantGuards pattern var bindings guards =
     match pattern with
@@ -117,6 +119,11 @@ let rec extractBindingsAndVariantGuards pattern var bindings guards =
         let guards = guard :: guards
         extractBindingsAndVariantGuards variant fieldAccess bindings guards
     | _ -> failwithf "impossible, got pattern %O" pattern
+
+let emitFfi f =
+    match f with
+    | FileReadLines filename -> sprintf "file_lines('%s')" filename
+    | FileRead filename -> sprintf "file_read('%s')" filename
 
 let extractValueGuard guard bindings =
     match guard with
@@ -169,17 +176,28 @@ and emitExpr oAssignVar map expr =
         |> Map.tryFind var
         |> Option.defaultValue var
     match expr with
+    | ETyped (expr, _) ->
+        emitExpr oAssignVar map expr
+    | EType (name, ty, body) ->
+        let ty = stringOfTy ty
+        let body = emitExpr None map body
+        sprintf "local %s = '%s'\n%s" name ty body
+    | EOpen name -> sprintf "require('output.%s')" name
+    | EListEmpty -> failwith "TODO"
+    | EListCons _ -> failwith "TODO"
+    | EError s -> sprintf "error('%s')" s
     | ESprintf (s, args) -> 
         let args  =
             args
             |> List.map (emitExpr None map)
             |> String.concat ", "
         sprintf "string.format('%s', %s)" s args
-    | EFile filename -> sprintf "lines_from(\"%s\")" filename
+    | EFfi f -> emitFfi f
     | EBool false -> "false"
     | EBool true -> "true"
     | EInt i -> string i
     | EFloat f -> string f
+    | EChar c -> sprintf "'%s'" (string c)
     | EString s -> sprintf "'%s'" s
     | EVar name -> getVar name
     | ECall (fn, arg) ->
@@ -187,6 +205,7 @@ and emitExpr oAssignVar map expr =
     | EFun (EVar name, body) ->
         let var = getNewVar ()
         sprintf "function(%s)\nlocal %s\n%s\nreturn %s\nend" name var (emitExpr (Some var) map body) var
+    | EFun _ -> failwith "TODO"
     | ELet (EVar name, value, body) ->
         let body =
             match body with
@@ -199,6 +218,7 @@ and emitExpr oAssignVar map expr =
             sprintf "%s = %s\n%s" name (emitExpr None map value) body
         | _ ->
             sprintf "local %s = %s\n%s" name (emitExpr None map value) body
+    | ELet _ -> failwith "TODO"
     | ESet (name, value, body) ->
         let body =
             match body with
@@ -252,14 +272,13 @@ and emitExpr oAssignVar map expr =
     | EDebug (e, body) ->
         let e =
             match !e with
-            | EType (e, ty) ->  sprintf "%s, \"%s\"" (emitExpr None map e) (stringOfTy ty)
+            | ETyped (e, ty) ->  sprintf "%s, \"%s\"" (emitExpr None map e) (stringOfTy ty)
             | _ -> raise (compilerError DebugNotTyped)
         let body =
             match body with
             | ERecordEmpty -> ""
             | _ -> emitExpr None map body
         sprintf "print(%s)\n%s" e body
-    | _ -> failwithf "impossible, got %O" expr
 
     |> (fun result ->
         match oAssignVar with
@@ -270,9 +289,5 @@ and emitExpr oAssignVar map expr =
         | _ -> result
     )
 
-let emitPrelude =
-    File.ReadAllLines("std.lua")
-    |> String.concat " "
-
 let emit expr =
-    emitPrelude + "\n\n" + emitExpr None Map.empty expr
+    "local std = require('output.std')" + "\n" + emitExpr None Map.empty expr
