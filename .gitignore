@@ -1,7 +1,1 @@
-bin/*
-obj/*
-output.lua
-Lexer.fs
-Parser.fsi
-Parser.fs
-output/*
+/target
