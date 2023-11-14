@@ -174,21 +174,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn let_expr(&mut self) -> Result<Expr> {
-        let pattern = self.pattern_expr()?;
-        self.expect(Token::Equal)?;
-        let value = self.expr_inner(0)?;
-        self.expect(Token::In)?;
-        let body = self.expr_inner(0)?;
-        Ok(Expr::Let(pattern, value.into(), body.into()))
-    }
-
-    fn fun_expr(&mut self) -> Result<Expr> {
-        self.expect(Token::LParen)?;
-        let mut params = Vec::new();
+    fn pattern_list(&mut self) -> Result<Vec<Pattern>> {
+        let mut patterns = Vec::new();
         loop {
-            let param = self.pattern_expr()?;
-            params.push(param);
+            let pattern = self.pattern_expr()?;
+            patterns.push(pattern);
             if self.matches(Token::RParen)? {
                 break;
             } else if self.matches(Token::Comma)? {
@@ -197,6 +187,34 @@ impl<'a> Parser<'a> {
                 return self.expected(vec![Token::RParen, Token::Comma]);
             }
         }
+        Ok(patterns)
+    }
+
+    fn let_expr(&mut self) -> Result<Expr> {
+        let pattern = self.pattern_expr()?;
+        match pattern {
+            Pattern::Var(name) if self.matches(Token::LParen)? => {
+                let params = self.pattern_list()?;
+                self.expect(Token::Equal)?;
+                let fun_body = self.expr_inner(0)?;
+                self.expect(Token::In)?;
+                let body = self.expr_inner(0)?;
+                let fun = Expr::Fun(params, fun_body.into());
+                Ok(Expr::Let(Pattern::Var(name), fun.into(), body.into()))
+            }
+            pattern => {
+                self.expect(Token::Equal)?;
+                let value = self.expr_inner(0)?;
+                self.expect(Token::In)?;
+                let body = self.expr_inner(0)?;
+                Ok(Expr::Let(pattern, value.into(), body.into()))
+            }
+        }
+    }
+
+    fn fun_expr(&mut self) -> Result<Expr> {
+        self.expect(Token::LParen)?;
+        let params = self.pattern_list()?;
         self.expect(Token::Arrow)?;
         let body = self.expr_inner(0)?;
         Ok(Expr::Fun(params, body.into()))
@@ -609,6 +627,14 @@ mod tests {
                     precord(vec![("a", pvar("a"))]),
                     record(vec![("a", int(1))], empty()),
                     var("a"),
+                )),
+            ),
+            (
+                "let f(a, b) = a + b in f(1, 2)",
+                pass(let_(
+                    pvar("f"),
+                    fun(vec![pvar("a"), pvar("b")], plus(var("a"), var("b"))),
+                    call(var("f"), vec![int(1), int(2)]),
                 )),
             ),
             //
