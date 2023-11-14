@@ -65,7 +65,7 @@ impl Default for Env {
 
 impl Env {
     fn process(&mut self, source: &str) -> Result<()> {
-        let expr = Parser::expr(source)?;
+        let expr = Parser::repl(source)?;
         let ty = self.infer.infer(&expr)?;
         let value = self.eval.eval(&expr)?;
         println!(": {}", self.infer.ty_to_string(&ty).unwrap());
