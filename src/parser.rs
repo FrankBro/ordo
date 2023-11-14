@@ -56,6 +56,7 @@ impl fmt::Display for Error {
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 pub struct Parser<'a> {
+    is_repl: bool,
     lexer: Lexer<'a, Token>,
     token: Option<Token>,
 }
@@ -123,10 +124,23 @@ impl<'a> Parser<'a> {
         Err(Error::Expected(vec![Token::empty_ident()], token))
     }
 
+    pub fn repl(source: &str) -> Result<Expr> {
+        Self::expr_source(source, true)
+    }
+
+    #[cfg(test)]
     pub fn expr(source: &str) -> Result<Expr> {
+        Self::expr_source(source, false)
+    }
+
+    fn expr_source(source: &str, is_repl: bool) -> Result<Expr> {
         let lexer = Token::lexer(source);
         let token = None;
-        let mut parser = Parser { lexer, token };
+        let mut parser = Parser {
+            lexer,
+            token,
+            is_repl,
+        };
         parser.advance()?;
         let expr = parser.expr_inner(0)?;
         if let Some(token) = parser.token.take() {
@@ -205,9 +219,17 @@ impl<'a> Parser<'a> {
             pattern => {
                 self.expect(Token::Equal)?;
                 let value = self.expr_inner(0)?;
-                self.expect(Token::In)?;
-                let body = self.expr_inner(0)?;
-                Ok(Expr::Let(pattern, value.into(), body.into()))
+                match pattern {
+                    Pattern::Var(name) if self.is_repl && self.token.is_none() => {
+                        let body = Expr::Var(name.clone());
+                        Ok(Expr::Let(Pattern::Var(name), value.into(), body.into()))
+                    }
+                    pattern => {
+                        self.expect(Token::In)?;
+                        let body = self.expr_inner(0)?;
+                        Ok(Expr::Let(pattern, value.into(), body.into()))
+                    }
+                }
             }
         }
     }
@@ -444,7 +466,11 @@ impl<'a> Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn ty(source: &str) -> Result<(Vec<String>, Type)> {
         let lexer = Token::lexer(source);
-        let mut parser = Parser { lexer, token: None };
+        let mut parser = Parser {
+            is_repl: false,
+            lexer,
+            token: None,
+        };
         parser.advance()?;
 
         let mut vars = Vec::new();
@@ -795,5 +821,13 @@ mod tests {
                 },
             }
         }
+    }
+
+    #[test]
+    fn repl() {
+        let source = "let a = 0";
+        let expected = let_(pvar("a"), int(0), var("a"));
+        let actual = Parser::repl(source).unwrap();
+        assert_eq!(expected, actual)
     }
 }
