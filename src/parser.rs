@@ -1,9 +1,13 @@
-use std::{collections::BTreeMap, fmt};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+};
 
+use itertools::Itertools;
 use logos::{Lexer, Logos};
 
 use crate::{
-    expr::{Expr, IntBinOp, Pattern, Type},
+    expr::{Constraints, Expr, IntBinOp, Pattern, Type},
     lexer::Token,
 };
 
@@ -17,6 +21,9 @@ pub enum Error {
     UnexpectedEof,
     InvalidPrefix(Option<Token>),
     DuplicateLabel(String),
+    InvalidTypeVarName(String),
+    NoRowForConstraints(String),
+    RowConstraintsAlreadyDefined(String),
 }
 
 impl fmt::Display for Error {
@@ -24,18 +31,12 @@ impl fmt::Display for Error {
         match self {
             Error::Lexer => write!(f, "lexer encountered an unexpected token"),
             Error::Expected(tokens, token) => {
-                let token_str = match token {
+                let token= match token {
                     Some(token) => token.to_string(),
                     None => EOF.to_owned(),
                 };
-                let mut tokens_str = String::new();
-                let mut sep = "";
-                for token in tokens {
-                    tokens_str.push_str(sep);
-                    tokens_str.push_str(&token.to_string());
-                    sep = ", ";
-                }
-                write!(f, "got {}, expected {}", token_str, tokens_str)
+                let tokens = tokens.iter().map(|token| token.to_string()).join(", ");
+                write!(f, "got {}, expected {}", token, tokens)
             }
             Error::ExpectedEof(token) => {
                 write!(f, "got {}, expected {}", token, EOF)
@@ -49,6 +50,9 @@ impl fmt::Display for Error {
                 write!(f, "invalid prefix: {}", token_str)
             }
             Error::DuplicateLabel(label) => write!(f, "duplicate label: {}", label),
+            Error::InvalidTypeVarName(name) => write!(f, "invalid type var name, should be either one letter or the letter 'r' and one letter, was: {}", name),
+            Error::NoRowForConstraints(name) => write!(f, "found constraint for a row that isn't defined: {}", name),
+            Error::RowConstraintsAlreadyDefined(name) => write!(f, "constraints for a row with constraints already defined: {}", name),
         }
     }
 }
@@ -462,9 +466,59 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[derive(Default)]
+pub struct ForAll {
+    pub vars: BTreeSet<String>,
+    pub row_vars: BTreeMap<String, Constraints>,
+}
+
 // Type
 impl<'a> Parser<'a> {
-    pub fn ty(source: &str) -> Result<(Vec<String>, Type)> {
+    fn forall_ty(&mut self) -> Result<ForAll> {
+        let mut vars = BTreeSet::new();
+        let mut row_vars = BTreeMap::new();
+        loop {
+            if let Some(name) = self.matches_ident()? {
+                // TODO: Could be better
+                if name.len() == 2 && name.starts_with('r') {
+                    row_vars.insert(name, Constraints::new());
+                } else if name.len() == 1 {
+                    vars.insert(name);
+                } else {
+                    return Err(Error::InvalidTypeVarName(name));
+                }
+            } else if self.matches(Token::Dot)? {
+                self.expect(Token::LParen)?;
+                'outer: loop {
+                    let row_name = self.expect_ident()?;
+                    let row_constraints = row_vars
+                        .get_mut(&row_name)
+                        .ok_or_else(|| Error::NoRowForConstraints(row_name.clone()))?;
+                    if !row_constraints.is_empty() {
+                        return Err(Error::RowConstraintsAlreadyDefined(row_name));
+                    }
+                    'inner: loop {
+                        self.expect(Token::Backslash)?;
+                        let label = self.expect_ident()?;
+                        row_constraints.insert(label);
+                        if self.matches(Token::RParen)? {
+                            break 'outer;
+                        } else if self.matches(Token::Comma)? {
+                            break 'inner;
+                        }
+                    }
+                }
+                self.expect(Token::FatArrow)?;
+                return Ok(ForAll { vars, row_vars });
+            } else if self.matches(Token::FatArrow)? {
+                return Ok(ForAll { vars, row_vars });
+            } else {
+                return self.expected(vec![Token::empty_ident(), Token::Dot, Token::FatArrow]);
+            }
+        }
+    }
+
+    pub fn ty(source: &str) -> Result<(ForAll, Type)> {
         let lexer = Token::lexer(source);
         let mut parser = Parser {
             is_repl: false,
@@ -473,27 +527,17 @@ impl<'a> Parser<'a> {
         };
         parser.advance()?;
 
-        let mut vars = Vec::new();
-        if parser.matches(Token::ForAll)? {
-            parser.expect(Token::LBracket)?;
-            let var = parser.expect_ident()?;
-            vars.push(var);
-            loop {
-                if parser.matches(Token::RBracket)? {
-                    break;
-                } else if let Some(var) = parser.matches_ident()? {
-                    vars.push(var);
-                } else {
-                    return parser.expected(vec![Token::RBracket, Token::empty_ident()]);
-                }
-            }
-        }
+        let forall = if parser.matches(Token::ForAll)? {
+            parser.forall_ty()?
+        } else {
+            ForAll::default()
+        };
 
         let ty = parser.ty_inner()?;
         if let Some(token) = parser.token.take() {
             return Err(Error::ExpectedEof(token));
         }
-        Ok((vars, ty))
+        Ok((forall, ty))
     }
 
     fn ty_inner(&mut self) -> Result<Type> {

@@ -32,6 +32,8 @@ pub enum Token {
     Fun,
     #[token("->")]
     Arrow,
+    #[token("=>")]
+    FatArrow,
     #[token("(")]
     LParen,
     #[token(")")]
@@ -117,6 +119,7 @@ impl fmt::Display for Token {
             Token::True => "true",
             Token::False => "false",
             Token::Ident(i) => i,
+            Token::FatArrow => "=>",
         };
         write!(f, "{}", s)
     }

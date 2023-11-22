@@ -1,7 +1,9 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt,
 };
+
+use itertools::Itertools;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntBinOp {
@@ -9,6 +11,18 @@ pub enum IntBinOp {
     Minus,
     Multiply,
     Divide,
+}
+
+impl fmt::Display for IntBinOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let op = match self {
+            IntBinOp::Plus => "+",
+            IntBinOp::Minus => "-",
+            IntBinOp::Multiply => "*",
+            IntBinOp::Divide => "/",
+        };
+        write!(f, "{}", op)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -22,14 +36,11 @@ impl fmt::Display for Pattern {
         match self {
             Pattern::Var(var) => write!(f, "{}", var),
             Pattern::Record(labels) => {
-                let mut labels_str = String::new();
-                let mut sep = "";
-                for (label, pattern) in labels {
-                    labels_str.push_str(sep);
-                    labels_str.push_str(&format!("{}: {}", label, pattern));
-                    sep = ", ";
-                }
-                write!(f, "{{{}}}", labels_str)
+                let labels = labels
+                    .iter()
+                    .map(|(label, pat)| format!("{}: {}", label, pat))
+                    .join(", ");
+                write!(f, "{{{}}}", labels)
             }
         }
     }
@@ -56,6 +67,43 @@ pub enum Expr {
         Vec<(String, String, Expr)>,
         Option<(String, Box<Expr>)>,
     ),
+}
+
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Bool(b) => write!(f, "{}", b),
+            Expr::Int(i) => write!(f, "{}", i),
+            Expr::IntBinOp(op, a, b) => write!(f, "{} {} {}", a, op, b),
+            Expr::Negate(a) => write!(f, "!{}", a),
+            Expr::EqualEqual(a, b) => write!(f, "{} == {}", a, b),
+            Expr::Var(v) => write!(f, "{}", v),
+            Expr::Call(fun, args) => {
+                let args = args.iter().map(|arg| arg.to_string()).join(", ");
+                write!(f, "{}({})", fun, args)
+            }
+            Expr::Fun(params, body) => {
+                let params = params.iter().map(|param| param.to_string()).join(", ");
+                write!(f, "fun({}) -> {}", params, body)
+            }
+            Expr::Let(var, val, body) => write!(f, "let {} = {} in {}", var, val, body),
+            Expr::RecordSelect(rec, label) => write!(f, "{}.{}", rec, label),
+            Expr::RecordExtend(labels, rest) => {
+                let labels = labels
+                    .iter()
+                    .map(|(label, val)| format!("{}: {}", label, val))
+                    .join(", ");
+                match rest.as_ref() {
+                    Expr::RecordEmpty => write!(f, "{{{}}}", labels),
+                    _ => write!(f, "{{{} | {}}}", labels, rest),
+                }
+            }
+            Expr::RecordRestrict(record, label) => write!(f, "{}\\{}", record, label),
+            Expr::RecordEmpty => write!(f, "{{}}"),
+            Expr::Variant(label, value) => write!(f, ":{} {}", label, value),
+            Expr::Case(_, _, _) => todo!(),
+        }
+    }
 }
 
 pub type Id = usize;
@@ -120,11 +168,15 @@ impl Type {
     }
 }
 
+pub type Constraints = BTreeSet<String>;
+
 #[derive(Clone, Debug)]
 pub enum TypeVar {
     Unbound(Level),
+    UnboundRow(Level, Constraints),
     Link(Type),
     Generic,
+    GenericRow(Constraints),
 }
 
 #[cfg(test)]
