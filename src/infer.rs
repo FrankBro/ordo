@@ -1,7 +1,12 @@
 use core::fmt;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::expr::{Expr, Id, Level, Pattern, Type, TypeVar};
+use itertools::Itertools;
+
+use crate::{
+    expr::{Constraints, Expr, Id, Level, Pattern, Type, TypeVar},
+    parser::ForAll,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
@@ -14,6 +19,8 @@ pub enum Error {
     UnexpectedNumberOfArguments,
     ExpectedFunction,
     VariableNotFound(String),
+    CannotInjectConstraintsInto(String),
+    RowConstraintFailed(String),
 }
 
 impl fmt::Display for Error {
@@ -32,11 +39,29 @@ impl fmt::Display for Error {
             Error::UnexpectedNumberOfArguments => write!(f, "unexpected number of arguments"),
             Error::ExpectedFunction => write!(f, "expected a function"),
             Error::VariableNotFound(var) => write!(f, "variable not found: {}", var),
+            Error::CannotInjectConstraintsInto(ty) => {
+                write!(f, "cannot inject constraints into: {}", ty)
+            }
+            Error::RowConstraintFailed(label) => {
+                write!(f, "row constraint failed for label: {}", label)
+            }
         }
     }
 }
 
 type Result<T, E = Error> = std::result::Result<T, E>;
+
+trait BTreeSetExt<K: std::cmp::Ord> {
+    fn singleton(k: K) -> BTreeSet<K>;
+}
+
+impl<K: std::cmp::Ord> BTreeSetExt<K> for BTreeSet<K> {
+    fn singleton(k: K) -> BTreeSet<K> {
+        let mut set = BTreeSet::new();
+        set.insert(k);
+        set
+    }
+}
 
 trait BTreeMapExt<K: std::cmp::Ord, V> {
     fn singleton(k: K, v: V) -> BTreeMap<K, V>;
@@ -63,9 +88,21 @@ impl Env {
         Type::Var(id)
     }
 
+    fn new_unbound_row(&mut self, level: Level, constraints: Constraints) -> Type {
+        let id = self.type_vars.len();
+        self.type_vars.push(TypeVar::UnboundRow(level, constraints));
+        Type::Var(id)
+    }
+
     fn new_generic(&mut self) -> Type {
         let id = self.type_vars.len();
         self.type_vars.push(TypeVar::Generic);
+        Type::Var(id)
+    }
+
+    fn new_generic_row(&mut self, constraints: Constraints) -> Type {
+        let id = self.type_vars.len();
+        self.type_vars.push(TypeVar::GenericRow(constraints));
         Type::Var(id)
     }
 
@@ -89,12 +126,21 @@ impl Env {
                 let other = self.get_mut_type_var(*other_id)?;
                 match other.clone() {
                     TypeVar::Link(ty) => self.occurs_check_adjust_levels(id, level, &ty),
-                    TypeVar::Generic => panic!(),
+                    TypeVar::Generic | TypeVar::GenericRow(_) => panic!(),
                     TypeVar::Unbound(other_level) => {
                         if other_id == &id {
                             return Err(Error::RecursiveType);
                         } else if other_level > level {
                             *other = TypeVar::Unbound(level);
+                        }
+                        Ok(())
+                    }
+                    TypeVar::UnboundRow(other_level, constraints) => {
+                        if other_id == &id {
+                            // TODO: Should be RecursiveRowType?
+                            return Err(Error::RecursiveType);
+                        } else if other_level > level {
+                            *other = TypeVar::UnboundRow(level, constraints);
                         }
                         Ok(())
                     }
@@ -130,7 +176,79 @@ impl Env {
         Err(Error::CannotUnify(ty1, ty2))
     }
 
+    fn inject_constraints(
+        &mut self,
+        is_variant: bool,
+        constraints: Constraints,
+        ty: &Type,
+    ) -> Result<()> {
+        match ty {
+            Type::Var(id) => {
+                let type_var = self.get_mut_type_var(*id)?;
+                match type_var.clone() {
+                    TypeVar::Link(ty) => self.inject_constraints(false, constraints, &ty),
+                    TypeVar::UnboundRow(level, other_constraints) => {
+                        /* TODO: Why did I have this before?
+                        if !is_variant {
+                            let mut intersection = constraints.intersection(&other_constraints);
+                            if let Some(label) = intersection.next() {
+                                println!(
+                                    "unbound row: {:?}, {}",
+                                    intersection,
+                                    self.ty_to_string(ty).unwrap()
+                                );
+                                return Err(Error::RowConstraintFailed(label.clone()));
+                            }
+                        }
+                        */
+                        let constraints = constraints.union(&other_constraints).cloned().collect();
+                        *type_var = TypeVar::UnboundRow(level, constraints);
+                        Ok(())
+                    }
+                    TypeVar::GenericRow(other_constraints) => {
+                        if !is_variant {
+                            let mut intersection = constraints.intersection(&other_constraints);
+                            if let Some(label) = intersection.next() {
+                                println!("generic row: {:?}", intersection);
+                                return Err(Error::RowConstraintFailed(label.clone()));
+                            }
+                        }
+                        let constraints = constraints.union(&other_constraints).cloned().collect();
+                        *type_var = TypeVar::GenericRow(constraints);
+                        Ok(())
+                    }
+                    _ => {
+                        let ty = self.ty_to_string(ty)?;
+                        Err(Error::CannotInjectConstraintsInto(ty))
+                    }
+                }
+            }
+            Type::Record(ty) => self.inject_constraints(false, constraints, ty),
+            Type::Variant(ty) => self.inject_constraints(true, constraints, ty),
+            Type::RowExtend(_, _) => {
+                let (labels, rest) = self.match_row_ty(ty)?;
+                for label in labels.keys() {
+                    if !is_variant && constraints.contains(label) {
+                        println!("row extend");
+                        return Err(Error::RowConstraintFailed(label.clone()));
+                    }
+                }
+                self.inject_constraints(is_variant, constraints, &rest)?;
+                Ok(())
+            }
+            Type::RowEmpty => Ok(()),
+            _ => {
+                let ty = self.ty_to_string(ty)?;
+                Err(Error::CannotInjectConstraintsInto(ty))
+            }
+        }
+    }
+
     fn unify(&mut self, ty1: &Type, ty2: &Type) -> Result<()> {
+        self.unify_inner(false, ty1, ty2)
+    }
+
+    fn unify_inner(&mut self, is_variant: bool, ty1: &Type, ty2: &Type) -> Result<()> {
         if ty1 == ty2 {
             return Ok(());
         }
@@ -143,9 +261,9 @@ impl Env {
                 for i in 0..args1.len() {
                     let arg1 = &args1[i];
                     let arg2 = &args2[i];
-                    self.unify(arg1, arg2)?;
+                    self.unify_inner(is_variant, arg1, arg2)?;
                 }
-                self.unify(app_ty1, app_ty2)
+                self.unify_inner(is_variant, app_ty1, app_ty2)
             }
             (Type::Arrow(params1, ret1), Type::Arrow(params2, ret2)) => {
                 if params1.len() != params2.len() {
@@ -154,9 +272,9 @@ impl Env {
                 for i in 0..params1.len() {
                     let param1 = &params1[i];
                     let param2 = &params2[i];
-                    self.unify(param1, param2)?;
+                    self.unify_inner(is_variant, param1, param2)?;
                 }
-                self.unify(ret1, ret2)
+                self.unify_inner(is_variant, ret1, ret2)
             }
             (Type::Var(id1), Type::Var(id2)) if id1 == id2 => {
                 panic!("multiple instance of a type variable")
@@ -168,8 +286,14 @@ impl Env {
                         self.occurs_check_adjust_levels(*id, level, ty2)?;
                         self.link(*id, ty2.clone())
                     }
-                    TypeVar::Link(ty1) => self.unify(&ty1, ty2),
+                    TypeVar::UnboundRow(level, constraints) => {
+                        self.inject_constraints(is_variant, constraints, ty2)?;
+                        self.occurs_check_adjust_levels(*id, level, ty2)?;
+                        self.link(*id, ty2.clone())
+                    }
+                    TypeVar::Link(ty1) => self.unify_inner(is_variant, &ty1, ty2),
                     TypeVar::Generic => self.cannot_unify(ty1, ty2),
+                    TypeVar::GenericRow(_) => self.cannot_unify(ty1, ty2),
                 }
             }
             (_, Type::Var(id)) => {
@@ -179,12 +303,18 @@ impl Env {
                         self.occurs_check_adjust_levels(*id, level, ty1)?;
                         self.link(*id, ty1.clone())
                     }
-                    TypeVar::Link(ty2) => self.unify(ty1, &ty2),
+                    TypeVar::UnboundRow(level, constraints) => {
+                        self.inject_constraints(is_variant, constraints, ty1)?;
+                        self.occurs_check_adjust_levels(*id, level, ty1)?;
+                        self.link(*id, ty1.clone())
+                    }
+                    TypeVar::Link(ty2) => self.unify_inner(is_variant, ty1, &ty2),
                     TypeVar::Generic => self.cannot_unify(ty1, ty2),
+                    TypeVar::GenericRow(_) => self.cannot_unify(ty1, ty2),
                 }
             }
-            (Type::Record(row1), Type::Record(row2)) => self.unify(row1, row2),
-            (Type::Variant(row1), Type::Variant(row2)) => self.unify(row1, row2),
+            (Type::Record(row1), Type::Record(row2)) => self.unify_inner(false, row1, row2),
+            (Type::Variant(row1), Type::Variant(row2)) => self.unify_inner(true, row1, row2),
             (Type::RowEmpty, Type::RowEmpty) => Ok(()),
             (Type::RowExtend(_, _), Type::RowExtend(_, _)) => self.unify_rows(ty1, ty2),
             (Type::RowEmpty, Type::RowExtend(labels, _))
@@ -261,7 +391,15 @@ impl Env {
                     let type_var = self.get_type_var(id)?;
                     match type_var.clone() {
                         TypeVar::Unbound(level) => {
-                            let rest = self.new_unbound(level);
+                            let rest = self.new_unbound_row(level, Constraints::new());
+                            self.unify(&rest2, &Type::RowExtend(missing2, rest.clone().into()))?;
+                            if let TypeVar::Link(_) = self.get_type_var(id)? {
+                                return Err(Error::RecursiveRowType);
+                            }
+                            self.unify(&rest1, &Type::RowExtend(missing1, rest.into()))
+                        }
+                        TypeVar::UnboundRow(level, constraints) => {
+                            let rest = self.new_unbound_row(level, constraints);
                             self.unify(&rest2, &Type::RowExtend(missing2, rest.clone().into()))?;
                             if let TypeVar::Link(_) = self.get_type_var(id)? {
                                 return Err(Error::RecursiveRowType);
@@ -285,9 +423,15 @@ impl Env {
                         *type_var = TypeVar::Generic;
                         Ok(())
                     }
-                    TypeVar::Unbound(_) => Ok(()),
+                    TypeVar::UnboundRow(other_level, constraints) if other_level > level => {
+                        *type_var = TypeVar::GenericRow(constraints);
+                        Ok(())
+                    }
                     TypeVar::Link(ty) => self.generalize(level, &ty),
-                    TypeVar::Generic => Ok(()),
+                    TypeVar::Unbound(_)
+                    | TypeVar::UnboundRow(_, _)
+                    | TypeVar::Generic
+                    | TypeVar::GenericRow(_) => Ok(()),
                 }
             }
             Type::App(ty, args) => {
@@ -330,10 +474,16 @@ impl Env {
             Type::Var(id) => {
                 let type_var = self.get_type_var(id)?;
                 match type_var.clone() {
-                    TypeVar::Unbound(_) => Ok(ty),
+                    TypeVar::Unbound(_) | TypeVar::UnboundRow(_, _) => Ok(ty),
                     TypeVar::Link(ty) => self.instantiate_inner(id_vars, level, ty),
                     TypeVar::Generic => {
                         let ty = id_vars.entry(id).or_insert_with(|| self.new_unbound(level));
+                        Ok(ty.clone())
+                    }
+                    TypeVar::GenericRow(constraints) => {
+                        let ty = id_vars
+                            .entry(id)
+                            .or_insert_with(|| self.new_unbound_row(level, constraints));
                         Ok(ty.clone())
                     }
                 }
@@ -396,7 +546,9 @@ impl Env {
                         Ok((params, ret))
                     }
                     TypeVar::Link(ty) => self.match_fun_ty(num_params, ty),
-                    TypeVar::Generic => Err(Error::ExpectedFunction),
+                    TypeVar::UnboundRow(_, _) | TypeVar::Generic | TypeVar::GenericRow(_) => {
+                        Err(Error::ExpectedFunction)
+                    }
                 }
             }
             _ => Err(Error::ExpectedFunction),
@@ -500,7 +652,7 @@ impl Env {
             }
             Expr::RecordEmpty => Ok(Type::Record(Type::RowEmpty.into())),
             Expr::RecordSelect(record, label) => {
-                let rest = self.new_unbound(level);
+                let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
                 let field = self.new_unbound(level);
                 let param = Type::Record(
                     Type::RowExtend(
@@ -515,7 +667,7 @@ impl Env {
                 Ok(ret)
             }
             Expr::RecordRestrict(record, label) => {
-                let rest = self.new_unbound(level);
+                let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
                 let field = self.new_unbound(level);
                 let param = Type::Record(
                     Type::RowExtend(
@@ -531,17 +683,18 @@ impl Env {
             }
             Expr::RecordExtend(labels, record) => {
                 let mut tys = BTreeMap::new();
+                let constraints = labels.keys().cloned().collect();
                 for (label, expr) in labels {
                     let ty = self.infer_inner(level, expr)?;
                     tys.insert(label.clone(), ty);
                 }
-                let rest = self.new_unbound(level);
+                let rest = self.new_unbound_row(level, constraints);
                 let record = self.infer_inner(level, record)?;
                 self.unify(&Type::Record(rest.clone().into()), &record)?;
                 Ok(Type::Record(Type::RowExtend(tys, rest.into()).into()))
             }
             Expr::Variant(label, expr) => {
-                let rest = self.new_unbound(level);
+                let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
                 let variant = self.new_unbound(level);
                 let param = variant.clone();
                 let ret = Type::Variant(
@@ -560,7 +713,8 @@ impl Env {
                 Ok(ret)
             }
             Expr::Case(expr, cases, Some((def_var, def_expr))) => {
-                let def_variant = self.new_unbound(level);
+                let constraints = cases.iter().map(|(label, _, _)| label).cloned().collect();
+                let def_variant = self.new_unbound_row(level, constraints);
                 let old_vars = self.vars.clone();
                 self.vars
                     .insert(def_var.clone(), Type::Variant(def_variant.clone().into()));
@@ -594,12 +748,17 @@ impl Env {
         Ok(Type::RowExtend(labels, rest.into()))
     }
 
-    pub fn replace_ty_constants_with_vars(&mut self, vars: Vec<String>, mut ty: Type) -> Type {
-        if !vars.is_empty() {
-            let env = vars
-                .into_iter()
-                .map(|name| (name, self.new_generic()))
-                .collect();
+    pub fn replace_ty_constants_with_vars(&mut self, forall: ForAll, mut ty: Type) -> Type {
+        if !forall.vars.is_empty() || !forall.row_vars.is_empty() {
+            let mut env = HashMap::new();
+            for var in forall.vars {
+                let ty = self.new_generic();
+                env.insert(var, ty);
+            }
+            for (row_var, constraints) in forall.row_vars {
+                let ty = self.new_generic_row(constraints);
+                env.insert(row_var, ty);
+            }
             ty = ty.replace_const_with_vars(&env);
         }
         ty
@@ -607,7 +766,41 @@ impl Env {
 
     pub fn ty_to_string(&self, ty: &Type) -> Result<String> {
         let mut namer = Namer::new();
-        self.ty_to_string_impl(&mut namer, ty, false, false)
+        let mut ty = self.ty_to_string_impl(&mut namer, ty, false)?;
+        if !namer.names.is_empty() || !namer.row_names.is_empty() {
+            let names: BTreeSet<String> = namer
+                .names
+                .into_values()
+                .map(|name| (name as char).to_string())
+                .collect();
+            let row_names: BTreeMap<String, Constraints> = namer
+                .row_names
+                .into_iter()
+                .map(|(id, name)| {
+                    let type_var = self.get_type_var(id)?;
+                    match type_var {
+                        TypeVar::GenericRow(constraints) => {
+                            let name = format!("r{}", name as char);
+                            Ok((name, constraints.clone()))
+                        }
+                        _ => unreachable!(),
+                    }
+                })
+                .collect::<Result<BTreeMap<_, _>, Error>>()?;
+            let args = names.iter().chain(row_names.keys()).join(", ");
+            let mut constraints = row_names
+                .iter()
+                .filter(|(_, constraints)| !constraints.is_empty())
+                .map(|(row_name, constraints)| {
+                    format!("{}\\{}", row_name, constraints.iter().join("\\"))
+                })
+                .join(", ");
+            if !constraints.is_empty() {
+                constraints = format!(". ({})", constraints);
+            }
+            ty = format!("forall {}{} => {}", args, constraints, ty);
+        }
+        Ok(ty)
     }
 
     fn real_ty(&self, ty: Type) -> Result<Type> {
@@ -623,23 +816,17 @@ impl Env {
         }
     }
 
-    fn ty_to_string_impl(
-        &self,
-        namer: &mut Namer,
-        ty: &Type,
-        is_simple: bool,
-        is_row: bool,
-    ) -> Result<String> {
+    fn ty_to_string_impl(&self, namer: &mut Namer, ty: &Type, is_simple: bool) -> Result<String> {
         match ty {
             Type::Const(name) => Ok(name.clone()),
             Type::App(ty, args) => {
-                let mut ty_str = self.ty_to_string_impl(namer, ty, true, is_row)?;
+                let mut ty_str = self.ty_to_string_impl(namer, ty, true)?;
                 ty_str.push('[');
                 for (i, arg) in args.iter().enumerate() {
                     if i != 0 {
                         ty_str.push_str(", ")
                     }
-                    let arg = self.ty_to_string_impl(namer, arg, false, is_row)?;
+                    let arg = self.ty_to_string_impl(namer, arg, false)?;
                     ty_str.push_str(&arg);
                 }
                 ty_str.push(']');
@@ -652,8 +839,8 @@ impl Env {
                     "".to_owned()
                 };
                 if params.len() == 1 {
-                    let param = self.ty_to_string_impl(namer, &params[0], true, is_row)?;
-                    let ret = self.ty_to_string_impl(namer, ret, false, is_row)?;
+                    let param = self.ty_to_string_impl(namer, &params[0], true)?;
+                    let ret = self.ty_to_string_impl(namer, ret, false)?;
                     ty_str.push_str(&param);
                     ty_str.push_str(" -> ");
                     ty_str.push_str(&ret);
@@ -663,10 +850,10 @@ impl Env {
                         if i != 0 {
                             ty_str.push_str(", ");
                         }
-                        let param = self.ty_to_string_impl(namer, param, false, is_row)?;
+                        let param = self.ty_to_string_impl(namer, param, false)?;
                         ty_str.push_str(&param);
                     }
-                    let ret = self.ty_to_string_impl(namer, ret, false, is_row)?;
+                    let ret = self.ty_to_string_impl(namer, ret, false)?;
                     ty_str.push_str(") -> ");
                     ty_str.push_str(&ret);
                 }
@@ -679,46 +866,44 @@ impl Env {
                 let tvar = self.get_type_var(*id)?;
                 match tvar {
                     TypeVar::Generic => {
-                        if is_row {
-                            let name = namer.get_or_insert_row_name(*id);
-                            Ok(format!("r{}", name))
-                        } else {
-                            let name = namer.get_or_insert_name(*id);
-                            Ok(name.to_string())
-                        }
+                        let name = namer.get_or_insert_name(*id);
+                        Ok(name.to_string())
+                    }
+                    TypeVar::GenericRow(_) => {
+                        let name = namer.get_or_insert_row_name(*id);
+                        Ok(format!("r{}", name))
                     }
                     TypeVar::Unbound(_) => Ok(format!("_{}", id)),
-                    TypeVar::Link(ty) => self.ty_to_string_impl(namer, ty, is_simple, is_row),
+                    TypeVar::UnboundRow(_, _) => Ok(format!("_row{}", id)),
+                    TypeVar::Link(ty) => self.ty_to_string_impl(namer, ty, is_simple),
                 }
             }
             Type::Record(row) => {
-                let ty = self.ty_to_string_impl(namer, row, is_simple, true)?;
+                let ty = self.ty_to_string_impl(namer, row, is_simple)?;
                 Ok(format!("{{{}}}", ty))
             }
             Type::Variant(row) => {
-                let ty = self.ty_to_string_impl(namer, row, is_simple, true)?;
+                let ty = self.ty_to_string_impl(namer, row, is_simple)?;
                 Ok(format!("[{}]", ty))
             }
             Type::RowEmpty => Ok("".to_string()),
             Type::RowExtend(_, _) => {
                 let (labels, rest) = self.match_row_ty(ty)?;
-                let mut output = String::new();
-                let mut sep = "";
-                for (label, ty) in labels {
-                    output.push_str(sep);
-                    output.push_str(&label);
-                    output.push_str(": ");
-                    let ty = self.ty_to_string_impl(namer, &ty, is_simple, is_row)?;
-                    output.push_str(&ty);
-                    sep = ", ";
-                }
+                let mut output = labels
+                    .into_iter()
+                    .map(|(label, ty)| {
+                        self.ty_to_string_impl(namer, &ty, is_simple)
+                            .map(|ty| format!("{}: {}", label, ty))
+                    })
+                    .collect::<Result<Vec<String>>>()?
+                    .iter()
+                    .join(", ");
                 match self.real_ty(rest)? {
                     Type::RowEmpty => (),
                     Type::RowExtend(_, _) => unreachable!(),
                     other_ty => {
                         output.push_str(" | ");
-                        let other_ty =
-                            self.ty_to_string_impl(namer, &other_ty, is_simple, is_row)?;
+                        let other_ty = self.ty_to_string_impl(namer, &other_ty, is_simple)?;
                         output.push_str(&other_ty);
                     }
                 }
@@ -782,317 +967,278 @@ mod tests {
 
     use super::Error;
 
-    enum Expected {
-        Pass(String),
-        Fail(Error),
+    #[track_caller]
+    fn pass(expr_str: &str, expected: &str) {
+        let (forall, ty) = Parser::ty(expected).unwrap();
+        let mut env = make_env();
+        let expected = env.replace_ty_constants_with_vars(forall, ty);
+        let expr = Parser::expr(expr_str).unwrap();
+        let actual = env.infer_inner(0, &expr).unwrap();
+        env.generalize(-1, &actual).unwrap();
+        let expected = env.ty_to_string(&expected).unwrap();
+        let actual = env.ty_to_string(&actual).unwrap();
+        assert_eq!(expected, actual, "for {}", expr_str);
     }
 
-    fn pass(sig: &str) -> Expected {
-        Expected::Pass(sig.to_owned())
-    }
-
-    fn fail(e: Error) -> Expected {
-        Expected::Fail(e)
-    }
-
-    fn run_cases(cases: Vec<(&str, Expected)>) {
-        let env = make_env();
-        for (expr_str, expected) in cases {
-            match expected {
-                Expected::Pass(expected) => {
-                    let (vars, ty) = Parser::ty(&expected).unwrap();
-                    let mut env = env.clone();
-                    let expected = env.replace_ty_constants_with_vars(vars, ty);
-                    let expr = Parser::expr(expr_str).unwrap();
-                    let actual = env.infer_inner(0, &expr).unwrap();
-                    env.generalize(-1, &actual).unwrap();
-                    let expected = env.ty_to_string(&expected).unwrap();
-                    let actual = env.ty_to_string(&actual).unwrap();
-                    assert_eq!(expected, actual, "for {}", expr_str);
-                }
-                Expected::Fail(expected) => {
-                    let mut env = env.clone();
-                    let expr = Parser::expr(expr_str).unwrap();
-                    let actual = env.infer_inner(0, &expr).unwrap_err();
-                    assert_eq!(expected, actual, "for {}", expr_str);
-                }
-            }
-        }
+    #[track_caller]
+    fn fail(expr_str: &str, expected: Error) {
+        let mut env = make_env();
+        let expr = Parser::expr(expr_str).unwrap();
+        let actual = env.infer_inner(0, &expr).unwrap_err();
+        assert_eq!(expected, actual, "for {}", expr_str);
     }
 
     #[test]
     fn infer_base() {
-        let test_cases: Vec<(&str, Expected)> = vec![
-            ("id", pass("forall[a] a -> a")),
-            ("one", pass("int")),
-            ("x", fail(Error::VariableNotFound("x".to_owned()))),
-            (
-                "let x = x in x",
-                fail(Error::VariableNotFound("x".to_owned())),
-            ),
-            ("let x = id in x", pass("forall[a] a -> a")),
-            ("let x = fun(y) -> y in x", pass("forall[a] a -> a")),
-            ("fun(x) -> x", pass("forall[a] a -> a")),
-            ("fun(x) -> x", pass("forall[int] int -> int")),
-            ("pair", pass("forall[a b] (a, b) -> pair[a, b]")),
-            ("pair", pass("forall[z x] (x, z) -> pair[x, z]")),
-            (
-                "fun(x) -> let y = fun(z) -> z in y",
-                pass("forall[a b] a -> b -> b"),
-            ),
-            (
-                "let f = fun(x) -> x in let id = fun(y) -> y in eq(f, id)",
-                pass("bool"),
-            ),
-            (
-                "let f = fun(x) -> x in let id = fun(y) -> y in eq_curry(f)(id)",
-                pass("bool"),
-            ),
-            ("let f = fun(x) -> x in eq(f, succ)", pass("bool")),
-            ("let f = fun(x) -> x in eq_curry(f)(succ)", pass("bool")),
-            (
-                "let f = fun(x) -> x in pair(f(one), f(true))",
-                pass("pair[int, bool]"),
-            ),
-            (
-                "fun(f) -> pair(f(one), f(true))",
-                fail(Error::CannotUnify("bool".to_owned(), "int".to_owned())),
-            ),
-            (
-                "let f = fun(x, y) -> let a = eq(x, y) in eq(x, y) in f",
-                pass("forall[a] (a, a) -> bool"),
-            ),
-            (
-                "let f = fun(x, y) -> let a = eq_curry(x)(y) in eq_curry(x)(y) in f",
-                pass("forall[a] (a, a) -> bool"),
-            ),
-            ("id(id)", pass("forall[a] a -> a")),
-            (
-                "choose(fun(x, y) -> x, fun(x, y) -> y)",
-                pass("forall[a] (a, a) -> a"),
-            ),
-            (
-                "choose_curry(fun(x, y) -> x)(fun(x, y) -> y)",
-                pass("forall[a] (a, a) -> a"),
-            ),
-            (
-                "let x = id in let y = let z = x(id) in z in y",
-                pass("forall[a] a -> a"),
-            ),
-            ("cons(id, nil)", pass("forall[a] list[a -> a]")),
-            ("cons_curry(id)(nil)", pass("forall[a] list[a -> a]")),
-            (
-                "let lst1 = cons(id, nil) in let lst2 = cons(succ, lst1) in lst2",
-                pass("list[int -> int]"),
-            ),
-            (
-                "cons_curry(id)(cons_curry(succ)(cons_curry(id)(nil)))",
-                pass("list[int -> int]"),
-            ),
-            (
-                "plus(one, true)",
-                fail(Error::CannotUnify("bool".to_owned(), "int".to_owned())),
-            ),
-            ("plus(one)", fail(Error::UnexpectedNumberOfArguments)),
-            ("fun(x) -> let y = x in y", pass("forall[a] a -> a")),
-            (
-                "fun(x) -> let y = let z = x(fun(x) -> x) in z in y",
-                pass("forall[a b] ((a -> a) -> b) -> b"),
-            ),
-            (
-                "fun(x) -> fun(y) -> let x = x(y) in x(y)",
-                pass("forall[a b] (a -> a -> b) -> a -> b"),
-            ),
-            (
-                "fun(x) -> let y = fun(z) -> x(z) in y",
-                pass("forall[a b] (a -> b) -> a -> b"),
-            ),
-            (
-                "fun(x) -> let y = fun(z) -> x in y",
-                pass("forall[a b] a -> b -> a"),
-            ),
-            (
-                "fun(x) -> fun(y) -> let x = x(y) in fun(x) -> y(x)",
-                pass("forall[a b c] ((a -> b) -> c) -> (a -> b) -> a -> b"),
-            ),
-            ("fun(x) -> let y = x in y(y)", fail(Error::RecursiveType)),
-            (
-                "fun(x) -> let y = fun(z) -> z in y(y)",
-                pass("forall[a b] a -> b -> b"),
-            ),
-            ("fun(x) -> x(x)", fail(Error::RecursiveType)),
-            ("one(id)", fail(Error::ExpectedFunction)),
-            (
-                "fun(f) -> let x = fun(g, y) -> let _ = g(y) in eq(f, g) in x",
-                pass("forall[a b] (a -> b) -> (a -> b, a) -> bool"),
-            ),
-            (
-                "let const = fun(x) -> fun(y) -> x in const",
-                pass("forall[a b] a -> b -> a"),
-            ),
-            (
-                "let apply = fun(f, x) -> f(x) in apply",
-                pass("forall[a b] (a -> b, a) -> b"),
-            ),
-            (
-                "let apply_curry = fun(f) -> fun(x) -> f(x) in apply_curry",
-                pass("forall[a b] (a -> b) -> a -> b"),
-            ),
-        ];
-        run_cases(test_cases)
+        pass("id", "forall a => a -> a");
+        pass("one", "int");
+        fail("x", Error::VariableNotFound("x".to_owned()));
+        fail("let x = x in x", Error::VariableNotFound("x".to_owned()));
+        pass("let x = id in x", "forall a => a -> a");
+        pass("let x = fun(y) -> y in x", "forall a => a -> a");
+        pass("fun(x) -> x", "forall a => a -> a");
+        pass("pair", "forall a b => (a, b) -> pair[a, b]");
+        pass("pair", "forall z x => (x, z) -> pair[x, z]");
+        pass(
+            "fun(x) -> let y = fun(z) -> z in y",
+            "forall a b => a -> b -> b",
+        );
+        pass(
+            "let f = fun(x) -> x in let id = fun(y) -> y in eq(f, id)",
+            "bool",
+        );
+        pass(
+            "let f = fun(x) -> x in let id = fun(y) -> y in eq_curry(f)(id)",
+            "bool",
+        );
+        pass("let f = fun(x) -> x in eq(f, succ)", "bool");
+        pass("let f = fun(x) -> x in eq_curry(f)(succ)", "bool");
+        pass(
+            "let f = fun(x) -> x in pair(f(one), f(true))",
+            "pair[int, bool]",
+        );
+        fail(
+            "fun(f) -> pair(f(one), f(true))",
+            Error::CannotUnify("bool".to_owned(), "int".to_owned()),
+        );
+        pass(
+            "let f = fun(x, y) -> let a = eq(x, y) in eq(x, y) in f",
+            "forall a => (a, a) -> bool",
+        );
+        pass(
+            "let f = fun(x, y) -> let a = eq_curry(x)(y) in eq_curry(x)(y) in f",
+            "forall a => (a, a) -> bool",
+        );
+        pass("id(id)", "forall a => a -> a");
+        pass(
+            "choose(fun(x, y) -> x, fun(x, y) -> y)",
+            "forall a => (a, a) -> a",
+        );
+        pass(
+            "choose_curry(fun(x, y) -> x)(fun(x, y) -> y)",
+            "forall a => (a, a) -> a",
+        );
+        pass(
+            "let x = id in let y = let z = x(id) in z in y",
+            "forall a => a -> a",
+        );
+        pass("cons(id, nil)", "forall a => list[a -> a]");
+        pass("cons_curry(id)(nil)", "forall a => list[a -> a]");
+        pass(
+            "let lst1 = cons(id, nil) in let lst2 = cons(succ, lst1) in lst2",
+            "list[int -> int]",
+        );
+        pass(
+            "cons_curry(id)(cons_curry(succ)(cons_curry(id)(nil)))",
+            "list[int -> int]",
+        );
+        fail(
+            "plus(one, true)",
+            Error::CannotUnify("bool".to_owned(), "int".to_owned()),
+        );
+        fail("plus(one)", Error::UnexpectedNumberOfArguments);
+        pass("fun(x) -> let y = x in y", "forall a => a -> a");
+        pass(
+            "fun(x) -> let y = let z = x(fun(x) -> x) in z in y",
+            "forall a b => ((a -> a) -> b) -> b",
+        );
+        pass(
+            "fun(x) -> fun(y) -> let x = x(y) in x(y)",
+            "forall a b => (a -> a -> b) -> a -> b",
+        );
+        pass(
+            "fun(x) -> let y = fun(z) -> x(z) in y",
+            "forall a b => (a -> b) -> a -> b",
+        );
+        pass(
+            "fun(x) -> let y = fun(z) -> x in y",
+            "forall a b => a -> b -> a",
+        );
+        pass(
+            "fun(x) -> fun(y) -> let x = x(y) in fun(x) -> y(x)",
+            "forall a b c => ((a -> b) -> c) -> (a -> b) -> a -> b",
+        );
+        fail("fun(x) -> let y = x in y(y)", Error::RecursiveType);
+        pass(
+            "fun(x) -> let y = fun(z) -> z in y(y)",
+            "forall a b => a -> b -> b",
+        );
+        fail("fun(x) -> x(x)", Error::RecursiveType);
+        fail("one(id)", Error::ExpectedFunction);
+        pass(
+            "fun(f) -> let x = fun(g, y) -> let _ = g(y) in eq(f, g) in x",
+            "forall a b => (a -> b) -> (a -> b, a) -> bool",
+        );
+        pass(
+            "let const = fun(x) -> fun(y) -> x in const",
+            "forall a b => a -> b -> a",
+        );
+        pass(
+            "let apply = fun(f, x) -> f(x) in apply",
+            "forall a b => (a -> b, a) -> b",
+        );
+        pass(
+            "let apply_curry = fun(f) -> fun(x) -> f(x) in apply_curry",
+            "forall a b => (a -> b) -> a -> b",
+        );
     }
 
     #[test]
     fn infer_records() {
-        let test_cases = vec![
-            ("{}", pass("{}")),
-            ("{}.x", fail(Error::MissingLabel("x".to_owned()))),
-            ("{a = one}", pass("{a : int}")),
-            ("{a = one, b = true}", pass("{a : int, b : bool}")),
-            ("{b = true, a = one}", pass("{b : bool, a : int}")),
-            ("{a = one, b = true}.a", pass("int")),
-            ("{a = one, b = true}.b", pass("bool")),
-            (
-                "{a = one, b = true}.c",
-                fail(Error::MissingLabel("c".to_owned())),
-            ),
-            ("{f = fun(x) -> x}", pass("forall[a] {f : a -> a}")),
-            (
-                "let r = {a = id, b = succ} in choose(r.a, r.b)",
-                pass("int -> int"),
-            ),
-            (
-                "let r = {a = id, b = fun(x) -> x} in choose(r.a, r.b)",
-                pass("forall[a] a -> a"),
-            ),
-            (
-                "choose({a = one}, {})",
-                fail(Error::MissingLabel("a".to_owned())),
-            ),
-            (
-                "{ x = zero | { y = one | {} } }",
-                pass("{y : int, x : int}"),
-            ),
-            (
-                "choose({ x = zero | { y = one | {} } }, {x = one, y = zero})",
-                pass("{y : int, x : int}"),
-            ),
-            ("{}\\x", fail(Error::MissingLabel("x".to_owned()))),
-            ("{x = one, y = zero} \\ x", pass("{y : int}")),
-            ("{ x = true | {x = one}}", pass("{x : bool}")),
-            ("let a = {} in {b = one | a}", pass("{b : int}")),
-            ("let a = {x = one} in {x = true | a}.x", pass("bool")),
-            (
-                "let a = {x = one} in a.y",
-                fail(Error::MissingLabel("y".to_owned())),
-            ),
-            ("let a = {x = one} in a \\ x", pass("{}")),
-            (
-                "let a = {x = one} in let b = {x = true | a} in b\\x.x",
-                fail(Error::MissingLabel("x".to_owned())),
-            ),
-            (
-                "fun(r) -> {x = one | r}",
-                pass("forall[r] {r} -> {x : int | r}"),
-            ),
-            ("fun(r) -> r.x", pass("forall[r a] {x : a | r} -> a")),
-            (
-                "let get_x = fun(r) -> r.x in get_x({y = one, x = zero})",
-                pass("int"),
-            ),
-            (
-                "let get_x = fun(r) -> r.x in get_x({y = one, z = true})",
-                fail(Error::MissingLabel("x".to_owned())),
-            ),
-            (
-                "fun(r) -> choose({x = zero | r}, {x = one | {}})",
-                pass("{} -> {x : int}"),
-            ),
-            (
-                "fun(r) -> choose({x = zero | r}, {x = one})",
-                pass("{} -> {x : int}"),
-            ),
-            (
-                "fun(r) -> choose({x = zero | r}, {x = one | r})",
-                pass("forall[r] {r} -> {x : int | r}"),
-            ),
-            (
-                "fun(r) -> choose({x = zero | r}, {y = one | r})",
-                fail(Error::RecursiveRowType),
-            ),
-            ("let f = fun(x) -> x.t(one) in f({t = succ})", pass("int")),
-            ("let f = fun(x) -> x.t(one) in f({t = id})", pass("int")),
-            (
-                "let f = fun(r) -> let y = r.y in choose(r, {x = one}) in f",
-                fail(Error::MissingLabel("y".to_owned())),
-            ),
-            (
-                "fun(r) -> choose({x = zero | r}, {x = true | r})",
-                fail(Error::CannotUnify("int".to_owned(), "bool".to_owned())),
-            ),
-            (
-                "fun(r, s) -> choose({b = true, c = zero | r}, {b = false, c = one, d = half | s})",
-                pass("forall[a] ({d : float | a}, {a}) -> {b : bool, c : int, d : float | a}"),
-            ),
-            (
-                "fun(r) -> {x = r | r}",
-                pass("forall[a] {a} -> {x : {a} | a}"),
-            ),
-        ];
-        run_cases(test_cases);
+        pass("{}", "{}");
+        fail("{}.x", Error::MissingLabel("x".to_owned()));
+        pass("{a = one}", "{a : int}");
+        pass("{a = one, b = true}", "{a : int, b : bool}");
+        pass("{b = true, a = one}", "{b : bool, a : int}");
+        pass("{a = one, b = true}.a", "int");
+        pass("{a = one, b = true}.b", "bool");
+        fail("{a = one, b = true}.c", Error::MissingLabel("c".to_owned()));
+        pass("{f = fun(x) -> x}", "forall a => {f : a -> a}");
+        pass(
+            "let r = {a = id, b = succ} in choose(r.a, r.b)",
+            "int -> int",
+        );
+        pass(
+            "let r = {a = id, b = fun(x) -> x} in choose(r.a, r.b)",
+            "forall a => a -> a",
+        );
+        fail("choose({a = one}, {})", Error::MissingLabel("a".to_owned()));
+        pass("{ x = zero | { y = one | {} } }", "{y : int, x : int}");
+        pass(
+            "choose({ x = zero | { y = one | {} } }, {x = one, y = zero})",
+            "{y : int, x : int}",
+        );
+        fail("{}\\x", Error::MissingLabel("x".to_owned()));
+        pass("{x = one, y = zero} \\ x", "{y : int}");
+        pass("{ x = true | {x = one}\\x}", "{x : bool}");
+        pass("let a = {} in {b = one | a}", "{b : int}");
+        pass("let a = {x = one} in {x = true | a\\x}.x", "bool");
+        fail(
+            "let a = {x = one} in a.y",
+            Error::MissingLabel("y".to_owned()),
+        );
+        pass("let a = {x = one} in a \\ x", "{}");
+        fail(
+            "let a = {x = one} in let b = {x = true | a\\x} in b\\x.x",
+            Error::MissingLabel("x".to_owned()),
+        );
+        pass(
+            "fun(r) -> {x = one | r}",
+            "forall ra. (ra\\x) => {ra} -> {x : int | ra}",
+        );
+        pass("fun(r) -> r.x", "forall ra a. (ra\\x) => {x : a | ra} -> a");
+        pass(
+            "let get_x = fun(r) -> r.x in get_x({y = one, x = zero})",
+            "int",
+        );
+        fail(
+            "let get_x = fun(r) -> r.x in get_x({y = one, z = true})",
+            Error::MissingLabel("x".to_owned()),
+        );
+        pass(
+            "fun(r) -> choose({x = zero | r}, {x = one | {}})",
+            "{} -> {x : int}",
+        );
+        pass(
+            "fun(r) -> choose({x = zero | r}, {x = one})",
+            "{} -> {x : int}",
+        );
+        pass(
+            "fun(r) -> choose({x = zero | r}, {x = one | r})",
+            "forall ra. (ra\\x) => {ra} -> {x : int | ra}",
+        );
+        fail(
+            "fun(r) -> choose({x = zero | r}, {y = one | r})",
+            Error::RowConstraintFailed("y".to_owned()),
+        );
+        pass("let f = fun(x) -> x.t(one) in f({t = succ})", "int");
+        pass("let f = fun(x) -> x.t(one) in f({t = id})", "int");
+        fail(
+            "let f = fun(r) -> let y = r.y in choose(r, {x = one}) in f",
+            Error::MissingLabel("y".to_owned()),
+        );
+        fail(
+            "fun(r) -> choose({x = zero | r}, {x = true | r})",
+            Error::CannotUnify("int".to_owned(), "bool".to_owned()),
+        );
+        pass(
+            "fun(r, s) -> choose({b = true, c = zero | r}, {b = false, c = one, d = half | s})",
+            "forall ra. (ra\\b\\c\\d) => ({d : float | ra}, {ra}) -> {b : bool, c : int, d : float | ra}",
+        );
+        pass(
+            "fun(r) -> {x = r | r}",
+            "forall ra. (ra\\x) => {ra} -> {x : {ra} | ra}",
+        );
     }
 
     #[test]
     fn infer_variant() {
-        let test_cases = vec![
-            (":X one", pass("forall[a] [X : int | a]")),
-            (
-                "choose(choose(:x one, :Y true), choose(:X half, :y nil))",
-                pass("forall[a b] [X : float, Y : bool, x : int, y : list[a] | b]"),
+        pass(":X one", "forall ra. (ra\\X) => [X : int | ra]");
+        pass(
+            "choose(choose(:x one, :Y true), choose(:X half, :y nil))",
+            "forall a ra. (ra\\X\\Y\\x\\y) => [X : float, Y : bool, x : int, y : list[a] | ra]",
+        );
+        fail(
+            "choose(:X one, :X true)",
+            Error::CannotUnify("int".to_owned(), "bool".to_owned()),
+        );
+        pass(
+            "choose(:X {x = one, y = false}, :Y {w = half})",
+            "forall ra. (ra\\X\\Y) => [X : {x : int, y : bool}, Y : {w : float} | ra]",
+        );
+        fail(
+            concat!(
+                "let e = choose(choose(:x one, :Y true), choose(:X half, :y nil)) in ",
+                "match e { :x i -> i | :Y y -> zero}"
             ),
-            (
-                "choose(:X one, :X true)",
-                fail(Error::CannotUnify("int".to_owned(), "bool".to_owned())),
+            Error::MissingLabel("X".to_owned()),
+        );
+        pass(
+            "fun(x, y) -> match x {:a i -> one | :b i -> zero | :c i -> y}",
+            "forall a b c => ([a : a, b : b, c : c], int) -> int",
+        );
+        pass(
+            "fun(a) -> match a {:X i -> i | r -> one}",
+            "forall ra. (ra\\X) => [X : int | ra] -> int",
+        );
+        pass(
+            concat!(
+                "let f = fun(m) -> match m {:y a -> one | :Y b -> zero | :z z -> zero} in ",
+                "fun(e) -> match e { :x i -> i | :X f -> one | r -> f(r)}"
             ),
-            (
-                "choose(:X {x = one, y = false}, :Y {w = half})",
-                pass("forall[a] [X : {x : int, y : bool}, Y : {w : float} | a]"),
+            "forall a b c d => [X : a, Y : b, x : int, y : c, z : d] -> int",
+        );
+        pass(
+            concat!(
+                "let e = choose(choose(:x one, :Y true), choose(:X half, :y nil)) in ",
+                "let f = fun(m) -> match m {:y a -> one | :Y b -> zero | :z z -> zero} in ",
+                "match e { :x i -> i | :X f -> one | r -> f(r)}"
             ),
-            (
-                concat!(
-                    "let e = choose(choose(:x one, :Y true), choose(:X half, :y nil)) in ",
-                    "match e { :x i -> i | :Y y -> zero}"
-                ),
-                fail(Error::MissingLabel("X".to_owned())),
-            ),
-            (
-                "fun(x, y) -> match x {:a i -> one | :b i -> zero | :c i -> y}",
-                pass("forall [a b c] ([a : a, b : b, c : c], int) -> int"),
-            ),
-            (
-                "fun(a) -> match a {:X i -> i | r -> one}",
-                pass("forall[a] [X : int | a] -> int"),
-            ),
-            (
-                concat!(
-                    "let f = fun(m) -> match m {:y a -> one | :Y b -> zero | :z z -> zero} in ",
-                    "fun(e) -> match e { :x i -> i | :X f -> one | r -> f(r)}"
-                ),
-                pass("forall[a b c d] [X : a, Y : b, x : int, y : c, z : d] -> int"),
-            ),
-            (
-                concat!(
-                    "let e = choose(choose(:x one, :Y true), choose(:X half, :y nil)) in ",
-                    "let f = fun(m) -> match m {:y a -> one | :Y b -> zero | :z z -> zero} in ",
-                    "match e { :x i -> i | :X f -> one | r -> f(r)}"
-                ),
-                pass("int"),
-            ),
-            (
-                "fun(e) -> match e { :X a -> plus(a.x, one) }",
-                pass("forall[a] [X : {x : int | a}] -> int"),
-            ),
-        ];
-        run_cases(test_cases);
+            "int",
+        );
+        pass(
+            "fun(e) -> match e { :X a -> plus(a.x, one) }",
+            "forall ra. (ra\\x) => [X : {x : int | ra}] -> int",
+        );
     }
 }

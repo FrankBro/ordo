@@ -1,6 +1,8 @@
 use core::fmt;
 use std::collections::{BTreeMap, HashMap};
 
+use itertools::Itertools;
+
 use crate::expr::{Expr, IntBinOp, Pattern};
 
 #[derive(Debug)]
@@ -42,13 +44,7 @@ pub struct Function {
 
 impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut params = String::new();
-        let mut sep = "";
-        for param in &self.params {
-            params.push_str(sep);
-            params.push_str(&param.to_string());
-            sep = ", ";
-        }
+        let params = self.params.iter().map(|param| param.to_string()).join(", ");
         write!(f, "fun({})", params)
     }
 }
@@ -83,13 +79,11 @@ impl fmt::Display for Value {
             Value::Int(i) => write!(f, "{}", i),
             Value::Function(fun) => write!(f, "{}", fun),
             Value::Record(labels) => {
-                let mut labels_str = String::new();
-                let mut sep = "";
-                for (label, value) in labels {
-                    labels_str = format!("{}{}{}: {}", labels_str, sep, label, value);
-                    sep = ", ";
-                }
-                write!(f, "{{{}}}", labels_str)
+                let labels = labels
+                    .iter()
+                    .map(|(label, val)| format!("{}: {}", label, val))
+                    .join(", ");
+                write!(f, "{{{}}}", labels)
             }
             Value::Variant(label, value) => {
                 write!(f, ":{} {}", label, value)
