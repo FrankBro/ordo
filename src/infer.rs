@@ -21,6 +21,7 @@ pub enum Error {
     VariableNotFound(String),
     CannotInjectConstraintsInto(String),
     RowConstraintFailed(String),
+    RecordPatternNotRecord(String),
 }
 
 impl fmt::Display for Error {
@@ -45,6 +46,7 @@ impl fmt::Display for Error {
             Error::RowConstraintFailed(label) => {
                 write!(f, "row constraint failed for label: {}", label)
             }
+            Error::RecordPatternNotRecord(ty) => write!(f, "record pattern not a record: {}", ty),
         }
     }
 }
@@ -574,21 +576,41 @@ impl Env {
         Ok(ty)
     }
 
-    fn infer_pattern(&mut self, pattern: &Pattern, ty: Type) -> Result<()> {
-        match pattern {
-            Pattern::Var(var) => {
-                self.insert_var(var.clone(), ty);
-                Ok(())
-            }
-            Pattern::Record(labels) => {
-                let (labels_ty, _) = self.match_row_ty(&ty)?;
+    fn assign_pattern(&mut self, pattern: &Pattern, ty: Type) -> Result<()> {
+        match (pattern, ty) {
+            (Pattern::Var(name), ty) => self.insert_var(name.clone(), ty),
+            (Pattern::Record(labels), Type::Record(row)) => {
+                let (labels_ty, _) = self.match_row_ty(&row)?;
                 for (label, label_pattern) in labels {
                     match labels_ty.get(label) {
                         None => return Err(Error::MissingLabel(label.clone())),
-                        Some(label_ty) => self.infer_pattern(label_pattern, label_ty.clone())?,
+                        Some(label_ty) => self.assign_pattern(label_pattern, label_ty.clone())?,
                     }
                 }
-                Ok(())
+            }
+            (Pattern::Record(_), ty) => {
+                let ty = self.ty_to_string(&ty)?;
+                return Err(Error::RecordPatternNotRecord(ty));
+            }
+        }
+        Ok(())
+    }
+
+    fn infer_pattern(&mut self, level: Level, pattern: &Pattern) -> Type {
+        match pattern {
+            Pattern::Var(name) => {
+                let ty = self.new_unbound(level);
+                self.insert_var(name.clone(), ty.clone());
+                ty
+            }
+            Pattern::Record(labels) => {
+                let constraints = labels.keys().cloned().collect();
+                let labels = labels
+                    .iter()
+                    .map(|(label, pat)| (label.clone(), self.infer_pattern(level, pat)))
+                    .collect();
+                let rest = self.new_unbound_row(level, constraints);
+                Type::Record(Type::RowExtend(labels, rest.into()).into())
             }
         }
     }
@@ -615,7 +637,7 @@ impl Env {
                 let lhs = self.infer_inner(level, lhs)?;
                 let rhs = self.infer_inner(level, rhs)?;
                 self.unify(&lhs, &rhs)?;
-                Ok(lhs)
+                Ok(Type::bool())
             }
             Expr::Var(name) => {
                 let ty = self.get_var(name)?.clone();
@@ -625,8 +647,7 @@ impl Env {
                 let mut param_tys = Vec::with_capacity(params.len());
                 let old_vars = self.vars.clone();
                 for param in params {
-                    let param_ty = self.new_unbound(level);
-                    self.infer_pattern(param, param_ty.clone())?;
+                    let param_ty = self.infer_pattern(level, param);
                     param_tys.push(param_ty);
                 }
                 let ret_ty = self.infer_inner(level, body)?;
@@ -636,7 +657,7 @@ impl Env {
             Expr::Let(pattern, value, body) => {
                 let var_ty = self.infer_inner(level + 1, value)?;
                 self.generalize(level, &var_ty)?;
-                self.infer_pattern(pattern, var_ty)?;
+                self.assign_pattern(pattern, var_ty)?;
                 self.infer_inner(level, body)
             }
             Expr::Call(f, args) => {
@@ -787,7 +808,7 @@ impl Env {
                     }
                 })
                 .collect::<Result<BTreeMap<_, _>, Error>>()?;
-            let args = names.iter().chain(row_names.keys()).join(", ");
+            let args = names.iter().chain(row_names.keys()).join(" ");
             let mut constraints = row_names
                 .iter()
                 .filter(|(_, constraints)| !constraints.is_empty())
@@ -989,6 +1010,14 @@ mod tests {
     }
 
     #[test]
+    fn infer_pattern() {
+        pass("let x = 1 in x", "int");
+        pass("let {x = x} = {x = 1} in x", "int");
+        pass("let {x} = {x = 1} in x", "int");
+        pass("let {x = {y = y}} = {x = {y = 1}} in y", "int");
+    }
+
+    #[test]
     fn infer_base() {
         pass("id", "forall a => a -> a");
         pass("one", "int");
@@ -1101,6 +1130,7 @@ mod tests {
             "let apply_curry = fun(f) -> fun(x) -> f(x) in apply_curry",
             "forall a b => (a -> b) -> a -> b",
         );
+        pass("1 == 1", "bool");
     }
 
     #[test]
@@ -1189,6 +1219,7 @@ mod tests {
             "fun(r) -> {x = r | r}",
             "forall ra. (ra\\x) => {ra} -> {x : {ra} | ra}",
         );
+        pass("let { x = x } = { x = 1 } in { x = x }", "{ x: int}");
     }
 
     #[test]
@@ -1209,30 +1240,30 @@ mod tests {
         fail(
             concat!(
                 "let e = choose(choose(:x one, :Y true), choose(:X half, :y nil)) in ",
-                "match e { :x i -> i | :Y y -> zero}"
+                "match e { :x i -> i , :Y y -> zero}"
             ),
             Error::MissingLabel("X".to_owned()),
         );
         pass(
-            "fun(x, y) -> match x {:a i -> one | :b i -> zero | :c i -> y}",
+            "fun(x, y) -> match x {:a i -> one , :b i -> zero , :c i -> y}",
             "forall a b c => ([a : a, b : b, c : c], int) -> int",
         );
         pass(
-            "fun(a) -> match a {:X i -> i | r -> one}",
+            "fun(a) -> match a {:X i -> i , r -> one}",
             "forall ra. (ra\\X) => [X : int | ra] -> int",
         );
         pass(
             concat!(
-                "let f = fun(m) -> match m {:y a -> one | :Y b -> zero | :z z -> zero} in ",
-                "fun(e) -> match e { :x i -> i | :X f -> one | r -> f(r)}"
+                "let f = fun(m) -> match m {:y a -> one , :Y b -> zero , :z z -> zero} in ",
+                "fun(e) -> match e { :x i -> i , :X f -> one , r -> f(r)}"
             ),
             "forall a b c d => [X : a, Y : b, x : int, y : c, z : d] -> int",
         );
         pass(
             concat!(
                 "let e = choose(choose(:x one, :Y true), choose(:X half, :y nil)) in ",
-                "let f = fun(m) -> match m {:y a -> one | :Y b -> zero | :z z -> zero} in ",
-                "match e { :x i -> i | :X f -> one | r -> f(r)}"
+                "let f = fun(m) -> match m {:y a -> one , :Y b -> zero , :z z -> zero} in ",
+                "match e { :x i -> i , :X f -> one , r -> f(r)}"
             ),
             "int",
         );
