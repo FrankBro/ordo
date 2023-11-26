@@ -46,6 +46,21 @@ impl fmt::Display for Pattern {
     }
 }
 
+impl Pattern {
+    pub fn expr(&self) -> Expr {
+        match self {
+            Pattern::Var(name) => Expr::Var(name.clone()),
+            Pattern::Record(labels) => {
+                let labels = labels
+                    .iter()
+                    .map(|(label, pat)| (label.clone(), pat.expr()))
+                    .collect();
+                Expr::RecordExtend(labels, Expr::RecordEmpty.into())
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Bool(bool),
@@ -261,5 +276,14 @@ pub mod util {
 
     pub fn equalequal(lhs: Expr, rhs: Expr) -> Expr {
         Expr::EqualEqual(lhs.into(), rhs.into())
+    }
+
+    pub fn match_(val: Expr, cases: Vec<(&str, &str, Expr)>, def: Option<(&str, Expr)>) -> Expr {
+        let cases = cases
+            .into_iter()
+            .map(|(variant, var, body)| (variant.to_owned(), var.to_owned(), body))
+            .collect();
+        let def = def.map(|(var, body)| (var.to_owned(), body.into()));
+        Expr::Case(val.into(), cases, def)
     }
 }

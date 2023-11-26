@@ -16,7 +16,7 @@ const EOF: &str = "<eof>";
 #[derive(Debug, PartialEq)]
 pub enum Error {
     Lexer,
-    Expected(Vec<Token>, Option<Token>),
+    Expected(&'static str, Vec<Token>, Option<Token>),
     ExpectedEof(Token),
     UnexpectedEof,
     InvalidPrefix(Option<Token>),
@@ -30,13 +30,13 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Lexer => write!(f, "lexer encountered an unexpected token"),
-            Error::Expected(tokens, token) => {
+            Error::Expected(context, tokens, token) => {
                 let token= match token {
                     Some(token) => token.to_string(),
                     None => EOF.to_owned(),
                 };
                 let tokens = tokens.iter().map(|token| token.to_string()).join(", ");
-                write!(f, "got {}, expected {}", token, tokens)
+                write!(f, "got {}, expected {} in context {}", token, tokens, context)
             }
             Error::ExpectedEof(token) => {
                 write!(f, "got {}, expected {}", token, EOF)
@@ -107,25 +107,25 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn expected<T>(&mut self, tokens: Vec<Token>) -> Result<T> {
-        Err(Error::Expected(tokens, self.token.take()))
+    fn expected<T>(&mut self, tokens: Vec<Token>, context: &'static str) -> Result<T> {
+        Err(Error::Expected(context, tokens, self.token.take()))
     }
 
-    fn expect(&mut self, expected: Token) -> Result<()> {
+    fn expect(&mut self, expected: Token, context: &'static str) -> Result<()> {
         if self.token.as_ref() != Some(&expected) {
-            return self.expected(vec![expected]);
+            return self.expected(vec![expected], context);
         }
         self.advance()?;
         Ok(())
     }
 
-    fn expect_ident(&mut self) -> Result<String> {
+    fn expect_ident(&mut self, context: &'static str) -> Result<String> {
         let token = self.token.take();
         if let Some(Token::Ident(ident)) = token {
             self.advance()?;
             return Ok(ident);
         }
-        Err(Error::Expected(vec![Token::empty_ident()], token))
+        Err(Error::Expected(context, vec![Token::empty_ident()], token))
     }
 
     pub fn repl(source: &str) -> Result<Expr> {
@@ -155,7 +155,7 @@ impl<'a> Parser<'a> {
 
     fn paren_expr(&mut self) -> Result<Expr> {
         let expr = self.expr_inner(0)?;
-        self.expect(Token::RParen)?;
+        self.expect(Token::RParen, "paren expr")?;
         Ok(expr)
     }
 
@@ -168,14 +168,13 @@ impl<'a> Parser<'a> {
             }
             let mut labels = BTreeMap::new();
             loop {
-                let label = self.expect_ident()?;
-                let var = if self.matches(Token::Equal)? {
-                    let var = self.expect_ident()?;
-                    Pattern::Var(var)
+                let label = self.expect_ident("pattern expr record label")?;
+                let pattern = if self.matches(Token::Equal)? {
+                    self.pattern_expr()?
                 } else {
                     Pattern::Var(label.clone())
                 };
-                if labels.insert(label.clone(), var).is_some() {
+                if labels.insert(label.clone(), pattern).is_some() {
                     return Err(Error::DuplicateLabel(label));
                 }
                 if self.matches(Token::RBrace)? {
@@ -183,12 +182,15 @@ impl<'a> Parser<'a> {
                 } else if self.matches(Token::Comma)? {
                     continue;
                 } else {
-                    return self.expected(vec![Token::empty_ident(), Token::RBrace]);
+                    return self.expected(
+                        vec![Token::empty_ident(), Token::RBrace],
+                        "pattern expr record",
+                    );
                 }
             }
             Ok(Pattern::Record(labels))
         } else {
-            self.expected(vec![Token::empty_ident(), Token::LBrace])
+            self.expected(vec![Token::empty_ident(), Token::LBrace], "pattern expr")
         }
     }
 
@@ -202,7 +204,7 @@ impl<'a> Parser<'a> {
             } else if self.matches(Token::Comma)? {
                 continue;
             } else {
-                return self.expected(vec![Token::RParen, Token::Comma]);
+                return self.expected(vec![Token::RParen, Token::Comma], "pattern list");
             }
         }
         Ok(patterns)
@@ -213,35 +215,36 @@ impl<'a> Parser<'a> {
         match pattern {
             Pattern::Var(name) if self.matches(Token::LParen)? => {
                 let params = self.pattern_list()?;
-                self.expect(Token::Equal)?;
+                self.expect(Token::Equal, "let expr fun")?;
                 let fun_body = self.expr_inner(0)?;
-                self.expect(Token::In)?;
-                let body = self.expr_inner(0)?;
+                let body = if self.is_repl && self.token.is_none() {
+                    Expr::Var(name.clone())
+                } else {
+                    self.expect(Token::In, "let expr fun")?;
+                    self.expr_inner(0)?
+                };
                 let fun = Expr::Fun(params, fun_body.into());
                 Ok(Expr::Let(Pattern::Var(name), fun.into(), body.into()))
             }
             pattern => {
-                self.expect(Token::Equal)?;
+                self.expect(Token::Equal, "let expr")?;
                 let value = self.expr_inner(0)?;
-                match pattern {
-                    Pattern::Var(name) if self.is_repl && self.token.is_none() => {
-                        let body = Expr::Var(name.clone());
-                        Ok(Expr::Let(Pattern::Var(name), value.into(), body.into()))
-                    }
-                    pattern => {
-                        self.expect(Token::In)?;
-                        let body = self.expr_inner(0)?;
-                        Ok(Expr::Let(pattern, value.into(), body.into()))
-                    }
+                if self.is_repl && self.token.is_none() {
+                    let body = pattern.expr();
+                    Ok(Expr::Let(pattern, value.into(), body.into()))
+                } else {
+                    self.expect(Token::In, "let expr")?;
+                    let body = self.expr_inner(0)?;
+                    Ok(Expr::Let(pattern, value.into(), body.into()))
                 }
             }
         }
     }
 
     fn fun_expr(&mut self) -> Result<Expr> {
-        self.expect(Token::LParen)?;
+        self.expect(Token::LParen, "fun expr")?;
         let params = self.pattern_list()?;
-        self.expect(Token::Arrow)?;
+        self.expect(Token::Arrow, "fun expr")?;
         let body = self.expr_inner(0)?;
         Ok(Expr::Fun(params, body.into()))
     }
@@ -253,7 +256,7 @@ impl<'a> Parser<'a> {
         let mut labels = BTreeMap::new();
         let mut rest = Expr::RecordEmpty;
         loop {
-            let label = self.expect_ident()?;
+            let label = self.expect_ident("record expr label")?;
             let expr = if self.matches(Token::Equal)? {
                 self.expr_inner(0)?
             } else {
@@ -270,48 +273,51 @@ impl<'a> Parser<'a> {
                 break;
             } else if self.matches(Token::Pipe)? {
                 rest = self.expr_inner(0)?;
-                self.expect(Token::RBrace)?;
+                self.expect(Token::RBrace, "record expr rest")?;
                 break;
             } else {
-                return self.expected(vec![Token::Pipe, Token::Comma, Token::RBrace]);
+                return self.expected(
+                    vec![Token::Pipe, Token::Comma, Token::RBrace],
+                    "record expr",
+                );
             }
         }
         Ok(Expr::RecordExtend(labels, rest.into()))
     }
 
     fn variant_expr(&mut self) -> Result<Expr> {
-        let label = self.expect_ident()?;
+        let label = self.expect_ident("variant expr")?;
         let expr = self.expr_inner(0)?;
         Ok(Expr::Variant(label, expr.into()))
     }
 
     fn match_expr(&mut self) -> Result<Expr> {
         let expr = self.expr_inner(0)?;
-        self.expect(Token::LBrace)?;
+        self.expect(Token::LBrace, "match expr")?;
         let mut cases = Vec::new();
         let mut default_case = None;
         loop {
             if self.matches(Token::Colon)? {
-                let variant = self.expect_ident()?;
-                let var = self.expect_ident()?;
-                self.expect(Token::Arrow)?;
+                let variant = self.expect_ident("match expr case variant")?;
+                let var = self.expect_ident("match expr case value")?;
+                self.expect(Token::Arrow, "match expr case")?;
                 let expr = self.expr_inner(0)?;
                 cases.push((variant, var, expr));
             } else if let Some(var) = self.matches_ident()? {
-                self.expect(Token::Arrow)?;
+                self.expect(Token::Arrow, "match expr default case")?;
                 let expr = self.expr_inner(0)?;
                 default_case = Some((var, Box::new(expr)));
-                self.expect(Token::RBrace)?;
+                self.expect(Token::RBrace, "match expr default case")?;
                 break;
             } else {
-                return self.expected(vec![Token::Colon, Token::empty_ident()]);
+                return self.expected(vec![Token::Colon, Token::empty_ident()], "match expr case");
             }
-            if self.matches(Token::Pipe)? {
+            if self.matches(Token::Comma)? {
                 continue;
             } else if self.matches(Token::RBrace)? {
                 break;
             } else {
-                return self.expected(vec![Token::Pipe, Token::RBrace]);
+                return self.expected(vec![Token::Comma, Token::RBrace], "match expr");
             }
         }
         Ok(Expr::Case(expr.into(), cases, default_case))
@@ -356,7 +362,7 @@ impl<'a> Parser<'a> {
                 break;
             } else if self.matches(Token::Comma)? {
             } else {
-                return self.expected(vec![Token::Comma, Token::RParen]);
+                return self.expected(vec![Token::Comma, Token::RParen], "call expr");
             }
             let arg = self.expr_inner(0)?;
             args.push(arg);
@@ -365,12 +371,12 @@ impl<'a> Parser<'a> {
     }
 
     fn record_select_expr(&mut self, lhs: Expr) -> Result<Expr> {
-        let field = self.expect_ident()?;
+        let field = self.expect_ident("record select expr")?;
         Ok(Expr::RecordSelect(lhs.into(), field))
     }
 
     fn record_restrict_expr(&mut self, lhs: Expr) -> Result<Expr> {
-        let field = self.expect_ident()?;
+        let field = self.expect_ident("record restrict expr")?;
         Ok(Expr::RecordRestrict(lhs.into(), field))
     }
 
@@ -382,7 +388,10 @@ impl<'a> Parser<'a> {
         } else if self.matches(Token::Backslash)? {
             self.record_restrict_expr(lhs)
         } else {
-            self.expected(vec![Token::LParen, Token::Dot, Token::Backslash])
+            self.expected(
+                vec![Token::LParen, Token::Dot, Token::Backslash],
+                "expr postfix",
+            )
         }
     }
 
@@ -403,13 +412,16 @@ impl<'a> Parser<'a> {
             let rhs = self.expr_inner(r_bp)?;
             Ok(Expr::EqualEqual(lhs.into(), rhs.into()))
         } else {
-            self.expected(vec![
-                Token::Plus,
-                Token::Minus,
-                Token::Multiply,
-                Token::Divide,
-                Token::EqualEqual,
-            ])
+            self.expected(
+                vec![
+                    Token::Plus,
+                    Token::Minus,
+                    Token::Multiply,
+                    Token::Divide,
+                    Token::EqualEqual,
+                ],
+                "expr infix",
+            )
         }
     }
 
@@ -488,9 +500,9 @@ impl<'a> Parser<'a> {
                     return Err(Error::InvalidTypeVarName(name));
                 }
             } else if self.matches(Token::Dot)? {
-                self.expect(Token::LParen)?;
+                self.expect(Token::LParen, "forall constraints")?;
                 'outer: loop {
-                    let row_name = self.expect_ident()?;
+                    let row_name = self.expect_ident("forall constraints name")?;
                     let row_constraints = row_vars
                         .get_mut(&row_name)
                         .ok_or_else(|| Error::NoRowForConstraints(row_name.clone()))?;
@@ -498,8 +510,8 @@ impl<'a> Parser<'a> {
                         return Err(Error::RowConstraintsAlreadyDefined(row_name));
                     }
                     'inner: loop {
-                        self.expect(Token::Backslash)?;
-                        let label = self.expect_ident()?;
+                        self.expect(Token::Backslash, "forall constraints label")?;
+                        let label = self.expect_ident("forall constraints label")?;
                         row_constraints.insert(label);
                         if self.matches(Token::RParen)? {
                             break 'outer;
@@ -508,12 +520,15 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
-                self.expect(Token::FatArrow)?;
+                self.expect(Token::FatArrow, "forall constraints")?;
                 return Ok(ForAll { vars, row_vars });
             } else if self.matches(Token::FatArrow)? {
                 return Ok(ForAll { vars, row_vars });
             } else {
-                return self.expected(vec![Token::empty_ident(), Token::Dot, Token::FatArrow]);
+                return self.expected(
+                    vec![Token::empty_ident(), Token::Dot, Token::FatArrow],
+                    "forall",
+                );
             }
         }
     }
@@ -550,7 +565,7 @@ impl<'a> Parser<'a> {
         } else if self.matches(Token::LBracket)? {
             self.variant_ty()?
         } else {
-            return self.expected(vec![Token::LParen, Token::empty_ident()]);
+            return self.expected(vec![Token::LParen, Token::empty_ident()], "ty");
         };
 
         if self.matches(Token::LBracket)? {
@@ -561,7 +576,7 @@ impl<'a> Parser<'a> {
                 if self.matches(Token::RBracket)? {
                     break;
                 }
-                self.expect(Token::Comma)?;
+                self.expect(Token::Comma, "ty app")?;
             }
             ty = Type::App(ty.into(), args);
         }
@@ -581,11 +596,11 @@ impl<'a> Parser<'a> {
         let mut labels = BTreeMap::new();
         let mut rest = Type::RowEmpty;
         loop {
-            let label = self.expect_ident()?;
+            let label = self.expect_ident("record ty label")?;
             if labels.is_empty() && self.matches(Token::RBrace)? {
                 return Ok(Type::Record(Type::Const(label).into()));
             }
-            self.expect(Token::Colon)?;
+            self.expect(Token::Colon, "record ty")?;
             let ty = self.ty_inner()?;
             if labels.insert(label.clone(), ty).is_some() {
                 return Err(Error::DuplicateLabel(label));
@@ -596,10 +611,10 @@ impl<'a> Parser<'a> {
                 break;
             } else if self.matches(Token::Pipe)? {
                 rest = self.ty_inner()?;
-                self.expect(Token::RBrace)?;
+                self.expect(Token::RBrace, "record ty rest")?;
                 break;
             } else {
-                return self.expected(vec![Token::Comma, Token::RBrace, Token::Pipe]);
+                return self.expected(vec![Token::Comma, Token::RBrace, Token::Pipe], "record ty");
             }
         }
         Ok(Type::Record(Type::RowExtend(labels, rest.into()).into()))
@@ -609,8 +624,8 @@ impl<'a> Parser<'a> {
         let mut labels = BTreeMap::new();
         let mut rest = Type::RowEmpty;
         loop {
-            let label = self.expect_ident()?;
-            self.expect(Token::Colon)?;
+            let label = self.expect_ident("variant ty")?;
+            self.expect(Token::Colon, "variant ty")?;
             let ty = self.ty_inner()?;
             if labels.insert(label.clone(), ty).is_some() {
                 return Err(Error::DuplicateLabel(label));
@@ -621,10 +636,13 @@ impl<'a> Parser<'a> {
                 break;
             } else if self.matches(Token::Pipe)? {
                 rest = self.ty_inner()?;
-                self.expect(Token::RBracket)?;
+                self.expect(Token::RBracket, "variant ty")?;
                 break;
             } else {
-                return self.expected(vec![Token::Comma, Token::RBracket, Token::Pipe]);
+                return self.expected(
+                    vec![Token::Comma, Token::RBracket, Token::Pipe],
+                    "variant ty",
+                );
             }
         }
         Ok(Type::Variant(Type::RowExtend(labels, rest.into()).into()))
@@ -638,12 +656,12 @@ impl<'a> Parser<'a> {
             if self.matches(Token::RParen)? {
                 break;
             }
-            self.expect(Token::Comma)?;
+            self.expect(Token::Comma, "paren ty")?;
         }
         if args.len() == 1 && !self.check(Token::Arrow) {
             return Ok(args.pop().unwrap());
         }
-        self.expect(Token::Arrow)?;
+        self.expect(Token::Arrow, "paren ty")?;
         let ret = self.ty_inner()?;
         Ok(Type::Arrow(args, ret.into()))
     }
@@ -658,220 +676,232 @@ mod tests {
     use super::Error;
     use super::Parser;
 
-    enum Expected {
-        Pass(Expr),
-        Fail(Error),
+    #[track_caller]
+    fn pass(source: &str, expected: Expr) {
+        let actual = Parser::expr(source).unwrap();
+        assert_eq!(expected, actual);
     }
 
-    fn pass(expr: Expr) -> Expected {
-        Expected::Pass(expr)
+    #[track_caller]
+    fn fail(source: &str, expected: Error) {
+        let actual = Parser::expr(source).unwrap_err();
+        assert_eq!(expected, actual, "for {}", source);
     }
 
-    fn fail(error: Error) -> Expected {
-        Expected::Fail(error)
+    #[track_caller]
+    fn pass_repl(source: &str, expected: Expr) {
+        let actual = Parser::repl(source).unwrap();
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn precedence() {
-        let cases: Vec<(&str, Expr)> = vec![
-            ("1 + 2", plus(int(1), int(2))),
-            ("1 + 2 * 3", plus(int(1), multiply(int(2), int(3)))),
-            ("1 - 2 / 3", minus(int(1), divide(int(2), int(3)))),
-            (
-                "false == !true",
-                equalequal(bool(false), negate(bool(true))),
-            ),
-        ];
-        for (source, expected) in cases {
-            let actual = Parser::expr(source).unwrap();
-            assert_eq!(expected, actual);
-        }
+        pass("1 + 2", plus(int(1), int(2)));
+        pass("1 + 2 * 3", plus(int(1), multiply(int(2), int(3))));
+        pass("1 - 2 / 3", minus(int(1), divide(int(2), int(3))));
+        pass(
+            "false == !true",
+            equalequal(bool(false), negate(bool(true))),
+        );
     }
 
     #[test]
     fn patterns() {
-        let cases: Vec<(&str, Expected)> = vec![
-            (
-                "let {a} = {a = 1} in a",
-                pass(let_(
-                    precord(vec![("a", pvar("a"))]),
-                    record(vec![("a", int(1))], empty()),
-                    var("a"),
-                )),
+        pass(
+            "let {a} = {a = 1} in a",
+            let_(
+                precord(vec![("a", pvar("a"))]),
+                record(vec![("a", int(1))], empty()),
+                var("a"),
             ),
-            (
-                "let f(a, b) = a + b in f(1, 2)",
-                pass(let_(
-                    pvar("f"),
-                    fun(vec![pvar("a"), pvar("b")], plus(var("a"), var("b"))),
-                    call(var("f"), vec![int(1), int(2)]),
-                )),
+        );
+        pass(
+            "let f(a, b) = a + b in f(1, 2)",
+            let_(
+                pvar("f"),
+                fun(vec![pvar("a"), pvar("b")], plus(var("a"), var("b"))),
+                call(var("f"), vec![int(1), int(2)]),
             ),
-            //
-        ];
-        for (source, expected) in cases {
-            let res = Parser::expr(source);
-            match expected {
-                Expected::Pass(expected) => match res {
-                    Ok(actual) => assert_eq!(expected, actual),
-                    Err(e) => panic!("expected {:?}, got {:?} from {}", expected, e, source),
-                },
-                Expected::Fail(expected) => match res {
-                    Ok(actual) => panic!("expected failure, got {:?} from {}", actual, source),
-                    Err(actual) => {
-                        assert_eq!(expected, actual, "for {}", source)
-                    }
-                },
-            }
-        }
+        );
+        pass(
+            "let {x = {y = y}} = {x = {y = 1}} in y",
+            let_(
+                precord(vec![("x", precord(vec![("y", pvar("y"))]))]),
+                record(vec![("x", record(vec![("y", int(1))], empty()))], empty()),
+                var("y"),
+            ),
+        );
     }
 
     #[test]
     fn exprs() {
-        let cases: Vec<(&str, Expected)> = vec![
-            ("", fail(Error::UnexpectedEof)),
-            ("a", pass(var("a"))),
-            ("f(x, y)", pass(call(var("f"), vec![var("x"), var("y")]))),
-            (
-                "f(x)(y)",
-                pass(call(call(var("f"), vec![var("x")]), vec![var("y")])),
+        fail("", Error::UnexpectedEof);
+        pass("a", var("a"));
+        pass("f(x, y)", call(var("f"), vec![var("x"), var("y")]));
+        pass(
+            "f(x)(y)",
+            call(call(var("f"), vec![var("x")]), vec![var("y")]),
+        );
+        pass(
+            "let f = fun(x, y) -> g(x, y) in f(a, b)",
+            let_(
+                pvar("f"),
+                fun(
+                    vec![pvar("x"), pvar("y")],
+                    call(var("g"), vec![var("x"), var("y")]),
+                ),
+                call(var("f"), vec![var("a"), var("b")]),
             ),
-            (
-                "let f = fun(x, y) -> g(x, y) in f(a, b)",
-                pass(let_(
-                    pvar("f"),
-                    fun(
-                        vec![pvar("x"), pvar("y")],
-                        call(var("g"), vec![var("x"), var("y")]),
-                    ),
-                    call(var("f"), vec![var("a"), var("b")]),
-                )),
-            ),
-            (
-                "let x = a in
+        );
+        pass(
+            "let x = a in
                 let y = b in
                 f(x, y)",
-                pass(let_(
-                    pvar("x"),
-                    var("a"),
-                    let_(
-                        pvar("y"),
-                        var("b"),
-                        call(var("f"), vec![var("x"), var("y")]),
-                    ),
-                )),
+            let_(
+                pvar("x"),
+                var("a"),
+                let_(
+                    pvar("y"),
+                    var("b"),
+                    call(var("f"), vec![var("x"), var("y")]),
+                ),
             ),
-            (
-                "f x",
-                fail(Error::ExpectedEof(Token::Ident("x".to_owned()))),
+        );
+        fail("f x", Error::ExpectedEof(Token::Ident("x".to_owned())));
+        fail(
+            "let a = one",
+            Error::Expected("let expr", vec![Token::In], None),
+        );
+        fail("a, b", Error::ExpectedEof(Token::Comma));
+        fail("a = b", Error::ExpectedEof(Token::Equal));
+        // TODO: Not an ideal error here
+        fail("()", Error::InvalidPrefix(Some(Token::RParen)));
+        pass("fun(x) -> x", fun(vec![pvar("x")], var("x")));
+        // records
+        pass("{}", empty());
+        pass("{ }", empty());
+        fail(
+            "{",
+            Error::Expected("record expr label", vec![Token::empty_ident()], None),
+        );
+        pass("a.x", select(var("a"), "x"));
+        pass("m \\ a", restrict(var("m"), "a"));
+        pass("{a = x}", record(vec![("a", var("x"))], empty()));
+        fail(
+            "{a = x",
+            Error::Expected(
+                "record expr",
+                vec![Token::Pipe, Token::Comma, Token::RBrace],
+                None,
             ),
-            ("let a = one", fail(Error::Expected(vec![Token::In], None))),
-            ("a, b", fail(Error::ExpectedEof(Token::Comma))),
-            ("a = b", fail(Error::ExpectedEof(Token::Equal))),
-            // TODO: Not an ideal error here
-            ("()", fail(Error::InvalidPrefix(Some(Token::RParen)))),
-            ("fun(x) -> x", pass(fun(vec![pvar("x")], var("x")))),
-            // records
-            ("{}", pass(empty())),
-            ("{ }", pass(empty())),
-            ("{", fail(Error::Expected(vec![Token::empty_ident()], None))),
-            ("a.x", pass(select(var("a"), "x"))),
-            ("m \\ a", pass(restrict(var("m"), "a"))),
-            ("{a = x}", pass(record(vec![("a", var("x"))], empty()))),
-            (
-                "{a = x",
-                fail(Error::Expected(
-                    vec![Token::Pipe, Token::Comma, Token::RBrace],
-                    None,
-                )),
+        );
+        pass(
+            "{a=x, b = y}",
+            record(vec![("a", var("x")), ("b", var("y"))], empty()),
+        );
+        pass(
+            "{b = y ,a=x}",
+            record(vec![("a", var("x")), ("b", var("y"))], empty()),
+        );
+        pass(
+            "{a=x,h=w,d=y,b=q,g=z,c=t,e=s,f=r}",
+            record(
+                vec![
+                    ("a", var("x")),
+                    ("b", var("q")),
+                    ("c", var("t")),
+                    ("d", var("y")),
+                    ("e", var("s")),
+                    ("f", var("r")),
+                    ("g", var("z")),
+                    ("h", var("w")),
+                ],
+                empty(),
             ),
-            (
-                "{a=x, b = y}",
-                pass(record(vec![("a", var("x")), ("b", var("y"))], empty())),
+        );
+        pass("{a = x|m}", record(vec![("a", var("x"))], var("m")));
+        fail(
+            "{|m}",
+            Error::Expected(
+                "record expr label",
+                vec![Token::empty_ident()],
+                Some(Token::Pipe),
             ),
-            (
-                "{b = y ,a=x}",
-                pass(record(vec![("a", var("x")), ("b", var("y"))], empty())),
+        );
+        pass(
+            "{ a = x, b = y | m}",
+            record(vec![("a", var("x")), ("b", var("y"))], var("m")),
+        );
+        pass(
+            "{ a = x, b = y | m \\ a }",
+            record(
+                vec![("a", var("x")), ("b", var("y"))],
+                restrict(var("m"), "a"),
             ),
-            (
-                "{a=x,h=w,d=y,b=q,g=z,c=t,e=s,f=r}",
-                pass(record(
+        );
+        pass(
+            "let x = {a = f(x), b = y.b} in { a = fun(z) -> z | x \\ a }",
+            let_(
+                pvar("x"),
+                record(
                     vec![
-                        ("a", var("x")),
-                        ("b", var("q")),
-                        ("c", var("t")),
-                        ("d", var("y")),
-                        ("e", var("s")),
-                        ("f", var("r")),
-                        ("g", var("z")),
-                        ("h", var("w")),
+                        ("a", call(var("f"), vec![var("x")])),
+                        ("b", select(var("y"), "b")),
                     ],
                     empty(),
-                )),
+                ),
+                record(
+                    vec![("a", fun(vec![pvar("z")], var("z")))],
+                    restrict(var("x"), "a"),
+                ),
             ),
-            ("{a = x|m}", pass(record(vec![("a", var("x"))], var("m")))),
-            (
-                "{|m}",
-                fail(Error::Expected(
-                    vec![Token::empty_ident()],
-                    Some(Token::Pipe),
-                )),
+        );
+        fail("{a = x, a = y}", Error::DuplicateLabel("a".to_owned()));
+        pass(
+            "{x,y}",
+            record(vec![("x", var("x")), ("y", var("y"))], empty()),
+        );
+        pass(
+            "f({x,y})",
+            call(
+                var("f"),
+                vec![record(vec![("x", var("x")), ("y", var("y"))], empty())],
             ),
-            (
-                "{ a = x, b = y | m}",
-                pass(record(vec![("a", var("x")), ("b", var("y"))], var("m"))),
-            ),
-            (
-                "{ a = x, b = y | m \\ a }",
-                pass(record(
-                    vec![("a", var("x")), ("b", var("y"))],
-                    restrict(var("m"), "a"),
-                )),
-            ),
-            (
-                "let x = {a = f(x), b = y.b} in { a = fun(z) -> z | x \\ a }",
-                pass(let_(
-                    pvar("x"),
-                    record(
-                        vec![
-                            ("a", call(var("f"), vec![var("x")])),
-                            ("b", select(var("y"), "b")),
-                        ],
-                        empty(),
-                    ),
-                    record(
-                        vec![("a", fun(vec![pvar("z")], var("z")))],
-                        restrict(var("x"), "a"),
-                    ),
-                )),
-            ),
-            (
-                "{a = x, a = y}",
-                fail(Error::DuplicateLabel("a".to_owned())),
-            ),
-        ];
-        for (source, expected) in cases {
-            let res = Parser::expr(source);
-            match expected {
-                Expected::Pass(expected) => match res {
-                    Ok(actual) => assert_eq!(expected, actual),
-                    Err(e) => panic!("expected {:?}, got {:?} from {}", expected, e, source),
-                },
-                Expected::Fail(expected) => match res {
-                    Ok(actual) => panic!("expected failure, got {:?} from {}", actual, source),
-                    Err(actual) => {
-                        assert_eq!(expected, actual, "for {}", source)
-                    }
-                },
-            }
-        }
+        );
     }
 
     #[test]
     fn repl() {
-        let source = "let a = 0";
-        let expected = let_(pvar("a"), int(0), var("a"));
-        let actual = Parser::repl(source).unwrap();
-        assert_eq!(expected, actual)
+        pass_repl("let a = 0", let_(pvar("a"), int(0), var("a")));
+        pass_repl(
+            "let f(x) = x",
+            let_(pvar("f"), fun(vec![pvar("x")], var("x")), var("f")),
+        );
+        pass_repl(
+            "let {x = x} = {x = 1}",
+            let_(
+                precord(vec![("x", pvar("x"))]),
+                record(vec![("x", int(1))], empty()),
+                record(vec![("x", var("x"))], empty()),
+            ),
+        );
+        pass_repl(
+            "let f({ x = x }) = x",
+            let_(
+                pvar("f"),
+                fun(vec![precord(vec![("x", pvar("x"))])], var("x")),
+                var("f"),
+            ),
+        );
+        pass_repl(
+            "let default_with(default, value) = match value { :some value -> value, :none x -> default }",
+            let_(
+                pvar("default_with"),
+                fun(vec![pvar("default"), pvar("value")],
+                match_(var("value"), vec![
+                    ("some", "value", var("value")),
+                    ("none", "x", var("default"))
+                ], None)),
+                var("default_with")));
     }
 }

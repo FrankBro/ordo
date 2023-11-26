@@ -50,14 +50,13 @@ impl fmt::Display for Function {
 }
 
 impl Function {
-    fn apply(&mut self, args: &Vec<Expr>) -> Result<Value> {
+    fn apply(&mut self, args: Vec<Value>) -> Result<Value> {
         if self.params.len() != args.len() {
             return Err(Error::UnexpectedNumberOfArguments);
         }
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in args.into_iter().enumerate() {
             let param = &self.params[i];
-            let val = self.env.eval_inner(arg)?;
-            self.env.eval_pattern(param, val)?;
+            self.env.eval_pattern(param, arg)?;
         }
         self.env.eval_inner(&self.body)
     }
@@ -199,6 +198,10 @@ impl Env {
             Expr::Call(fun, args) => {
                 let fun = self.eval_inner(fun)?;
                 let mut fun = fun.as_function()?;
+                let args = args
+                    .iter()
+                    .map(|arg| self.eval_inner(arg))
+                    .collect::<Result<_, _>>()?;
                 fun.apply(args)
             }
             Expr::Fun(params, body) => {
@@ -280,8 +283,12 @@ mod tests {
             ("let a = 1 in a + 2", Value::Int(3)),
             ("{a = 2}.a", Value::Int(2)),
             (":a 3", Value::Variant("a".to_owned(), Value::Int(3).into())),
-            ("match :a 3 { :b b -> b | :a a -> a }", Value::Int(3)),
+            ("match :a 3 { :b b -> b , :a a -> a }", Value::Int(3)),
             ("let a = 1 in let r = {a} in r.a", Value::Int(1)),
+            (
+                "let f({x,y}) = x + y in let x = 1 in let y = 2 in f({x,y})",
+                Value::Int(3),
+            ),
         ];
         for (expr_str, expected) in cases {
             let expr = Parser::expr(expr_str).unwrap();
