@@ -92,6 +92,14 @@ impl fmt::Display for Value {
 }
 
 impl Value {
+    pub fn record(labels: Vec<(&str, Value)>) -> Self {
+        let labels = labels
+            .into_iter()
+            .map(|(label, val)| (label.to_owned(), val))
+            .collect();
+        Value::Record(labels)
+    }
+
     fn as_bool(&self) -> Result<bool> {
         match self {
             Value::Bool(b) => Ok(*b),
@@ -265,6 +273,17 @@ impl Env {
                     return env.eval_inner(body);
                 }
                 Err(Error::NoCase)
+            }
+            Expr::If(if_expr, if_body, elifs, else_body) => {
+                if self.eval_inner(if_expr)?.as_bool()? {
+                    return self.eval_inner(if_body);
+                }
+                for (elif_expr, elif_body) in elifs {
+                    if self.eval_inner(elif_expr)?.as_bool()? {
+                        return self.eval_inner(elif_body);
+                    }
+                }
+                self.eval_inner(else_body)
             }
         }
     }

@@ -323,6 +323,32 @@ impl<'a> Parser<'a> {
         Ok(Expr::Case(expr.into(), cases, default_case))
     }
 
+    fn if_expr(&mut self) -> Result<Expr> {
+        let if_expr = self.expr_inner(0)?;
+        self.expect(Token::Then, "if expr")?;
+        let if_body = self.expr_inner(0)?;
+        let mut elifs = Vec::new();
+        loop {
+            if self.matches(Token::Else)? {
+                break;
+            } else if self.matches(Token::Elif)? {
+                let elif_expr = self.expr_inner(0)?;
+                self.expect(Token::Then, "if expr elif")?;
+                let elif_body = self.expr_inner(0)?;
+                elifs.push((elif_expr, elif_body));
+            } else {
+                return self.expected(vec![Token::Elif, Token::Else], "if expr elif");
+            }
+        }
+        let else_body = self.expr_inner(0)?;
+        Ok(Expr::If(
+            if_expr.into(),
+            if_body.into(),
+            elifs,
+            else_body.into(),
+        ))
+    }
+
     fn expr_lhs(&mut self) -> Result<Expr> {
         if let Some(var) = self.matches_ident()? {
             Ok(Expr::Var(var))
@@ -344,6 +370,8 @@ impl<'a> Parser<'a> {
             self.variant_expr()
         } else if self.matches(Token::Match)? {
             self.match_expr()
+        } else if self.matches(Token::If)? {
+            self.if_expr()
         } else {
             let r_bp = self.prefix_bp()?;
             if self.matches(Token::Negate)? {
@@ -702,6 +730,28 @@ mod tests {
         pass(
             "false == !true",
             equalequal(bool(false), negate(bool(true))),
+        );
+    }
+
+    #[test]
+    fn ifs() {
+        pass(
+            "if a == b then a else b",
+            if_(
+                equalequal(var("a"), var("b")),
+                var("a"),
+                Vec::new(),
+                var("b"),
+            ),
+        );
+        pass(
+            "if a == b then a elif b == c then b else c",
+            if_(
+                equalequal(var("a"), var("b")),
+                var("a"),
+                vec![(equalequal(var("b"), var("c")), var("b"))],
+                var("c"),
+            ),
         );
     }
 

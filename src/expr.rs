@@ -82,6 +82,7 @@ pub enum Expr {
         Vec<(String, String, Expr)>,
         Option<(String, Box<Expr>)>,
     ),
+    If(Box<Expr>, Box<Expr>, Vec<(Expr, Expr)>, Box<Expr>),
 }
 
 impl fmt::Display for Expr {
@@ -117,6 +118,7 @@ impl fmt::Display for Expr {
             Expr::RecordEmpty => write!(f, "{{}}"),
             Expr::Variant(label, value) => write!(f, ":{} {}", label, value),
             Expr::Case(_, _, _) => todo!(),
+            Expr::If(_, _, _, _) => todo!(),
         }
     }
 }
@@ -285,5 +287,9 @@ pub mod util {
             .collect();
         let def = def.map(|(var, body)| (var.to_owned(), body.into()));
         Expr::Case(val.into(), cases, def)
+    }
+
+    pub fn if_(if_expr: Expr, if_body: Expr, elifs: Vec<(Expr, Expr)>, else_body: Expr) -> Expr {
+        Expr::If(if_expr.into(), if_body.into(), elifs, else_body.into())
     }
 }

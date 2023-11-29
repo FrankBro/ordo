@@ -746,6 +746,30 @@ impl Env {
                 self.unify(&expr, &Type::Variant(cases_row.into()))?;
                 Ok(ret)
             }
+            Expr::If(if_expr, if_body, elifs, else_body) => {
+                let bool = Type::bool();
+                let ty = self.infer_inner(level, if_expr)?;
+                self.unify(&bool, &ty)?;
+                let if_ty = self.infer_inner(level, if_body)?;
+                for (elif_expr, elif_body) in elifs {
+                    let ty = self.infer_inner(level, elif_expr)?;
+                    self.unify(&bool, &ty)?;
+                    let ty = self.infer_inner(level, elif_body)?;
+                    self.unify(&if_ty, &ty)?;
+                }
+                let ty = self.infer_inner(level, else_body)?;
+                self.unify(&if_ty, &ty)?;
+                // TODO: if calling a function with an open variant should keep it open
+                match if_ty {
+                    Type::Variant(row) => {
+                        let (labels, _) = self.match_row_ty(&row)?;
+                        Ok(Type::Variant(
+                            Type::RowExtend(labels, Type::RowEmpty.into()).into(),
+                        ))
+                    }
+                    _ => Ok(if_ty),
+                }
+            }
         }
     }
 
