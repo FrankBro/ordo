@@ -154,3 +154,7 @@ fn readme_test() {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/ifs.rs"]
+mod ifs;

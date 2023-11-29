@@ -78,6 +78,14 @@ pub enum Token {
     True,
     #[token("false")]
     False,
+    #[token("if")]
+    If,
+    #[token("then")]
+    Then,
+    #[token("elif")]
+    Elif,
+    #[token("else")]
+    Else,
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*", ident)]
     Ident(String),
 }
@@ -120,6 +128,10 @@ impl fmt::Display for Token {
             Token::False => "false",
             Token::Ident(i) => i,
             Token::FatArrow => "=>",
+            Token::If => "if",
+            Token::Then => "then",
+            Token::Elif => "elif",
+            Token::Else => "else",
         };
         write!(f, "{}", s)
     }
