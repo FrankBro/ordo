@@ -619,13 +619,13 @@ impl Env {
         match expr {
             Expr::Bool(_) => Ok(Type::bool()),
             Expr::Int(_) => Ok(Type::int()),
-            Expr::IntBinOp(_, lhs, rhs) => {
+            Expr::IntBinOp(op, lhs, rhs) => {
                 let ty = Type::int();
                 let lhs_ty = self.infer_inner(level, lhs)?;
                 self.unify(&ty, &lhs_ty)?;
                 let rhs_ty = self.infer_inner(level, rhs)?;
                 self.unify(&ty, &rhs_ty)?;
-                Ok(ty)
+                Ok(op.output_ty())
             }
             Expr::Negate(expr) => {
                 let ty = Type::bool();
@@ -1155,6 +1155,7 @@ mod tests {
             "forall a b => (a -> b) -> a -> b",
         );
         pass("1 == 1", "bool");
+        pass("1 > 2", "bool");
     }
 
     #[test]

@@ -11,6 +11,10 @@ pub enum IntBinOp {
     Minus,
     Multiply,
     Divide,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
 }
 
 impl fmt::Display for IntBinOp {
@@ -20,8 +24,24 @@ impl fmt::Display for IntBinOp {
             IntBinOp::Minus => "-",
             IntBinOp::Multiply => "*",
             IntBinOp::Divide => "/",
+            IntBinOp::LessThan => "<",
+            IntBinOp::LessThanOrEqual => "<=",
+            IntBinOp::GreaterThan => ">",
+            IntBinOp::GreaterThanOrEqual => ">=",
         };
         write!(f, "{}", op)
+    }
+}
+
+impl IntBinOp {
+    pub fn output_ty(&self) -> Type {
+        match self {
+            IntBinOp::Plus | IntBinOp::Minus | IntBinOp::Multiply | IntBinOp::Divide => Type::int(),
+            IntBinOp::LessThan
+            | IntBinOp::LessThanOrEqual
+            | IntBinOp::GreaterThan
+            | IntBinOp::GreaterThanOrEqual => Type::bool(),
+        }
     }
 }
 
@@ -278,6 +298,10 @@ pub mod util {
 
     pub fn equalequal(lhs: Expr, rhs: Expr) -> Expr {
         Expr::EqualEqual(lhs.into(), rhs.into())
+    }
+
+    pub fn gt(lhs: Expr, rhs: Expr) -> Expr {
+        Expr::IntBinOp(IntBinOp::GreaterThan, lhs.into(), rhs.into())
     }
 
     pub fn match_(val: Expr, cases: Vec<(&str, &str, Expr)>, def: Option<(&str, Expr)>) -> Expr {
