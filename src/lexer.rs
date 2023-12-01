@@ -86,6 +86,14 @@ pub enum Token {
     Elif,
     #[token("else")]
     Else,
+    #[token("<")]
+    LessThan,
+    #[token("<=")]
+    LessThanOrEqual,
+    #[token(">")]
+    GreaterThan,
+    #[token(">=")]
+    GreaterThanOrEqual,
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*", ident)]
     Ident(String),
 }
@@ -132,6 +140,10 @@ impl fmt::Display for Token {
             Token::Then => "then",
             Token::Elif => "elif",
             Token::Else => "else",
+            Token::LessThan => "<",
+            Token::LessThanOrEqual => "<=",
+            Token::GreaterThan => ">",
+            Token::GreaterThanOrEqual => ">=",
         };
         write!(f, "{}", s)
     }

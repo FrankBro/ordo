@@ -439,6 +439,30 @@ impl<'a> Parser<'a> {
         } else if self.matches(Token::EqualEqual)? {
             let rhs = self.expr_inner(r_bp)?;
             Ok(Expr::EqualEqual(lhs.into(), rhs.into()))
+        } else if self.matches(Token::LessThan)? {
+            let rhs = self.expr_inner(r_bp)?;
+            Ok(Expr::IntBinOp(IntBinOp::LessThan, lhs.into(), rhs.into()))
+        } else if self.matches(Token::LessThanOrEqual)? {
+            let rhs = self.expr_inner(r_bp)?;
+            Ok(Expr::IntBinOp(
+                IntBinOp::LessThanOrEqual,
+                lhs.into(),
+                rhs.into(),
+            ))
+        } else if self.matches(Token::GreaterThan)? {
+            let rhs = self.expr_inner(r_bp)?;
+            Ok(Expr::IntBinOp(
+                IntBinOp::GreaterThan,
+                lhs.into(),
+                rhs.into(),
+            ))
+        } else if self.matches(Token::GreaterThanOrEqual)? {
+            let rhs = self.expr_inner(r_bp)?;
+            Ok(Expr::IntBinOp(
+                IntBinOp::GreaterThanOrEqual,
+                lhs.into(),
+                rhs.into(),
+            ))
         } else {
             self.expected(
                 vec![
@@ -480,7 +504,7 @@ impl<'a> Parser<'a> {
 
     fn prefix_bp(&self) -> Result<u8> {
         match self.token {
-            Some(Token::Negate) => Ok(7),
+            Some(Token::Negate) => Ok(9),
             None => Err(Error::UnexpectedEof),
             _ => Err(Error::InvalidPrefix(self.token.clone())),
         }
@@ -489,9 +513,9 @@ impl<'a> Parser<'a> {
     // TODO: Not sure how to determine precedence
     fn postfix_bp(&self) -> Option<u8> {
         match self.token {
-            Some(Token::LParen) => Some(8),
-            Some(Token::Dot) => Some(10),
-            Some(Token::Backslash) => Some(9),
+            Some(Token::LParen) => Some(10),
+            Some(Token::Dot) => Some(12),
+            Some(Token::Backslash) => Some(11),
             _ => None,
         }
     }
@@ -499,8 +523,12 @@ impl<'a> Parser<'a> {
     fn infix_bp(&self) -> Option<(u8, u8)> {
         match self.token {
             Some(Token::EqualEqual) => Some((2, 1)),
-            Some(Token::Plus) | Some(Token::Minus) => Some((3, 4)),
-            Some(Token::Multiply) | Some(Token::Divide) => Some((5, 6)),
+            Some(Token::Plus) | Some(Token::Minus) => Some((5, 6)),
+            Some(Token::Multiply) | Some(Token::Divide) => Some((7, 8)),
+            Some(Token::LessThan)
+            | Some(Token::LessThanOrEqual)
+            | Some(Token::GreaterThan)
+            | Some(Token::GreaterThanOrEqual) => Some((3, 4)),
             _ => None,
         }
     }
@@ -731,6 +759,7 @@ mod tests {
             "false == !true",
             equalequal(bool(false), negate(bool(true))),
         );
+        pass("1 + 2 > 2", gt(plus(int(1), int(2)), int(2)));
     }
 
     #[test]

@@ -178,13 +178,17 @@ impl Env {
                 let lhs = lhs.as_int()?;
                 let rhs = self.eval_inner(rhs)?;
                 let rhs = rhs.as_int()?;
-                let i = match op {
-                    IntBinOp::Plus => lhs + rhs,
-                    IntBinOp::Minus => lhs - rhs,
-                    IntBinOp::Multiply => lhs * rhs,
-                    IntBinOp::Divide => lhs / rhs,
+                let val = match op {
+                    IntBinOp::Plus => Value::Int(lhs + rhs),
+                    IntBinOp::Minus => Value::Int(lhs - rhs),
+                    IntBinOp::Multiply => Value::Int(lhs * rhs),
+                    IntBinOp::Divide => Value::Int(lhs / rhs),
+                    IntBinOp::LessThan => Value::Bool(lhs < rhs),
+                    IntBinOp::LessThanOrEqual => Value::Bool(lhs <= rhs),
+                    IntBinOp::GreaterThan => Value::Bool(lhs > rhs),
+                    IntBinOp::GreaterThanOrEqual => Value::Bool(lhs >= rhs),
                 };
-                Ok(Value::Int(i))
+                Ok(val)
             }
             Expr::Negate(expr) => {
                 let v = self.eval_inner(expr)?;
@@ -308,6 +312,8 @@ mod tests {
                 "let f({x,y}) = x + y in let x = 1 in let y = 2 in f({x,y})",
                 Value::Int(3),
             ),
+            ("2 > 1", Value::Bool(true)),
+            ("2 > 3", Value::Bool(false)),
         ];
         for (expr_str, expected) in cases {
             let expr = Parser::expr(expr_str).unwrap();
