@@ -6,12 +6,12 @@ use std::{
 
 use parser::Parser;
 
-mod core;
-mod eval;
-mod expr;
-mod infer;
-mod lexer;
-mod parser;
+pub mod core;
+pub mod eval;
+pub mod expr;
+pub mod infer;
+pub mod lexer;
+pub mod parser;
 
 #[derive(Debug)]
 enum Error {
@@ -158,3 +158,7 @@ fn readme_test() {
 #[cfg(test)]
 #[path = "tests/ifs.rs"]
 mod ifs;
+
+#[cfg(test)]
+#[path = "tests/unwraps.rs"]
+mod unwraps;

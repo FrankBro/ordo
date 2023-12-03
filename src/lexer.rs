@@ -94,6 +94,8 @@ pub enum Token {
     GreaterThan,
     #[token(">=")]
     GreaterThanOrEqual,
+    #[token("?")]
+    QuestionMark,
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*", ident)]
     Ident(String),
 }
@@ -144,6 +146,7 @@ impl fmt::Display for Token {
             Token::LessThanOrEqual => "<=",
             Token::GreaterThan => ">",
             Token::GreaterThanOrEqual => ">=",
+            Token::QuestionMark => "?",
         };
         write!(f, "{}", s)
     }

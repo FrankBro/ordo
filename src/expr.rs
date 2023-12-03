@@ -5,6 +5,8 @@ use std::{
 
 use itertools::Itertools;
 
+pub const OK_LABEL: &str = "ok";
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum IntBinOp {
     Plus,
@@ -103,6 +105,7 @@ pub enum Expr {
         Option<(String, Box<Expr>)>,
     ),
     If(Box<Expr>, Box<Expr>, Vec<(Expr, Expr)>, Box<Expr>),
+    Unwrap(Box<Expr>),
 }
 
 impl fmt::Display for Expr {
@@ -139,6 +142,7 @@ impl fmt::Display for Expr {
             Expr::Variant(label, value) => write!(f, ":{} {}", label, value),
             Expr::Case(_, _, _) => todo!(),
             Expr::If(_, _, _, _) => todo!(),
+            Expr::Unwrap(expr) => write!(f, "{}?", expr),
         }
     }
 }
