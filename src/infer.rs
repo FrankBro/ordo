@@ -1,10 +1,10 @@
 use core::fmt;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap};
 
 use itertools::Itertools;
 
 use crate::{
-    expr::{Constraints, Expr, Id, Level, Pattern, Type, TypeVar},
+    expr::{Constraints, Expr, Id, Level, Pattern, Type, TypeVar, OK_LABEL},
     parser::ForAll,
 };
 
@@ -17,11 +17,13 @@ pub enum Error {
     NotARow(String),
     RecursiveRowType,
     UnexpectedNumberOfArguments,
-    ExpectedFunction,
+    ExpectedFunction(String),
     VariableNotFound(String),
     CannotInjectConstraintsInto(String),
     RowConstraintFailed(String),
     RecordPatternNotRecord(String),
+    UnwrapMissingOk(String),
+    UnwrapNotVariant(String),
 }
 
 impl fmt::Display for Error {
@@ -38,7 +40,7 @@ impl fmt::Display for Error {
             }
             Error::RecursiveRowType => write!(f, "recursive row type"),
             Error::UnexpectedNumberOfArguments => write!(f, "unexpected number of arguments"),
-            Error::ExpectedFunction => write!(f, "expected a function"),
+            Error::ExpectedFunction(ty) => write!(f, "expected a function, got: {}", ty),
             Error::VariableNotFound(var) => write!(f, "variable not found: {}", var),
             Error::CannotInjectConstraintsInto(ty) => {
                 write!(f, "cannot inject constraints into: {}", ty)
@@ -47,6 +49,10 @@ impl fmt::Display for Error {
                 write!(f, "row constraint failed for label: {}", label)
             }
             Error::RecordPatternNotRecord(ty) => write!(f, "record pattern not a record: {}", ty),
+            Error::UnwrapMissingOk(ty) => write!(f, "unwrap missing ok case, type: {}", ty),
+            Error::UnwrapNotVariant(ty) => {
+                write!(f, "unwrap on something other than variant: {}", ty)
+            }
         }
     }
 }
@@ -81,6 +87,7 @@ impl<K: std::cmp::Ord, V> BTreeMapExt<K, V> for BTreeMap<K, V> {
 pub struct Env {
     pub vars: HashMap<String, Type>,
     pub type_vars: Vec<TypeVar>,
+    wrap: BTreeMap<String, Type>,
 }
 
 impl Env {
@@ -549,11 +556,15 @@ impl Env {
                     }
                     TypeVar::Link(ty) => self.match_fun_ty(num_params, ty),
                     TypeVar::UnboundRow(_, _) | TypeVar::Generic | TypeVar::GenericRow(_) => {
-                        Err(Error::ExpectedFunction)
+                        let ty = self.ty_to_string(&ty)?;
+                        Err(Error::ExpectedFunction(ty))
                     }
                 }
             }
-            _ => Err(Error::ExpectedFunction),
+            _ => {
+                let ty = self.ty_to_string(&ty)?;
+                Err(Error::ExpectedFunction(ty))
+            }
         }
     }
 }
@@ -572,6 +583,7 @@ impl Env {
 
     pub fn infer(&mut self, expr: &Expr) -> Result<Type> {
         let ty = self.infer_inner(0, expr)?;
+        let ty = self.wrapped(ty)?;
         self.generalize(-1, &ty)?;
         Ok(ty)
     }
@@ -615,6 +627,31 @@ impl Env {
         }
     }
 
+    fn wrap_with(&mut self, labels: BTreeMap<String, Type>) -> Result<()> {
+        for (label, ty) in labels {
+            match self.wrap.entry(label) {
+                Entry::Vacant(v) => {
+                    v.insert(ty);
+                }
+                Entry::Occupied(o) => {
+                    let old_ty = o.get().clone();
+                    self.unify(&old_ty, &ty)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn wrapped(&mut self, ty: Type) -> Result<Type> {
+        let mut labels = std::mem::take(&mut self.wrap);
+        if labels.is_empty() {
+            return Ok(ty);
+        }
+        labels.insert(OK_LABEL.to_owned(), ty);
+        let rest = Type::RowEmpty;
+        Ok(Type::Variant(Type::RowExtend(labels, rest.into()).into()))
+    }
+
     fn infer_inner(&mut self, level: Level, expr: &Expr) -> Result<Type> {
         match expr {
             Expr::Bool(_) => Ok(Type::bool()),
@@ -641,24 +678,28 @@ impl Env {
             }
             Expr::Var(name) => {
                 let ty = self.get_var(name)?.clone();
-                self.instantiate(level, ty)
+                let ty = self.instantiate(level, ty)?;
+                Ok(ty)
             }
             Expr::Fun(params, body) => {
                 let mut param_tys = Vec::with_capacity(params.len());
                 let old_vars = self.vars.clone();
+                let old_wrap = self.wrap.clone();
                 for param in params {
                     let param_ty = self.infer_pattern(level, param);
                     param_tys.push(param_ty);
                 }
                 let ret_ty = self.infer_inner(level, body)?;
                 self.vars = old_vars;
+                self.wrap = old_wrap;
                 Ok(Type::Arrow(param_tys, ret_ty.into()))
             }
             Expr::Let(pattern, value, body) => {
                 let var_ty = self.infer_inner(level + 1, value)?;
                 self.generalize(level, &var_ty)?;
                 self.assign_pattern(pattern, var_ty)?;
-                self.infer_inner(level, body)
+                let ty = self.infer_inner(level, body)?;
+                Ok(ty)
             }
             Expr::Call(f, args) => {
                 let f_ty = self.infer_inner(level, f)?;
@@ -745,6 +786,28 @@ impl Env {
                 let cases_row = self.infer_cases(level, &ret, def_variant, cases)?;
                 self.unify(&expr, &Type::Variant(cases_row.into()))?;
                 Ok(ret)
+            }
+            Expr::Unwrap(expr) => {
+                let ty = self.infer_inner(level, expr)?;
+                match &ty {
+                    Type::Variant(rows) => {
+                        let (mut labels, _) = self.match_row_ty(rows)?;
+                        match labels.remove(OK_LABEL) {
+                            None => {
+                                let ty = self.ty_to_string(&ty)?;
+                                Err(Error::UnwrapMissingOk(ty))
+                            }
+                            Some(ty) => {
+                                self.wrap_with(labels)?;
+                                Ok(ty)
+                            }
+                        }
+                    }
+                    _ => {
+                        let ty = self.ty_to_string(&ty)?;
+                        Err(Error::UnwrapNotVariant(ty))
+                    }
+                }
             }
             Expr::If(if_expr, if_body, elifs, else_body) => {
                 let bool = Type::bool();
@@ -1137,7 +1200,7 @@ mod tests {
             "forall a b => a -> b -> b",
         );
         fail("fun(x) -> x(x)", Error::RecursiveType);
-        fail("one(id)", Error::ExpectedFunction);
+        fail("one(id)", Error::ExpectedFunction("int".to_owned()));
         pass(
             "fun(f) -> let x = fun(g, y) -> let _ = g(y) in eq(f, g) in x",
             "forall a b => (a -> b) -> (a -> b, a) -> bool",

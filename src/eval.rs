@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use itertools::Itertools;
 
-use crate::expr::{Expr, IntBinOp, Pattern};
+use crate::expr::{Expr, IntBinOp, Pattern, OK_LABEL};
 
 #[derive(Debug)]
 pub enum Error {
@@ -16,6 +16,7 @@ pub enum Error {
     UnexpectedNumberOfArguments,
     LabelNotFound(String),
     NoCase,
+    UnwrapNotVariant(Value),
 }
 
 impl fmt::Display for Error {
@@ -30,6 +31,7 @@ impl fmt::Display for Error {
             Error::UnexpectedNumberOfArguments => write!(f, "unexpected number of arguments"),
             Error::LabelNotFound(label) => write!(f, "label not found: {}", label),
             Error::NoCase => write!(f, "no case"),
+            Error::UnwrapNotVariant(val) => write!(f, "unwrap on a non-variant: {}", val),
         }
     }
 }
@@ -50,7 +52,7 @@ impl fmt::Display for Function {
 }
 
 impl Function {
-    fn apply(&mut self, args: Vec<Value>) -> Result<Value> {
+    fn apply(&mut self, args: Vec<Value>) -> Result<Wrap> {
         if self.params.len() != args.len() {
             return Err(Error::UnexpectedNumberOfArguments);
         }
@@ -136,6 +138,20 @@ impl Value {
     }
 }
 
+enum Wrap {
+    Value(Value),
+    Wrap(String, Box<Value>),
+}
+
+impl Wrap {
+    fn value(self) -> Value {
+        match self {
+            Wrap::Value(val) => val,
+            Wrap::Wrap(name, val) => Value::Variant(name, val),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Env {
     vars: HashMap<String, Value>,
@@ -143,7 +159,8 @@ pub struct Env {
 
 impl Env {
     pub fn eval(&mut self, expr: &Expr) -> Result<Value> {
-        self.eval_inner(expr)
+        let wrap = self.eval_inner(expr)?;
+        Ok(wrap.value())
     }
 
     fn eval_pattern(&mut self, pattern: &Pattern, value: Value) -> Result<()> {
@@ -169,15 +186,19 @@ impl Env {
         Ok(())
     }
 
-    fn eval_inner(&mut self, expr: &Expr) -> Result<Value> {
+    fn eval_inner(&mut self, expr: &Expr) -> Result<Wrap> {
         match expr {
-            Expr::Bool(b) => Ok(Value::Bool(*b)),
-            Expr::Int(i) => Ok(Value::Int(*i)),
+            Expr::Bool(b) => Ok(Wrap::Value(Value::Bool(*b))),
+            Expr::Int(i) => Ok(Wrap::Value(Value::Int(*i))),
             Expr::IntBinOp(op, lhs, rhs) => {
-                let lhs = self.eval_inner(lhs)?;
-                let lhs = lhs.as_int()?;
-                let rhs = self.eval_inner(rhs)?;
-                let rhs = rhs.as_int()?;
+                let lhs = match self.eval_inner(lhs)? {
+                    Wrap::Value(value) => value.as_int()?,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                let rhs = match self.eval_inner(rhs)? {
+                    Wrap::Value(value) => value.as_int()?,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
                 let val = match op {
                     IntBinOp::Plus => Value::Int(lhs + rhs),
                     IntBinOp::Minus => Value::Int(lhs - rhs),
@@ -188,78 +209,113 @@ impl Env {
                     IntBinOp::GreaterThan => Value::Bool(lhs > rhs),
                     IntBinOp::GreaterThanOrEqual => Value::Bool(lhs >= rhs),
                 };
-                Ok(val)
+                Ok(Wrap::Value(val))
             }
             Expr::Negate(expr) => {
-                let v = self.eval_inner(expr)?;
-                let b = v.as_bool()?;
-                Ok(Value::Bool(!b))
+                let b = match self.eval_inner(expr)? {
+                    Wrap::Value(value) => value.as_bool()?,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                Ok(Wrap::Value(Value::Bool(!b)))
             }
             Expr::EqualEqual(lhs, rhs) => {
-                let lhs = self.eval_inner(lhs)?;
-                let rhs = self.eval_inner(rhs)?;
-                Ok(Value::Bool(lhs == rhs))
+                let lhs = match self.eval_inner(lhs)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                let rhs = match self.eval_inner(rhs)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                Ok(Wrap::Value(Value::Bool(lhs == rhs)))
             }
             Expr::Var(s) => {
                 let value = self
                     .vars
                     .get(s)
                     .ok_or_else(|| Error::VarNotFound(s.clone()))?;
-                Ok(value.clone())
+                Ok(Wrap::Value(value.clone()))
             }
             Expr::Call(fun, args) => {
-                let fun = self.eval_inner(fun)?;
-                let mut fun = fun.as_function()?;
-                let args = args
-                    .iter()
-                    .map(|arg| self.eval_inner(arg))
-                    .collect::<Result<_, _>>()?;
-                fun.apply(args)
+                let mut fun = match self.eval_inner(fun)? {
+                    Wrap::Value(value) => value.as_function()?,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                let mut values = Vec::with_capacity(args.len());
+                for arg in args {
+                    let value = match self.eval_inner(arg)? {
+                        Wrap::Value(value) => value,
+                        Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                    };
+                    values.push(value);
+                }
+                fun.apply(values)
             }
             Expr::Fun(params, body) => {
                 let env = self.clone();
                 let params = params.clone();
                 let body = *body.clone();
                 let fun = Function { env, params, body };
-                Ok(Value::Function(fun))
+                Ok(Wrap::Value(Value::Function(fun)))
             }
             Expr::Let(var, val, body) => {
-                let val = self.eval_inner(val)?;
+                let val = match self.eval_inner(val)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
                 self.eval_pattern(var, val)?;
                 self.eval_inner(body)
             }
             Expr::RecordSelect(record, label) => {
-                let record = self.eval_inner(record)?;
+                let record = match self.eval_inner(record)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
                 let record = record.as_record()?;
                 let val = record
                     .get(label)
                     .ok_or_else(|| Error::LabelNotFound(label.clone()))?;
-                Ok(val.clone())
+                Ok(Wrap::Value(val.clone()))
             }
             Expr::RecordExtend(labels, record) => {
-                let record = self.eval_inner(record)?;
+                let record = match self.eval_inner(record)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
                 let record = record.as_record()?;
                 let mut record = record.clone();
                 for (label, expr) in labels {
-                    let value = self.eval_inner(expr)?;
+                    let value = match self.eval_inner(expr)? {
+                        Wrap::Value(value) => value,
+                        Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                    };
                     record.insert(label.clone(), value);
                 }
-                Ok(Value::Record(record))
+                Ok(Wrap::Value(Value::Record(record)))
             }
             Expr::RecordRestrict(record, label) => {
-                let record = self.eval_inner(record)?;
+                let record = match self.eval_inner(record)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
                 let record = record.as_record()?;
                 let mut record = record.clone();
                 record.remove(label);
-                Ok(Value::Record(record))
+                Ok(Wrap::Value(Value::Record(record)))
             }
-            Expr::RecordEmpty => Ok(Value::Record(BTreeMap::new())),
+            Expr::RecordEmpty => Ok(Wrap::Value(Value::Record(BTreeMap::new()))),
             Expr::Variant(label, expr) => {
-                let value = self.eval_inner(expr)?;
-                Ok(Value::Variant(label.clone(), value.into()))
+                let value = match self.eval_inner(expr)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                Ok(Wrap::Value(Value::Variant(label.clone(), value.into())))
             }
             Expr::Case(value, cases, def) => {
-                let value = self.eval_inner(value)?;
+                let value = match self.eval_inner(value)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
                 let (label, value) = value.as_variant()?;
                 for (case_label, case_var, case_body) in cases {
                     if label == case_label {
@@ -279,15 +335,34 @@ impl Env {
                 Err(Error::NoCase)
             }
             Expr::If(if_expr, if_body, elifs, else_body) => {
-                if self.eval_inner(if_expr)?.as_bool()? {
+                let b = match self.eval_inner(if_expr)? {
+                    Wrap::Value(value) => value.as_bool()?,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                if b {
                     return self.eval_inner(if_body);
                 }
                 for (elif_expr, elif_body) in elifs {
-                    if self.eval_inner(elif_expr)?.as_bool()? {
+                    let b = match self.eval_inner(elif_expr)? {
+                        Wrap::Value(value) => value.as_bool()?,
+                        Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                    };
+                    if b {
                         return self.eval_inner(elif_body);
                     }
                 }
                 self.eval_inner(else_body)
+            }
+            Expr::Unwrap(expr) => {
+                let val = match self.eval_inner(expr)? {
+                    Wrap::Value(value) => value,
+                    Wrap::Wrap(name, val) => return Ok(Wrap::Value(Value::Variant(name, val))),
+                };
+                match val {
+                    Value::Variant(name, val) if name == OK_LABEL => Ok(Wrap::Value(*val)),
+                    Value::Variant(name, val) => Ok(Wrap::Wrap(name, val)),
+                    val => Err(Error::UnwrapNotVariant(val)),
+                }
             }
         }
     }

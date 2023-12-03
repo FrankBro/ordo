@@ -408,6 +408,10 @@ impl<'a> Parser<'a> {
         Ok(Expr::RecordRestrict(lhs.into(), field))
     }
 
+    fn unwrap_expr(&mut self, lhs: Expr) -> Result<Expr> {
+        Ok(Expr::Unwrap(lhs.into()))
+    }
+
     fn expr_postfix(&mut self, lhs: Expr) -> Result<Expr> {
         if self.matches(Token::LParen)? {
             self.call_expr(lhs)
@@ -415,6 +419,8 @@ impl<'a> Parser<'a> {
             self.record_select_expr(lhs)
         } else if self.matches(Token::Backslash)? {
             self.record_restrict_expr(lhs)
+        } else if self.matches(Token::QuestionMark)? {
+            self.unwrap_expr(lhs)
         } else {
             self.expected(
                 vec![Token::LParen, Token::Dot, Token::Backslash],
@@ -504,7 +510,7 @@ impl<'a> Parser<'a> {
 
     fn prefix_bp(&self) -> Result<u8> {
         match self.token {
-            Some(Token::Negate) => Ok(9),
+            Some(Token::Negate) => Ok(10),
             None => Err(Error::UnexpectedEof),
             _ => Err(Error::InvalidPrefix(self.token.clone())),
         }
@@ -513,9 +519,10 @@ impl<'a> Parser<'a> {
     // TODO: Not sure how to determine precedence
     fn postfix_bp(&self) -> Option<u8> {
         match self.token {
-            Some(Token::LParen) => Some(10),
-            Some(Token::Dot) => Some(12),
-            Some(Token::Backslash) => Some(11),
+            Some(Token::LParen) => Some(11),
+            Some(Token::Dot) => Some(13),
+            Some(Token::Backslash) => Some(12),
+            Some(Token::QuestionMark) => Some(9),
             _ => None,
         }
     }
