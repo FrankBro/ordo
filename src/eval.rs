@@ -17,6 +17,8 @@ pub enum Error {
     LabelNotFound(String),
     NoCase,
     UnwrapNotVariant(Value),
+    PatternRecordRestNotEmpty(Expr),
+    InvalidPattern(Expr),
 }
 
 impl fmt::Display for Error {
@@ -32,6 +34,10 @@ impl fmt::Display for Error {
             Error::LabelNotFound(label) => write!(f, "label not found: {}", label),
             Error::NoCase => write!(f, "no case"),
             Error::UnwrapNotVariant(val) => write!(f, "unwrap on a non-variant: {}", val),
+            Error::PatternRecordRestNotEmpty(expr) => {
+                write!(f, "record pattern extended something: {}", expr)
+            }
+            Error::InvalidPattern(expr) => write!(f, "invalid pattern: {}", expr),
         }
     }
 }
@@ -168,7 +174,11 @@ impl Env {
             Pattern::Var(var) => {
                 self.vars.insert(var.clone(), value);
             }
-            Pattern::Record(labels) => {
+            Pattern::RecordExtend(labels, rest) => {
+                match rest.as_ref() {
+                    Expr::RecordEmpty => (),
+                    expr => return Err(Error::PatternRecordRestNotEmpty(expr.clone())),
+                }
                 let labels_value = match value {
                     Value::Record(labels) => labels,
                     _ => return Err(Error::NotRecord(value)),
@@ -182,6 +192,7 @@ impl Env {
                     }
                 }
             }
+            _ => return Err(Error::InvalidPattern(pattern.clone())),
         }
         Ok(())
     }

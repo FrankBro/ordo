@@ -47,41 +47,7 @@ impl IntBinOp {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum Pattern {
-    Var(String),
-    Record(BTreeMap<String, Pattern>),
-}
-
-impl fmt::Display for Pattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Pattern::Var(var) => write!(f, "{}", var),
-            Pattern::Record(labels) => {
-                let labels = labels
-                    .iter()
-                    .map(|(label, pat)| format!("{}: {}", label, pat))
-                    .join(", ");
-                write!(f, "{{{}}}", labels)
-            }
-        }
-    }
-}
-
-impl Pattern {
-    pub fn expr(&self) -> Expr {
-        match self {
-            Pattern::Var(name) => Expr::Var(name.clone()),
-            Pattern::Record(labels) => {
-                let labels = labels
-                    .iter()
-                    .map(|(label, pat)| (label.clone(), pat.expr()))
-                    .collect();
-                Expr::RecordExtend(labels, Expr::RecordEmpty.into())
-            }
-        }
-    }
-}
+pub type Pattern = Expr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
@@ -93,7 +59,7 @@ pub enum Expr {
     Var(String),
     Call(Box<Expr>, Vec<Expr>),
     Fun(Vec<Pattern>, Box<Expr>),
-    Let(Pattern, Box<Expr>, Box<Expr>),
+    Let(Box<Pattern>, Box<Expr>, Box<Expr>),
     RecordSelect(Box<Expr>, String),
     RecordExtend(BTreeMap<String, Expr>, Box<Expr>),
     RecordRestrict(Box<Expr>, String),
@@ -225,7 +191,7 @@ pub mod util {
     use super::{Expr, IntBinOp, Pattern};
 
     pub fn pvar(var: &str) -> Pattern {
-        Pattern::Var(var.to_owned())
+        Expr::Var(var.to_owned())
     }
 
     pub fn precord(labels: Vec<(&str, Pattern)>) -> Pattern {
@@ -233,7 +199,7 @@ pub mod util {
             .into_iter()
             .map(|(label, pattern)| (label.to_owned(), pattern))
             .collect();
-        Pattern::Record(labels)
+        Expr::RecordExtend(labels, Expr::RecordEmpty.into())
     }
 
     pub fn bool(b: bool) -> Expr {
@@ -257,7 +223,7 @@ pub mod util {
     }
 
     pub fn let_(var: Pattern, value: Expr, body: Expr) -> Expr {
-        Expr::Let(var, value.into(), body.into())
+        Expr::Let(var.into(), value.into(), body.into())
     }
 
     pub fn empty() -> Expr {

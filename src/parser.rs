@@ -161,10 +161,10 @@ impl<'a> Parser<'a> {
 
     fn pattern_expr(&mut self) -> Result<Pattern> {
         if let Some(var) = self.matches_ident()? {
-            Ok(Pattern::Var(var))
+            Ok(Expr::Var(var))
         } else if self.matches(Token::LBrace)? {
             if self.matches(Token::RBrace)? {
-                return Ok(Pattern::Record(BTreeMap::new()));
+                return Ok(Expr::RecordEmpty);
             }
             let mut labels = BTreeMap::new();
             loop {
@@ -172,7 +172,7 @@ impl<'a> Parser<'a> {
                 let pattern = if self.matches(Token::Equal)? {
                     self.pattern_expr()?
                 } else {
-                    Pattern::Var(label.clone())
+                    Expr::Var(label.clone())
                 };
                 if labels.insert(label.clone(), pattern).is_some() {
                     return Err(Error::DuplicateLabel(label));
@@ -188,7 +188,7 @@ impl<'a> Parser<'a> {
                     );
                 }
             }
-            Ok(Pattern::Record(labels))
+            Ok(Expr::RecordExtend(labels, Expr::RecordEmpty.into()))
         } else {
             self.expected(vec![Token::empty_ident(), Token::LBrace], "pattern expr")
         }
@@ -213,7 +213,7 @@ impl<'a> Parser<'a> {
     fn let_expr(&mut self) -> Result<Expr> {
         let pattern = self.pattern_expr()?;
         match pattern {
-            Pattern::Var(name) if self.matches(Token::LParen)? => {
+            Expr::Var(name) if self.matches(Token::LParen)? => {
                 let params = self.pattern_list()?;
                 self.expect(Token::Equal, "let expr fun")?;
                 let fun_body = self.expr_inner(0)?;
@@ -224,18 +224,18 @@ impl<'a> Parser<'a> {
                     self.expr_inner(0)?
                 };
                 let fun = Expr::Fun(params, fun_body.into());
-                Ok(Expr::Let(Pattern::Var(name), fun.into(), body.into()))
+                Ok(Expr::Let(Expr::Var(name).into(), fun.into(), body.into()))
             }
             pattern => {
                 self.expect(Token::Equal, "let expr")?;
                 let value = self.expr_inner(0)?;
                 if self.is_repl && self.token.is_none() {
-                    let body = pattern.expr();
-                    Ok(Expr::Let(pattern, value.into(), body.into()))
+                    let body = pattern.clone();
+                    Ok(Expr::Let(pattern.into(), value.into(), body.into()))
                 } else {
                     self.expect(Token::In, "let expr")?;
                     let body = self.expr_inner(0)?;
-                    Ok(Expr::Let(pattern, value.into(), body.into()))
+                    Ok(Expr::Let(pattern.into(), value.into(), body.into()))
                 }
             }
         }
