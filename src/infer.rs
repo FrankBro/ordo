@@ -24,6 +24,8 @@ pub enum Error {
     RecordPatternNotRecord(String),
     UnwrapMissingOk(String),
     UnwrapNotVariant(String),
+    PatternRecordRestNotEmpty(Expr),
+    InvalidPattern(Expr),
 }
 
 impl fmt::Display for Error {
@@ -53,6 +55,10 @@ impl fmt::Display for Error {
             Error::UnwrapNotVariant(ty) => {
                 write!(f, "unwrap on something other than variant: {}", ty)
             }
+            Error::PatternRecordRestNotEmpty(expr) => {
+                write!(f, "record pattern extended something: {}", expr)
+            }
+            Error::InvalidPattern(expr) => write!(f, "invalid pattern: {}", expr),
         }
     }
 }
@@ -591,7 +597,11 @@ impl Env {
     fn assign_pattern(&mut self, pattern: &Pattern, ty: Type) -> Result<()> {
         match (pattern, ty) {
             (Pattern::Var(name), ty) => self.insert_var(name.clone(), ty),
-            (Pattern::Record(labels), Type::Record(row)) => {
+            (Pattern::RecordExtend(labels, rest), Type::Record(row)) => {
+                match rest.as_ref() {
+                    Expr::RecordEmpty => (),
+                    expr => return Err(Error::PatternRecordRestNotEmpty(expr.clone())),
+                }
                 let (labels_ty, _) = self.match_row_ty(&row)?;
                 for (label, label_pattern) in labels {
                     match labels_ty.get(label) {
@@ -600,30 +610,39 @@ impl Env {
                     }
                 }
             }
-            (Pattern::Record(_), ty) => {
+            (Pattern::RecordExtend(_, _), ty) => {
                 let ty = self.ty_to_string(&ty)?;
                 return Err(Error::RecordPatternNotRecord(ty));
             }
+            _ => return Err(Error::InvalidPattern(pattern.clone())),
         }
         Ok(())
     }
 
-    fn infer_pattern(&mut self, level: Level, pattern: &Pattern) -> Type {
+    fn infer_pattern(&mut self, level: Level, pattern: &Pattern) -> Result<Type> {
         match pattern {
             Pattern::Var(name) => {
                 let ty = self.new_unbound(level);
                 self.insert_var(name.clone(), ty.clone());
-                ty
+                Ok(ty)
             }
-            Pattern::Record(labels) => {
+            Pattern::RecordExtend(labels, rest) => {
+                match rest.as_ref() {
+                    Expr::RecordEmpty => (),
+                    expr => return Err(Error::PatternRecordRestNotEmpty(expr.clone())),
+                }
                 let constraints = labels.keys().cloned().collect();
                 let labels = labels
                     .iter()
-                    .map(|(label, pat)| (label.clone(), self.infer_pattern(level, pat)))
-                    .collect();
+                    .map(|(label, pat)| {
+                        self.infer_pattern(level, pat)
+                            .map(|pat| (label.clone(), pat))
+                    })
+                    .collect::<Result<_, _>>()?;
                 let rest = self.new_unbound_row(level, constraints);
-                Type::Record(Type::RowExtend(labels, rest.into()).into())
+                Ok(Type::Record(Type::RowExtend(labels, rest.into()).into()))
             }
+            _ => Err(Error::InvalidPattern(pattern.clone())),
         }
     }
 
@@ -686,7 +705,7 @@ impl Env {
                 let old_vars = self.vars.clone();
                 let old_wrap = self.wrap.clone();
                 for param in params {
-                    let param_ty = self.infer_pattern(level, param);
+                    let param_ty = self.infer_pattern(level, param)?;
                     param_tys.push(param_ty);
                 }
                 let ret_ty = self.infer_inner(level, body)?;
