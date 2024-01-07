@@ -4,7 +4,7 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap};
 use itertools::Itertools;
 
 use crate::{
-    expr::{Constraints, Expr, Id, Level, Pattern, Type, TypeVar, OK_LABEL},
+    expr::{Constraints, Expr, ExprAt, Id, Level, Pattern, PatternAt, Type, TypeVar, OK_LABEL},
     parser::ForAll,
 };
 
@@ -24,8 +24,8 @@ pub enum Error {
     RecordPatternNotRecord(String),
     UnwrapMissingOk(String),
     UnwrapNotVariant(String),
-    PatternRecordRestNotEmpty(Expr),
-    InvalidPattern(Expr),
+    PatternRecordRestNotEmpty(ExprAt),
+    InvalidPattern(ExprAt),
 }
 
 impl fmt::Display for Error {
@@ -587,20 +587,20 @@ impl Env {
         self.vars.insert(name, ty);
     }
 
-    pub fn infer(&mut self, expr: &Expr) -> Result<Type> {
+    pub fn infer(&mut self, expr: &ExprAt) -> Result<Type> {
         let ty = self.infer_inner(0, expr)?;
         let ty = self.wrapped(ty)?;
         self.generalize(-1, &ty)?;
         Ok(ty)
     }
 
-    fn assign_pattern(&mut self, pattern: &Pattern, ty: Type) -> Result<()> {
-        match (pattern, ty) {
+    fn assign_pattern(&mut self, pattern: &PatternAt, ty: Type) -> Result<()> {
+        match (&pattern.expr, ty) {
             (Pattern::Var(name), ty) => self.insert_var(name.clone(), ty),
             (Pattern::RecordExtend(labels, rest), Type::Record(row)) => {
-                match rest.as_ref() {
+                match rest.expr {
                     Expr::RecordEmpty => (),
-                    expr => return Err(Error::PatternRecordRestNotEmpty(expr.clone())),
+                    _ => return Err(Error::PatternRecordRestNotEmpty(*rest.clone())),
                 }
                 let (labels_ty, _) = self.match_row_ty(&row)?;
                 for (label, label_pattern) in labels {
@@ -619,17 +619,17 @@ impl Env {
         Ok(())
     }
 
-    fn infer_pattern(&mut self, level: Level, pattern: &Pattern) -> Result<Type> {
-        match pattern {
+    fn infer_pattern(&mut self, level: Level, pattern: &PatternAt) -> Result<Type> {
+        match &pattern.expr {
             Pattern::Var(name) => {
                 let ty = self.new_unbound(level);
                 self.insert_var(name.clone(), ty.clone());
                 Ok(ty)
             }
             Pattern::RecordExtend(labels, rest) => {
-                match rest.as_ref() {
+                match &rest.expr {
                     Expr::RecordEmpty => (),
-                    expr => return Err(Error::PatternRecordRestNotEmpty(expr.clone())),
+                    _ => return Err(Error::PatternRecordRestNotEmpty(*rest.clone())),
                 }
                 let constraints = labels.keys().cloned().collect();
                 let labels = labels
@@ -671,8 +671,8 @@ impl Env {
         Ok(Type::Variant(Type::RowExtend(labels, rest.into()).into()))
     }
 
-    fn infer_inner(&mut self, level: Level, expr: &Expr) -> Result<Type> {
-        match expr {
+    fn infer_inner(&mut self, level: Level, expr: &ExprAt) -> Result<Type> {
+        match &expr.expr {
             Expr::Bool(_) => Ok(Type::bool()),
             Expr::Int(_) => Ok(Type::int()),
             Expr::IntBinOp(op, lhs, rhs) => {
@@ -860,7 +860,7 @@ impl Env {
         level: Level,
         ret: &Type,
         rest: Type,
-        cases: &Vec<(String, String, Expr)>,
+        cases: &Vec<(String, String, ExprAt)>,
     ) -> Result<Type> {
         let mut labels = BTreeMap::new();
         for (label, var, expr) in cases {

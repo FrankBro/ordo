@@ -1,6 +1,6 @@
 use core::fmt;
 
-use logos::{Lexer, Logos};
+use logos::{Lexer, Logos, Skip};
 
 fn int(lex: &mut Lexer<Token>) -> Option<i64> {
     let slice = lex.slice();
@@ -19,8 +19,21 @@ fn ident(lex: &mut Lexer<Token>) -> Option<String> {
     Some(ident)
 }
 
+#[derive(Default)]
+pub struct Extras {
+    pub line_breaks: usize,
+    pub column_offset: usize,
+}
+
+fn newline(lex: &mut Lexer<Token>) -> Skip {
+    lex.extras.line_breaks += 1;
+    lex.extras.column_offset = lex.span().end;
+    Skip
+}
+
 #[derive(Logos, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\n\f\r]+")]
+#[logos(extras = Extras)]
+#[logos(skip r"[ \t\f\r]+")]
 pub enum Token {
     #[token("let")]
     Let,
@@ -98,6 +111,8 @@ pub enum Token {
     QuestionMark,
     #[regex("[a-zA-Z_][a-zA-Z0-9_]*", ident)]
     Ident(String),
+    #[regex(r"\n", newline)]
+    Newline,
 }
 
 impl Token {
@@ -147,6 +162,7 @@ impl fmt::Display for Token {
             Token::GreaterThan => ">",
             Token::GreaterThanOrEqual => ">=",
             Token::QuestionMark => "?",
+            Token::Newline => "\n",
         };
         write!(f, "{}", s)
     }

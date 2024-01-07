@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use itertools::Itertools;
 
-use crate::expr::{Expr, IntBinOp, Pattern, OK_LABEL};
+use crate::expr::{Expr, ExprAt, IntBinOp, Pattern, PatternAt, OK_LABEL};
 
 #[derive(Debug)]
 pub enum Error {
@@ -17,8 +17,8 @@ pub enum Error {
     LabelNotFound(String),
     NoCase,
     UnwrapNotVariant(Value),
-    PatternRecordRestNotEmpty(Expr),
-    InvalidPattern(Expr),
+    PatternRecordRestNotEmpty(ExprAt),
+    InvalidPattern(ExprAt),
 }
 
 impl fmt::Display for Error {
@@ -46,8 +46,8 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     env: Env,
-    params: Vec<Pattern>,
-    body: Expr,
+    params: Vec<PatternAt>,
+    body: ExprAt,
 }
 
 impl fmt::Display for Function {
@@ -164,20 +164,20 @@ pub struct Env {
 }
 
 impl Env {
-    pub fn eval(&mut self, expr: &Expr) -> Result<Value> {
+    pub fn eval(&mut self, expr: &ExprAt) -> Result<Value> {
         let wrap = self.eval_inner(expr)?;
         Ok(wrap.value())
     }
 
-    fn eval_pattern(&mut self, pattern: &Pattern, value: Value) -> Result<()> {
-        match pattern {
+    fn eval_pattern(&mut self, pattern: &PatternAt, value: Value) -> Result<()> {
+        match &pattern.expr {
             Pattern::Var(var) => {
                 self.vars.insert(var.clone(), value);
             }
             Pattern::RecordExtend(labels, rest) => {
-                match rest.as_ref() {
+                match &rest.expr {
                     Expr::RecordEmpty => (),
-                    expr => return Err(Error::PatternRecordRestNotEmpty(expr.clone())),
+                    _ => return Err(Error::PatternRecordRestNotEmpty(*rest.clone())),
                 }
                 let labels_value = match value {
                     Value::Record(labels) => labels,
@@ -197,8 +197,8 @@ impl Env {
         Ok(())
     }
 
-    fn eval_inner(&mut self, expr: &Expr) -> Result<Wrap> {
-        match expr {
+    fn eval_inner(&mut self, expr: &ExprAt) -> Result<Wrap> {
+        match &expr.expr {
             Expr::Bool(b) => Ok(Wrap::Value(Value::Bool(*b))),
             Expr::Int(i) => Ok(Wrap::Value(Value::Int(*i))),
             Expr::IntBinOp(op, lhs, rhs) => {
