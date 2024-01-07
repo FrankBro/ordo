@@ -162,3 +162,15 @@ mod ifs;
 #[cfg(test)]
 #[path = "tests/unwraps.rs"]
 mod unwraps;
+
+#[cfg(test)]
+#[path = "tests/parse_only.rs"]
+mod parse_only;
+
+#[cfg(test)]
+#[path = "tests/parse_at.rs"]
+mod parse_at;
+
+#[cfg(test)]
+#[path = "tests/infer_tests.rs"]
+mod infer_tests;
