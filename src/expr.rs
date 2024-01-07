@@ -47,34 +47,144 @@ impl IntBinOp {
     }
 }
 
-pub type Pattern = Expr;
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Expr {
-    Bool(bool),
-    Int(i64),
-    IntBinOp(IntBinOp, Box<Expr>, Box<Expr>),
-    Negate(Box<Expr>),
-    EqualEqual(Box<Expr>, Box<Expr>),
-    Var(String),
-    Call(Box<Expr>, Vec<Expr>),
-    Fun(Vec<Pattern>, Box<Expr>),
-    Let(Box<Pattern>, Box<Expr>, Box<Expr>),
-    RecordSelect(Box<Expr>, String),
-    RecordExtend(BTreeMap<String, Expr>, Box<Expr>),
-    RecordRestrict(Box<Expr>, String),
-    RecordEmpty,
-    Variant(String, Box<Expr>),
-    Case(
-        Box<Expr>,
-        Vec<(String, String, Expr)>,
-        Option<(String, Box<Expr>)>,
-    ),
-    If(Box<Expr>, Box<Expr>, Vec<(Expr, Expr)>, Box<Expr>),
-    Unwrap(Box<Expr>),
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
 }
 
-impl fmt::Display for Expr {
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Location {
+    pub start: Position,
+    pub end: Position,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct At<T> {
+    pub start: Position,
+    pub end: Position,
+    pub value: T,
+}
+
+impl<T> At<T> {
+    pub fn map<U, F>(self, f: F) -> At<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        let start = self.start;
+        let end = self.end;
+        let value = f(self.value);
+        At { start, end, value }
+    }
+
+    pub fn span_with<N, V>(self, next: At<N>, value: V) -> At<V> {
+        At {
+            start: self.start,
+            end: next.end,
+            value,
+        }
+    }
+}
+
+pub type NoContext = ();
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PositionContext {
+    pub start: Position,
+    pub end: Position,
+}
+
+impl<T> From<At<T>> for PositionContext {
+    fn from(value: At<T>) -> Self {
+        Self {
+            start: value.start,
+            end: value.end,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExprIn<Context> {
+    pub context: Context,
+    pub expr: Expr<Context>,
+}
+
+impl<Context> fmt::Display for ExprIn<Context> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.expr)
+    }
+}
+
+impl From<Expr<NoContext>> for ExprOnly {
+    fn from(expr: Expr<NoContext>) -> Self {
+        ExprIn { context: (), expr }
+    }
+}
+
+impl From<At<Expr<PositionContext>>> for ExprAt {
+    fn from(value: At<Expr<PositionContext>>) -> Self {
+        ExprIn {
+            context: PositionContext {
+                start: value.start,
+                end: value.end,
+            },
+            expr: value.value,
+        }
+    }
+}
+
+impl ExprIn<PositionContext> {
+    pub fn strip_context(self) -> ExprIn<NoContext> {
+        ExprIn {
+            context: (),
+            expr: self.expr.strip_context(),
+        }
+    }
+}
+
+pub type ExprOnly = ExprIn<NoContext>;
+pub type ExprAt = ExprIn<PositionContext>;
+
+pub type Pattern<Context> = Expr<Context>;
+pub type PatternIn<Context> = ExprIn<Context>;
+pub type PatternOnly = ExprOnly;
+pub type PatternAt = ExprAt;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr<Context> {
+    Bool(bool),
+    Int(i64),
+    IntBinOp(IntBinOp, Box<ExprIn<Context>>, Box<ExprIn<Context>>),
+    Negate(Box<ExprIn<Context>>),
+    EqualEqual(Box<ExprIn<Context>>, Box<ExprIn<Context>>),
+    Var(String),
+    Call(Box<ExprIn<Context>>, Vec<ExprIn<Context>>),
+    Fun(Vec<PatternIn<Context>>, Box<ExprIn<Context>>),
+    Let(
+        Box<PatternIn<Context>>,
+        Box<ExprIn<Context>>,
+        Box<ExprIn<Context>>,
+    ),
+    RecordSelect(Box<ExprIn<Context>>, String),
+    RecordExtend(BTreeMap<String, ExprIn<Context>>, Box<ExprIn<Context>>),
+    RecordRestrict(Box<ExprIn<Context>>, String),
+    RecordEmpty,
+    Variant(String, Box<ExprIn<Context>>),
+    Case(
+        Box<ExprIn<Context>>,
+        Vec<(String, String, ExprIn<Context>)>,
+        Option<(String, Box<ExprIn<Context>>)>,
+    ),
+    If(
+        Box<ExprIn<Context>>,
+        Box<ExprIn<Context>>,
+        Vec<(ExprIn<Context>, ExprIn<Context>)>,
+        Box<ExprIn<Context>>,
+    ),
+    Unwrap(Box<ExprIn<Context>>),
+}
+
+impl<Context> fmt::Display for Expr<Context> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::Bool(b) => write!(f, "{}", b),
@@ -91,14 +201,16 @@ impl fmt::Display for Expr {
                 let params = params.iter().map(|param| param.to_string()).join(", ");
                 write!(f, "fun({}) -> {}", params, body)
             }
-            Expr::Let(var, val, body) => write!(f, "let {} = {} in {}", var, val, body),
+            Expr::Let(var, val, body) => {
+                write!(f, "let {} = {} in {}", var, val, body)
+            }
             Expr::RecordSelect(rec, label) => write!(f, "{}.{}", rec, label),
             Expr::RecordExtend(labels, rest) => {
                 let labels = labels
                     .iter()
                     .map(|(label, val)| format!("{}: {}", label, val))
                     .join(", ");
-                match rest.as_ref() {
+                match rest.expr {
                     Expr::RecordEmpty => write!(f, "{{{}}}", labels),
                     _ => write!(f, "{{{} | {}}}", labels, rest),
                 }
@@ -109,6 +221,59 @@ impl fmt::Display for Expr {
             Expr::Case(_, _, _) => todo!(),
             Expr::If(_, _, _, _) => todo!(),
             Expr::Unwrap(expr) => write!(f, "{}?", expr),
+        }
+    }
+}
+
+impl Expr<PositionContext> {
+    fn strip_context(self) -> Expr<NoContext> {
+        #[allow(clippy::boxed_local)]
+        fn fix(e: Box<ExprAt>) -> Box<ExprOnly> {
+            e.strip_context().into()
+        }
+        match self {
+            Expr::Bool(b) => Expr::Bool(b),
+            Expr::Int(i) => Expr::Int(i),
+            Expr::IntBinOp(op, a, b) => Expr::IntBinOp(op, fix(a), fix(b)),
+            Expr::Negate(e) => Expr::Negate(fix(e)),
+            Expr::EqualEqual(a, b) => Expr::EqualEqual(fix(a), fix(b)),
+            Expr::Var(s) => Expr::Var(s),
+            Expr::Call(fun, args) => {
+                let args = args.into_iter().map(ExprAt::strip_context).collect();
+                Expr::Call(fix(fun), args)
+            }
+            Expr::Fun(params, body) => {
+                let params = params.into_iter().map(ExprAt::strip_context).collect();
+                Expr::Fun(params, fix(body))
+            }
+            Expr::Let(p, v, b) => Expr::Let(fix(p), fix(v), fix(b)),
+            Expr::RecordSelect(r, l) => Expr::RecordSelect(fix(r), l),
+            Expr::RecordExtend(ls, r) => {
+                let ls = ls
+                    .into_iter()
+                    .map(|(l, e)| (l, e.strip_context()))
+                    .collect();
+                Expr::RecordExtend(ls, fix(r))
+            }
+            Expr::RecordRestrict(r, l) => Expr::RecordRestrict(fix(r), l),
+            Expr::RecordEmpty => Expr::RecordEmpty,
+            Expr::Variant(l, e) => Expr::Variant(l, fix(e)),
+            Expr::Case(e, cs, d) => {
+                let cs = cs
+                    .into_iter()
+                    .map(|(l, v, b)| (l, v, b.strip_context()))
+                    .collect();
+                let d = d.map(|(v, b)| (v, fix(b)));
+                Expr::Case(fix(e), cs, d)
+            }
+            Expr::If(i, ib, ies, eb) => {
+                let ies = ies
+                    .into_iter()
+                    .map(|(ie, ieb)| (ie.strip_context(), ieb.strip_context()))
+                    .collect();
+                Expr::If(fix(i), fix(ib), ies, fix(eb))
+            }
+            Expr::Unwrap(e) => Expr::Unwrap(fix(e)),
         }
     }
 }
@@ -188,102 +353,139 @@ pub enum TypeVar {
 
 #[cfg(test)]
 pub mod util {
-    use super::{Expr, IntBinOp, Pattern};
+    use super::{Expr, ExprAt, ExprOnly, IntBinOp, PatternAt, PatternOnly, PositionContext};
 
-    pub fn pvar(var: &str) -> Pattern {
-        Expr::Var(var.to_owned())
+    pub fn pvar(var: &str) -> PatternOnly {
+        Expr::Var(var.to_owned()).into()
     }
 
-    pub fn precord(labels: Vec<(&str, Pattern)>) -> Pattern {
+    pub fn precord(labels: Vec<(&str, PatternOnly)>) -> PatternOnly {
         let labels = labels
             .into_iter()
             .map(|(label, pattern)| (label.to_owned(), pattern))
             .collect();
-        Expr::RecordExtend(labels, Expr::RecordEmpty.into())
+        Expr::RecordExtend(labels, Box::new(Expr::RecordEmpty.into())).into()
     }
 
-    pub fn bool(b: bool) -> Expr {
-        Expr::Bool(b)
+    pub fn bool(b: bool) -> ExprOnly {
+        Expr::Bool(b).into()
     }
 
-    pub fn int(i: i64) -> Expr {
-        Expr::Int(i)
+    pub fn int(i: i64) -> ExprOnly {
+        Expr::Int(i).into()
     }
 
-    pub fn var(var: &str) -> Expr {
-        Expr::Var(var.to_owned())
+    pub fn int_at(i: i64, context: PositionContext) -> ExprAt {
+        ExprAt {
+            context,
+            expr: Expr::Int(i),
+        }
     }
 
-    pub fn call(fn_expr: Expr, args: Vec<Expr>) -> Expr {
-        Expr::Call(fn_expr.into(), args)
+    pub fn var(var: &str) -> ExprOnly {
+        Expr::Var(var.to_owned()).into()
     }
 
-    pub fn fun(args: Vec<Pattern>, body: Expr) -> Expr {
-        Expr::Fun(args, body.into())
+    pub fn var_at(var: &str, context: PositionContext) -> ExprAt {
+        ExprAt {
+            context,
+            expr: Expr::Var(var.to_owned()),
+        }
     }
 
-    pub fn let_(var: Pattern, value: Expr, body: Expr) -> Expr {
-        Expr::Let(var.into(), value.into(), body.into())
+    pub fn call(fn_expr: ExprOnly, args: Vec<ExprOnly>) -> ExprOnly {
+        Expr::Call(fn_expr.into(), args).into()
     }
 
-    pub fn empty() -> Expr {
-        Expr::RecordEmpty
+    pub fn fun(args: Vec<PatternOnly>, body: ExprOnly) -> ExprOnly {
+        Expr::Fun(args, body.into()).into()
     }
 
-    pub fn select(r: Expr, label: &str) -> Expr {
-        Expr::RecordSelect(r.into(), label.to_owned())
+    pub fn let_(var: PatternOnly, value: ExprOnly, body: ExprOnly) -> ExprOnly {
+        Expr::Let(var.into(), value.into(), body.into()).into()
     }
 
-    pub fn restrict(r: Expr, label: &str) -> Expr {
-        Expr::RecordRestrict(r.into(), label.to_owned())
+    pub fn let_at(var: PatternAt, value: ExprAt, body: ExprAt, context: PositionContext) -> ExprAt {
+        ExprAt {
+            context,
+            expr: Expr::Let(var.into(), value.into(), body.into()),
+        }
     }
 
-    pub fn record(labels: Vec<(&str, Expr)>, r: Expr) -> Expr {
+    pub fn empty() -> ExprOnly {
+        Expr::RecordEmpty.into()
+    }
+
+    pub fn select(r: ExprOnly, label: &str) -> ExprOnly {
+        Expr::RecordSelect(r.into(), label.to_owned()).into()
+    }
+
+    pub fn restrict(r: ExprOnly, label: &str) -> ExprOnly {
+        Expr::RecordRestrict(r.into(), label.to_owned()).into()
+    }
+
+    pub fn record(labels: Vec<(&str, ExprOnly)>, r: ExprOnly) -> ExprOnly {
         let labels = labels
             .into_iter()
             .map(|(label, expr)| (label.to_owned(), expr))
             .collect();
-        Expr::RecordExtend(labels, r.into())
+        Expr::RecordExtend(labels, r.into()).into()
     }
 
-    pub fn plus(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::IntBinOp(IntBinOp::Plus, lhs.into(), rhs.into())
+    pub fn plus(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
+        Expr::IntBinOp(IntBinOp::Plus, lhs.into(), rhs.into()).into()
     }
 
-    pub fn minus(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::IntBinOp(IntBinOp::Minus, lhs.into(), rhs.into())
+    pub fn plus_at(lhs: ExprAt, rhs: ExprAt, context: PositionContext) -> ExprAt {
+        ExprAt {
+            context,
+            expr: Expr::IntBinOp(IntBinOp::Plus, lhs.into(), rhs.into()),
+        }
     }
 
-    pub fn multiply(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::IntBinOp(IntBinOp::Multiply, lhs.into(), rhs.into())
+    pub fn minus(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
+        Expr::IntBinOp(IntBinOp::Minus, lhs.into(), rhs.into()).into()
     }
 
-    pub fn divide(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::IntBinOp(IntBinOp::Divide, lhs.into(), rhs.into())
+    pub fn multiply(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
+        Expr::IntBinOp(IntBinOp::Multiply, lhs.into(), rhs.into()).into()
     }
 
-    pub fn negate(expr: Expr) -> Expr {
-        Expr::Negate(expr.into())
+    pub fn divide(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
+        Expr::IntBinOp(IntBinOp::Divide, lhs.into(), rhs.into()).into()
     }
 
-    pub fn equalequal(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::EqualEqual(lhs.into(), rhs.into())
+    pub fn negate(expr: ExprOnly) -> ExprOnly {
+        Expr::Negate(expr.into()).into()
     }
 
-    pub fn gt(lhs: Expr, rhs: Expr) -> Expr {
-        Expr::IntBinOp(IntBinOp::GreaterThan, lhs.into(), rhs.into())
+    pub fn equalequal(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
+        Expr::EqualEqual(lhs.into(), rhs.into()).into()
     }
 
-    pub fn match_(val: Expr, cases: Vec<(&str, &str, Expr)>, def: Option<(&str, Expr)>) -> Expr {
+    pub fn gt(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
+        Expr::IntBinOp(IntBinOp::GreaterThan, lhs.into(), rhs.into()).into()
+    }
+
+    pub fn match_(
+        val: ExprOnly,
+        cases: Vec<(&str, &str, ExprOnly)>,
+        def: Option<(&str, ExprOnly)>,
+    ) -> ExprOnly {
         let cases = cases
             .into_iter()
             .map(|(variant, var, body)| (variant.to_owned(), var.to_owned(), body))
             .collect();
         let def = def.map(|(var, body)| (var.to_owned(), body.into()));
-        Expr::Case(val.into(), cases, def)
+        Expr::Case(val.into(), cases, def).into()
     }
 
-    pub fn if_(if_expr: Expr, if_body: Expr, elifs: Vec<(Expr, Expr)>, else_body: Expr) -> Expr {
-        Expr::If(if_expr.into(), if_body.into(), elifs, else_body.into())
+    pub fn if_(
+        if_expr: ExprOnly,
+        if_body: ExprOnly,
+        elifs: Vec<(ExprOnly, ExprOnly)>,
+        else_body: ExprOnly,
+    ) -> ExprOnly {
+        Expr::If(if_expr.into(), if_body.into(), elifs, else_body.into()).into()
     }
 }

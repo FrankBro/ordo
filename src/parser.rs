@@ -7,7 +7,7 @@ use itertools::Itertools;
 use logos::{Lexer, Logos};
 
 use crate::{
-    expr::{Constraints, Expr, IntBinOp, Pattern, Type},
+    expr::{At, Constraints, Expr, ExprAt, IntBinOp, Pattern, PatternAt, Position, Type},
     lexer::Token,
 };
 
@@ -20,10 +20,10 @@ pub enum Error {
     ExpectedEof(Token),
     UnexpectedEof,
     InvalidPrefix(Option<Token>),
-    DuplicateLabel(String),
-    InvalidTypeVarName(String),
-    NoRowForConstraints(String),
-    RowConstraintsAlreadyDefined(String),
+    DuplicateLabel(At<String>),
+    InvalidTypeVarName(At<String>),
+    NoRowForConstraints(At<String>),
+    RowConstraintsAlreadyDefined(At<String>),
 }
 
 impl fmt::Display for Error {
@@ -49,10 +49,10 @@ impl fmt::Display for Error {
                 };
                 write!(f, "invalid prefix: {}", token_str)
             }
-            Error::DuplicateLabel(label) => write!(f, "duplicate label: {}", label),
-            Error::InvalidTypeVarName(name) => write!(f, "invalid type var name, should be either one letter or the letter 'r' and one letter, was: {}", name),
-            Error::NoRowForConstraints(name) => write!(f, "found constraint for a row that isn't defined: {}", name),
-            Error::RowConstraintsAlreadyDefined(name) => write!(f, "constraints for a row with constraints already defined: {}", name),
+            Error::DuplicateLabel(label) => write!(f, "duplicate label: {}", label.value),
+            Error::InvalidTypeVarName(name) => write!(f, "invalid type var name, should be either one letter or the letter 'r' and one letter, was: {}", name.value),
+            Error::NoRowForConstraints(name) => write!(f, "found constraint for a row that isn't defined: {}", name.value),
+            Error::RowConstraintsAlreadyDefined(name) => write!(f, "constraints for a row with constraints already defined: {}", name.value),
         }
     }
 }
@@ -66,21 +66,40 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    fn at<T>(&self, value: T) -> At<T> {
+        let line = self.lexer.extras.line_breaks;
+        let offset = self.lexer.extras.column_offset;
+        let span = self.lexer.span();
+        At {
+            value,
+            start: Position {
+                line,
+                column: span.start - offset,
+            },
+            end: Position {
+                line,
+                column: span.end - offset,
+            },
+        }
+    }
+
     fn check(&mut self, token: Token) -> bool {
         self.token == Some(token)
     }
 
-    fn matches(&mut self, token: Token) -> Result<bool> {
+    fn matches(&mut self, token: Token) -> Result<Option<At<()>>> {
         if !self.check(token) {
-            return Ok(false);
+            return Ok(None);
         }
+        let at = self.at(());
         self.advance()?;
-        Ok(true)
+        Ok(Some(at))
     }
 
-    fn matches_ident(&mut self) -> Result<Option<String>> {
+    fn matches_ident(&mut self) -> Result<Option<At<String>>> {
         let token = self.token.take();
         if let Some(Token::Ident(ident)) = token {
+            let ident = self.at(ident);
             self.advance()?;
             return Ok(Some(ident));
         }
@@ -88,9 +107,10 @@ impl<'a> Parser<'a> {
         Ok(None)
     }
 
-    fn matches_int(&mut self) -> Result<Option<i64>> {
+    fn matches_int(&mut self) -> Result<Option<At<i64>>> {
         let token = self.token.take();
         if let Some(Token::Int(i)) = token {
+            let i = self.at(i);
             self.advance()?;
             return Ok(Some(i));
         }
@@ -111,33 +131,35 @@ impl<'a> Parser<'a> {
         Err(Error::Expected(context, tokens, self.token.take()))
     }
 
-    fn expect(&mut self, expected: Token, context: &'static str) -> Result<()> {
+    fn expect(&mut self, expected: Token, context: &'static str) -> Result<At<()>> {
         if self.token.as_ref() != Some(&expected) {
             return self.expected(vec![expected], context);
         }
+        let at = self.at(());
         self.advance()?;
-        Ok(())
+        Ok(at)
     }
 
-    fn expect_ident(&mut self, context: &'static str) -> Result<String> {
+    fn expect_ident(&mut self, context: &'static str) -> Result<At<String>> {
         let token = self.token.take();
         if let Some(Token::Ident(ident)) = token {
+            let ident = self.at(ident);
             self.advance()?;
             return Ok(ident);
         }
         Err(Error::Expected(context, vec![Token::empty_ident()], token))
     }
 
-    pub fn repl(source: &str) -> Result<Expr> {
+    pub fn repl(source: &str) -> Result<ExprAt> {
         Self::expr_source(source, true)
     }
 
     #[cfg(test)]
-    pub fn expr(source: &str) -> Result<Expr> {
+    pub fn expr(source: &str) -> Result<ExprAt> {
         Self::expr_source(source, false)
     }
 
-    fn expr_source(source: &str, is_repl: bool) -> Result<Expr> {
+    fn expr_source(source: &str, is_repl: bool) -> Result<ExprAt> {
         let lexer = Token::lexer(source);
         let token = None;
         let mut parser = Parser {
@@ -153,55 +175,64 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn paren_expr(&mut self) -> Result<Expr> {
+    fn paren_expr(&mut self) -> Result<ExprAt> {
         let expr = self.expr_inner(0)?;
         self.expect(Token::RParen, "paren expr")?;
         Ok(expr)
     }
 
-    fn pattern_expr(&mut self) -> Result<Pattern> {
+    /// Return the labels and closing brace location
+    fn pattern_expr_inner(&mut self) -> Result<(BTreeMap<String, ExprAt>, At<()>)> {
+        let mut labels = BTreeMap::new();
+        loop {
+            let label = self.expect_ident("pattern expr record label")?;
+            let pattern = if self.matches(Token::Equal)?.is_some() {
+                self.pattern_expr()?
+            } else {
+                label.clone().map(Pattern::Var).into()
+            };
+            if labels.insert(label.clone().value, pattern).is_some() {
+                return Err(Error::DuplicateLabel(label));
+            }
+            if let Some(r) = self.matches(Token::RBrace)? {
+                return Ok((labels, r));
+            } else if self.matches(Token::Comma)?.is_some() {
+                continue;
+            } else {
+                return self.expected(
+                    vec![Token::empty_ident(), Token::RBrace],
+                    "pattern expr record",
+                );
+            }
+        }
+    }
+
+    fn pattern_expr(&mut self) -> Result<PatternAt> {
         if let Some(var) = self.matches_ident()? {
-            Ok(Expr::Var(var))
-        } else if self.matches(Token::LBrace)? {
-            if self.matches(Token::RBrace)? {
-                return Ok(Expr::RecordEmpty);
+            Ok(var.map(Pattern::Var).into())
+        } else if let Some(l) = self.matches(Token::LBrace)? {
+            if let Some(r) = self.matches(Token::RBrace)? {
+                return Ok(l.span_with(r, Expr::RecordEmpty).into());
             }
-            let mut labels = BTreeMap::new();
-            loop {
-                let label = self.expect_ident("pattern expr record label")?;
-                let pattern = if self.matches(Token::Equal)? {
-                    self.pattern_expr()?
-                } else {
-                    Expr::Var(label.clone())
-                };
-                if labels.insert(label.clone(), pattern).is_some() {
-                    return Err(Error::DuplicateLabel(label));
-                }
-                if self.matches(Token::RBrace)? {
-                    break;
-                } else if self.matches(Token::Comma)? {
-                    continue;
-                } else {
-                    return self.expected(
-                        vec![Token::empty_ident(), Token::RBrace],
-                        "pattern expr record",
-                    );
-                }
-            }
-            Ok(Expr::RecordExtend(labels, Expr::RecordEmpty.into()))
+            let (labels, r) = self.pattern_expr_inner()?;
+            Ok(l.span_with(
+                r.clone(),
+                Expr::RecordExtend(labels, Box::new(r.map(|()| Expr::RecordEmpty).into())),
+            )
+            .into())
         } else {
             self.expected(vec![Token::empty_ident(), Token::LBrace], "pattern expr")
         }
     }
 
-    fn pattern_list(&mut self) -> Result<Vec<Pattern>> {
+    fn pattern_list(&mut self) -> Result<Vec<PatternAt>> {
         let mut patterns = Vec::new();
         loop {
             let pattern = self.pattern_expr()?;
             patterns.push(pattern);
-            if self.matches(Token::RParen)? {
+            if self.matches(Token::RParen)?.is_some() {
                 break;
-            } else if self.matches(Token::Comma)? {
+            } else if self.matches(Token::Comma)?.is_some() {
                 continue;
             } else {
                 return self.expected(vec![Token::RParen, Token::Comma], "pattern list");
@@ -210,71 +241,88 @@ impl<'a> Parser<'a> {
         Ok(patterns)
     }
 
-    fn let_expr(&mut self) -> Result<Expr> {
+    fn let_expr(&mut self, at: At<()>) -> Result<ExprAt> {
         let pattern = self.pattern_expr()?;
-        match pattern {
-            Expr::Var(name) if self.matches(Token::LParen)? => {
+        match pattern.expr {
+            Pattern::Var(_) if self.matches(Token::LParen)?.is_some() => {
                 let params = self.pattern_list()?;
                 self.expect(Token::Equal, "let expr fun")?;
                 let fun_body = self.expr_inner(0)?;
                 let body = if self.is_repl && self.token.is_none() {
-                    Expr::Var(name.clone())
+                    pattern.clone()
                 } else {
                     self.expect(Token::In, "let expr fun")?;
                     self.expr_inner(0)?
                 };
-                let fun = Expr::Fun(params, fun_body.into());
-                Ok(Expr::Let(Expr::Var(name).into(), fun.into(), body.into()))
+                let fun = ExprAt {
+                    context: at.clone().into(),
+                    expr: Expr::Fun(params, fun_body.into()),
+                };
+                let expr = Expr::Let(pattern.into(), fun.into(), body.into());
+                Ok(ExprAt {
+                    context: at.into(),
+                    expr,
+                })
             }
-            pattern => {
+            _ => {
                 self.expect(Token::Equal, "let expr")?;
                 let value = self.expr_inner(0)?;
                 if self.is_repl && self.token.is_none() {
                     let body = pattern.clone();
-                    Ok(Expr::Let(pattern.into(), value.into(), body.into()))
+                    Ok(ExprAt {
+                        context: at.into(),
+                        expr: Expr::Let(pattern.into(), value.into(), body.into()),
+                    })
                 } else {
                     self.expect(Token::In, "let expr")?;
                     let body = self.expr_inner(0)?;
-                    Ok(Expr::Let(pattern.into(), value.into(), body.into()))
+                    Ok(ExprAt {
+                        context: at.into(),
+                        expr: Expr::Let(pattern.into(), value.into(), body.into()),
+                    })
                 }
             }
         }
     }
 
-    fn fun_expr(&mut self) -> Result<Expr> {
+    fn fun_expr(&mut self, at: At<()>) -> Result<ExprAt> {
         self.expect(Token::LParen, "fun expr")?;
         let params = self.pattern_list()?;
         self.expect(Token::Arrow, "fun expr")?;
         let body = self.expr_inner(0)?;
-        Ok(Expr::Fun(params, body.into()))
+        Ok(ExprAt {
+            context: at.into(),
+            expr: Expr::Fun(params, body.into()),
+        })
     }
 
-    fn record_expr(&mut self) -> Result<Expr> {
-        if self.matches(Token::RBrace)? {
-            return Ok(Expr::RecordEmpty);
-        }
+    /// Return is labels, rest and closing brace location
+    fn record_expr_inner(&mut self) -> Result<(BTreeMap<String, ExprAt>, ExprAt, At<()>)> {
         let mut labels = BTreeMap::new();
-        let mut rest = Expr::RecordEmpty;
         loop {
             let label = self.expect_ident("record expr label")?;
-            let expr = if self.matches(Token::Equal)? {
+            let expr = if self.matches(Token::Equal)?.is_some() {
                 self.expr_inner(0)?
             } else {
-                Expr::Var(label.clone())
+                label.clone().map(Expr::Var).into()
             };
 
-            if labels.insert(label.clone(), expr).is_some() {
+            if labels.insert(label.value.clone(), expr).is_some() {
                 return Err(Error::DuplicateLabel(label));
             }
 
-            if self.matches(Token::Comma)? {
+            if self.matches(Token::Comma)?.is_some() {
                 continue;
-            } else if self.matches(Token::RBrace)? {
-                break;
-            } else if self.matches(Token::Pipe)? {
-                rest = self.expr_inner(0)?;
-                self.expect(Token::RBrace, "record expr rest")?;
-                break;
+            } else if let Some(r) = self.matches(Token::RBrace)? {
+                let rest = ExprAt {
+                    context: r.clone().into(),
+                    expr: Expr::RecordEmpty,
+                };
+                return Ok((labels, rest, r));
+            } else if self.matches(Token::Pipe)?.is_some() {
+                let rest = self.expr_inner(0)?;
+                let r = self.expect(Token::RBrace, "record expr rest")?;
+                return Ok((labels, rest, r));
             } else {
                 return self.expected(
                     vec![Token::Pipe, Token::Comma, Token::RBrace],
@@ -282,56 +330,74 @@ impl<'a> Parser<'a> {
                 );
             }
         }
-        Ok(Expr::RecordExtend(labels, rest.into()))
     }
 
-    fn variant_expr(&mut self) -> Result<Expr> {
+    fn record_expr(&mut self, l: At<()>) -> Result<ExprAt> {
+        if let Some(r) = self.matches(Token::RBrace)? {
+            return Ok(l.span_with(r, Expr::RecordEmpty).into());
+        }
+        let (labels, rest, r) = self.record_expr_inner()?;
+        Ok(ExprAt {
+            context: l.span_with(r, ()).into(),
+            expr: Expr::RecordExtend(labels, rest.into()),
+        })
+    }
+
+    fn variant_expr(&mut self, at: At<()>) -> Result<ExprAt> {
         let label = self.expect_ident("variant expr")?;
         let expr = self.expr_inner(0)?;
-        Ok(Expr::Variant(label, expr.into()))
+        let label_only = label.value.clone();
+        let context = at.span_with(label, ()).into();
+        Ok(ExprAt {
+            context,
+            expr: Expr::Variant(label_only, expr.into()),
+        })
     }
 
-    fn match_expr(&mut self) -> Result<Expr> {
+    fn match_expr(&mut self, at: At<()>) -> Result<ExprAt> {
         let expr = self.expr_inner(0)?;
         self.expect(Token::LBrace, "match expr")?;
         let mut cases = Vec::new();
         let mut default_case = None;
         loop {
-            if self.matches(Token::Colon)? {
+            if self.matches(Token::Colon)?.is_some() {
                 let variant = self.expect_ident("match expr case variant")?;
                 let var = self.expect_ident("match expr case value")?;
                 self.expect(Token::Arrow, "match expr case")?;
                 let expr = self.expr_inner(0)?;
-                cases.push((variant, var, expr));
+                cases.push((variant.value, var.value, expr));
             } else if let Some(var) = self.matches_ident()? {
                 self.expect(Token::Arrow, "match expr default case")?;
                 let expr = self.expr_inner(0)?;
-                default_case = Some((var, Box::new(expr)));
+                default_case = Some((var.value, Box::new(expr)));
                 self.expect(Token::RBrace, "match expr default case")?;
                 break;
             } else {
                 return self.expected(vec![Token::Colon, Token::empty_ident()], "match expr case");
             }
-            if self.matches(Token::Comma)? {
+            if self.matches(Token::Comma)?.is_some() {
                 continue;
-            } else if self.matches(Token::RBrace)? {
+            } else if self.matches(Token::RBrace)?.is_some() {
                 break;
             } else {
                 return self.expected(vec![Token::Comma, Token::RBrace], "match expr");
             }
         }
-        Ok(Expr::Case(expr.into(), cases, default_case))
+        Ok(ExprAt {
+            context: at.into(),
+            expr: Expr::Case(expr.into(), cases, default_case),
+        })
     }
 
-    fn if_expr(&mut self) -> Result<Expr> {
+    fn if_expr(&mut self, at: At<()>) -> Result<ExprAt> {
         let if_expr = self.expr_inner(0)?;
         self.expect(Token::Then, "if expr")?;
         let if_body = self.expr_inner(0)?;
         let mut elifs = Vec::new();
         loop {
-            if self.matches(Token::Else)? {
+            if self.matches(Token::Else)?.is_some() {
                 break;
-            } else if self.matches(Token::Elif)? {
+            } else if self.matches(Token::Elif)?.is_some() {
                 let elif_expr = self.expr_inner(0)?;
                 self.expect(Token::Then, "if expr elif")?;
                 let elif_body = self.expr_inner(0)?;
@@ -341,86 +407,91 @@ impl<'a> Parser<'a> {
             }
         }
         let else_body = self.expr_inner(0)?;
-        Ok(Expr::If(
-            if_expr.into(),
-            if_body.into(),
-            elifs,
-            else_body.into(),
-        ))
+        Ok(ExprAt {
+            context: at.into(),
+            expr: Expr::If(if_expr.into(), if_body.into(), elifs, else_body.into()),
+        })
     }
 
-    fn expr_lhs(&mut self) -> Result<Expr> {
+    fn expr_lhs(&mut self) -> Result<ExprAt> {
         if let Some(var) = self.matches_ident()? {
-            Ok(Expr::Var(var))
+            Ok(var.map(Expr::Var).into())
         } else if let Some(i) = self.matches_int()? {
-            Ok(Expr::Int(i))
-        } else if self.matches(Token::True)? {
-            Ok(Expr::Bool(true))
-        } else if self.matches(Token::False)? {
-            Ok(Expr::Bool(false))
-        } else if self.matches(Token::LParen)? {
+            Ok(i.map(Expr::Int).into())
+        } else if let Some(at) = self.matches(Token::True)? {
+            Ok(at.map(|()| Expr::Bool(true)).into())
+        } else if let Some(at) = self.matches(Token::False)? {
+            Ok(at.map(|()| Expr::Bool(false)).into())
+        } else if self.matches(Token::LParen)?.is_some() {
             self.paren_expr()
-        } else if self.matches(Token::Let)? {
-            self.let_expr()
-        } else if self.matches(Token::Fun)? {
-            self.fun_expr()
-        } else if self.matches(Token::LBrace)? {
-            self.record_expr()
-        } else if self.matches(Token::Colon)? {
-            self.variant_expr()
-        } else if self.matches(Token::Match)? {
-            self.match_expr()
-        } else if self.matches(Token::If)? {
-            self.if_expr()
+        } else if let Some(at) = self.matches(Token::Let)? {
+            self.let_expr(at)
+        } else if let Some(at) = self.matches(Token::Fun)? {
+            self.fun_expr(at)
+        } else if let Some(l) = self.matches(Token::LBrace)? {
+            self.record_expr(l)
+        } else if let Some(at) = self.matches(Token::Colon)? {
+            self.variant_expr(at)
+        } else if let Some(at) = self.matches(Token::Match)? {
+            self.match_expr(at)
+        } else if let Some(at) = self.matches(Token::If)? {
+            self.if_expr(at)
         } else {
             let r_bp = self.prefix_bp()?;
-            if self.matches(Token::Negate)? {
+            if let Some(at) = self.matches(Token::Negate)? {
                 let rhs = self.expr_inner(r_bp)?;
-                Ok(Expr::Negate(rhs.into()))
+                Ok(at.map(|()| Expr::Negate(rhs.into())).into())
             } else {
                 Err(Error::InvalidPrefix(self.token.take()))
             }
         }
     }
 
-    fn call_expr(&mut self, lhs: Expr) -> Result<Expr> {
+    fn call_expr(&mut self, lhs: ExprAt) -> Result<ExprAt> {
         let mut args = vec![self.expr_inner(0)?];
         loop {
-            if self.matches(Token::RParen)? {
+            if self.matches(Token::RParen)?.is_some() {
                 break;
-            } else if self.matches(Token::Comma)? {
+            } else if self.matches(Token::Comma)?.is_some() {
             } else {
                 return self.expected(vec![Token::Comma, Token::RParen], "call expr");
             }
             let arg = self.expr_inner(0)?;
             args.push(arg);
         }
-        Ok(Expr::Call(lhs.into(), args))
+        Ok(ExprAt {
+            context: lhs.context.clone(),
+            expr: Expr::Call(lhs.into(), args),
+        })
     }
 
-    fn record_select_expr(&mut self, lhs: Expr) -> Result<Expr> {
+    fn record_select_expr(&mut self, lhs: ExprAt) -> Result<ExprAt> {
         let field = self.expect_ident("record select expr")?;
-        Ok(Expr::RecordSelect(lhs.into(), field))
+        Ok(field
+            .map(|field| Expr::RecordSelect(lhs.into(), field))
+            .into())
     }
 
-    fn record_restrict_expr(&mut self, lhs: Expr) -> Result<Expr> {
+    fn record_restrict_expr(&mut self, lhs: ExprAt) -> Result<ExprAt> {
         let field = self.expect_ident("record restrict expr")?;
-        Ok(Expr::RecordRestrict(lhs.into(), field))
+        Ok(field
+            .map(|field| Expr::RecordRestrict(lhs.into(), field))
+            .into())
     }
 
-    fn unwrap_expr(&mut self, lhs: Expr) -> Result<Expr> {
-        Ok(Expr::Unwrap(lhs.into()))
+    fn unwrap_expr(&mut self, lhs: ExprAt, at: At<()>) -> Result<ExprAt> {
+        Ok(at.map(|()| Expr::Unwrap(lhs.into())).into())
     }
 
-    fn expr_postfix(&mut self, lhs: Expr) -> Result<Expr> {
-        if self.matches(Token::LParen)? {
+    fn expr_postfix(&mut self, lhs: ExprAt) -> Result<ExprAt> {
+        if self.matches(Token::LParen)?.is_some() {
             self.call_expr(lhs)
-        } else if self.matches(Token::Dot)? {
+        } else if self.matches(Token::Dot)?.is_some() {
             self.record_select_expr(lhs)
-        } else if self.matches(Token::Backslash)? {
+        } else if self.matches(Token::Backslash)?.is_some() {
             self.record_restrict_expr(lhs)
-        } else if self.matches(Token::QuestionMark)? {
-            self.unwrap_expr(lhs)
+        } else if let Some(at) = self.matches(Token::QuestionMark)? {
+            self.unwrap_expr(lhs, at)
         } else {
             self.expected(
                 vec![Token::LParen, Token::Dot, Token::Backslash],
@@ -429,46 +500,33 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expr_infix(&mut self, lhs: Expr, r_bp: u8) -> Result<Expr> {
-        if self.matches(Token::Plus)? {
+    fn binop_expr(&mut self, at: At<()>, op: IntBinOp, lhs: ExprAt, r_bp: u8) -> Result<ExprAt> {
+        let rhs = self.expr_inner(r_bp)?;
+        Ok(at
+            .map(|()| Expr::IntBinOp(op, lhs.into(), rhs.into()))
+            .into())
+    }
+
+    fn expr_infix(&mut self, lhs: ExprAt, r_bp: u8) -> Result<ExprAt> {
+        if let Some(at) = self.matches(Token::Plus)? {
+            self.binop_expr(at, IntBinOp::Plus, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::Minus)? {
+            self.binop_expr(at, IntBinOp::Minus, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::Multiply)? {
+            self.binop_expr(at, IntBinOp::Multiply, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::Divide)? {
+            self.binop_expr(at, IntBinOp::Divide, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::EqualEqual)? {
             let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(IntBinOp::Plus, lhs.into(), rhs.into()))
-        } else if self.matches(Token::Minus)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(IntBinOp::Minus, lhs.into(), rhs.into()))
-        } else if self.matches(Token::Multiply)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(IntBinOp::Multiply, lhs.into(), rhs.into()))
-        } else if self.matches(Token::Divide)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(IntBinOp::Divide, lhs.into(), rhs.into()))
-        } else if self.matches(Token::EqualEqual)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::EqualEqual(lhs.into(), rhs.into()))
-        } else if self.matches(Token::LessThan)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(IntBinOp::LessThan, lhs.into(), rhs.into()))
-        } else if self.matches(Token::LessThanOrEqual)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(
-                IntBinOp::LessThanOrEqual,
-                lhs.into(),
-                rhs.into(),
-            ))
-        } else if self.matches(Token::GreaterThan)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(
-                IntBinOp::GreaterThan,
-                lhs.into(),
-                rhs.into(),
-            ))
-        } else if self.matches(Token::GreaterThanOrEqual)? {
-            let rhs = self.expr_inner(r_bp)?;
-            Ok(Expr::IntBinOp(
-                IntBinOp::GreaterThanOrEqual,
-                lhs.into(),
-                rhs.into(),
-            ))
+            Ok(at.map(|()| Expr::EqualEqual(lhs.into(), rhs.into())).into())
+        } else if let Some(at) = self.matches(Token::LessThan)? {
+            self.binop_expr(at, IntBinOp::LessThan, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::LessThanOrEqual)? {
+            self.binop_expr(at, IntBinOp::LessThanOrEqual, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::GreaterThan)? {
+            self.binop_expr(at, IntBinOp::GreaterThan, lhs, r_bp)
+        } else if let Some(at) = self.matches(Token::GreaterThanOrEqual)? {
+            self.binop_expr(at, IntBinOp::GreaterThanOrEqual, lhs, r_bp)
         } else {
             self.expected(
                 vec![
@@ -477,13 +535,17 @@ impl<'a> Parser<'a> {
                     Token::Multiply,
                     Token::Divide,
                     Token::EqualEqual,
+                    Token::LessThan,
+                    Token::LessThanOrEqual,
+                    Token::GreaterThan,
+                    Token::GreaterThanOrEqual,
                 ],
                 "expr infix",
             )
         }
     }
 
-    fn expr_inner(&mut self, min_bp: u8) -> Result<Expr> {
+    fn expr_inner(&mut self, min_bp: u8) -> Result<ExprAt> {
         let mut lhs = self.expr_lhs()?;
         loop {
             if self.matches_eof() {
@@ -555,19 +617,19 @@ impl<'a> Parser<'a> {
         loop {
             if let Some(name) = self.matches_ident()? {
                 // TODO: Could be better
-                if name.len() == 2 && name.starts_with('r') {
-                    row_vars.insert(name, Constraints::new());
-                } else if name.len() == 1 {
-                    vars.insert(name);
+                if name.value.len() == 2 && name.value.starts_with('r') {
+                    row_vars.insert(name.value, Constraints::new());
+                } else if name.value.len() == 1 {
+                    vars.insert(name.value);
                 } else {
                     return Err(Error::InvalidTypeVarName(name));
                 }
-            } else if self.matches(Token::Dot)? {
+            } else if self.matches(Token::Dot)?.is_some() {
                 self.expect(Token::LParen, "forall constraints")?;
                 'outer: loop {
                     let row_name = self.expect_ident("forall constraints name")?;
                     let row_constraints = row_vars
-                        .get_mut(&row_name)
+                        .get_mut(&row_name.value)
                         .ok_or_else(|| Error::NoRowForConstraints(row_name.clone()))?;
                     if !row_constraints.is_empty() {
                         return Err(Error::RowConstraintsAlreadyDefined(row_name));
@@ -575,17 +637,17 @@ impl<'a> Parser<'a> {
                     'inner: loop {
                         self.expect(Token::Backslash, "forall constraints label")?;
                         let label = self.expect_ident("forall constraints label")?;
-                        row_constraints.insert(label);
-                        if self.matches(Token::RParen)? {
+                        row_constraints.insert(label.value);
+                        if self.matches(Token::RParen)?.is_some() {
                             break 'outer;
-                        } else if self.matches(Token::Comma)? {
+                        } else if self.matches(Token::Comma)?.is_some() {
                             break 'inner;
                         }
                     }
                 }
                 self.expect(Token::FatArrow, "forall constraints")?;
                 return Ok(ForAll { vars, row_vars });
-            } else if self.matches(Token::FatArrow)? {
+            } else if self.matches(Token::FatArrow)?.is_some() {
                 return Ok(ForAll { vars, row_vars });
             } else {
                 return self.expected(
@@ -605,7 +667,7 @@ impl<'a> Parser<'a> {
         };
         parser.advance()?;
 
-        let forall = if parser.matches(Token::ForAll)? {
+        let forall = if parser.matches(Token::ForAll)?.is_some() {
             parser.forall_ty()?
         } else {
             ForAll::default()
@@ -619,24 +681,24 @@ impl<'a> Parser<'a> {
     }
 
     fn ty_inner(&mut self) -> Result<Type> {
-        let mut ty = if self.matches(Token::LParen)? {
+        let mut ty = if self.matches(Token::LParen)?.is_some() {
             self.paren_ty()?
         } else if let Some(name) = self.matches_ident()? {
-            Type::Const(name)
-        } else if self.matches(Token::LBrace)? {
+            Type::Const(name.value)
+        } else if self.matches(Token::LBrace)?.is_some() {
             self.record_ty()?
-        } else if self.matches(Token::LBracket)? {
+        } else if self.matches(Token::LBracket)?.is_some() {
             self.variant_ty()?
         } else {
             return self.expected(vec![Token::LParen, Token::empty_ident()], "ty");
         };
 
-        if self.matches(Token::LBracket)? {
+        if self.matches(Token::LBracket)?.is_some() {
             let mut args = Vec::new();
             loop {
                 let arg = self.ty_inner()?;
                 args.push(arg);
-                if self.matches(Token::RBracket)? {
+                if self.matches(Token::RBracket)?.is_some() {
                     break;
                 }
                 self.expect(Token::Comma, "ty app")?;
@@ -644,7 +706,7 @@ impl<'a> Parser<'a> {
             ty = Type::App(ty.into(), args);
         }
 
-        if self.matches(Token::Arrow)? {
+        if self.matches(Token::Arrow)?.is_some() {
             let ret = self.ty_inner()?;
             ty = Type::Arrow(vec![ty], ret.into());
         }
@@ -653,26 +715,26 @@ impl<'a> Parser<'a> {
     }
 
     fn record_ty(&mut self) -> Result<Type> {
-        if self.matches(Token::RBrace)? {
+        if self.matches(Token::RBrace)?.is_some() {
             return Ok(Type::Record(Type::RowEmpty.into()));
         }
         let mut labels = BTreeMap::new();
         let mut rest = Type::RowEmpty;
         loop {
             let label = self.expect_ident("record ty label")?;
-            if labels.is_empty() && self.matches(Token::RBrace)? {
-                return Ok(Type::Record(Type::Const(label).into()));
+            if labels.is_empty() && self.matches(Token::RBrace)?.is_some() {
+                return Ok(Type::Record(Type::Const(label.value).into()));
             }
             self.expect(Token::Colon, "record ty")?;
             let ty = self.ty_inner()?;
-            if labels.insert(label.clone(), ty).is_some() {
+            if labels.insert(label.value.clone(), ty).is_some() {
                 return Err(Error::DuplicateLabel(label));
             }
-            if self.matches(Token::Comma)? {
+            if self.matches(Token::Comma)?.is_some() {
                 continue;
-            } else if self.matches(Token::RBrace)? {
+            } else if self.matches(Token::RBrace)?.is_some() {
                 break;
-            } else if self.matches(Token::Pipe)? {
+            } else if self.matches(Token::Pipe)?.is_some() {
                 rest = self.ty_inner()?;
                 self.expect(Token::RBrace, "record ty rest")?;
                 break;
@@ -690,14 +752,14 @@ impl<'a> Parser<'a> {
             let label = self.expect_ident("variant ty")?;
             self.expect(Token::Colon, "variant ty")?;
             let ty = self.ty_inner()?;
-            if labels.insert(label.clone(), ty).is_some() {
+            if labels.insert(label.value.clone(), ty).is_some() {
                 return Err(Error::DuplicateLabel(label));
             }
-            if self.matches(Token::Comma)? {
+            if self.matches(Token::Comma)?.is_some() {
                 continue;
-            } else if self.matches(Token::RBracket)? {
+            } else if self.matches(Token::RBracket)?.is_some() {
                 break;
-            } else if self.matches(Token::Pipe)? {
+            } else if self.matches(Token::Pipe)?.is_some() {
                 rest = self.ty_inner()?;
                 self.expect(Token::RBracket, "variant ty")?;
                 break;
@@ -716,7 +778,7 @@ impl<'a> Parser<'a> {
         loop {
             let arg = self.ty_inner()?;
             args.push(arg);
-            if self.matches(Token::RParen)? {
+            if self.matches(Token::RParen)?.is_some() {
                 break;
             }
             self.expect(Token::Comma, "paren ty")?;
@@ -733,15 +795,20 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use crate::expr::util::*;
-    use crate::expr::Expr;
+    use crate::expr::At;
+    use crate::expr::ExprAt;
+    use crate::expr::ExprOnly;
+    use crate::expr::Position;
+    use crate::expr::PositionContext;
     use crate::lexer::Token;
 
     use super::Error;
     use super::Parser;
 
     #[track_caller]
-    fn pass(source: &str, expected: Expr) {
+    fn pass(source: &str, expected: ExprOnly) {
         let actual = Parser::expr(source).unwrap();
+        let actual = actual.strip_context();
         assert_eq!(expected, actual);
     }
 
@@ -752,8 +819,9 @@ mod tests {
     }
 
     #[track_caller]
-    fn pass_repl(source: &str, expected: Expr) {
+    fn pass_repl(source: &str, expected: ExprOnly) {
         let actual = Parser::repl(source).unwrap();
+        let actual = actual.strip_context();
         assert_eq!(expected, actual);
     }
 
@@ -942,7 +1010,14 @@ mod tests {
                 ),
             ),
         );
-        fail("{a = x, a = y}", Error::DuplicateLabel("a".to_owned()));
+        fail(
+            "{a = x, a = y}",
+            Error::DuplicateLabel(At {
+                start: Position { line: 0, column: 8 },
+                end: Position { line: 0, column: 9 },
+                value: "a".to_owned(),
+            }),
+        );
         pass(
             "{x,y}",
             record(vec![("x", var("x")), ("y", var("y"))], empty()),
@@ -989,5 +1064,46 @@ mod tests {
                     ("none", "x", var("default"))
                 ], None)),
                 var("default_with")));
+    }
+
+    fn pass_at(source: &str, expected: ExprAt) {
+        let actual = Parser::repl(source).unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    fn loc(sl: usize, sc: usize, el: usize, ec: usize) -> PositionContext {
+        PositionContext {
+            start: Position {
+                line: sl,
+                column: sc,
+            },
+            end: Position {
+                line: el,
+                column: ec,
+            },
+        }
+    }
+
+    #[test]
+    fn at() {
+        pass_at("a", var_at("a", loc(0, 0, 0, 1)));
+        pass_at("1", int_at(1, loc(0, 0, 0, 1)));
+        pass_at(
+            "1 + 2",
+            plus_at(
+                int_at(1, loc(0, 0, 0, 1)),
+                int_at(2, loc(0, 4, 0, 5)),
+                loc(0, 2, 0, 3),
+            ),
+        );
+        pass_at(
+            "let a = 1 in\na",
+            let_at(
+                var_at("a", loc(0, 4, 0, 5)),
+                int_at(1, loc(0, 8, 0, 9)),
+                var_at("a", loc(1, 0, 1, 1)),
+                loc(0, 0, 0, 3),
+            ),
+        );
     }
 }
