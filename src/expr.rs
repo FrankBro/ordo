@@ -117,7 +117,7 @@ impl From<Type> for TypeContext {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprIn<Context> {
     pub context: Context,
-    pub expr: Expr<Context>,
+    pub expr: Box<Expr<Context>>,
 }
 
 impl<Context> fmt::Display for ExprIn<Context> {
@@ -128,7 +128,10 @@ impl<Context> fmt::Display for ExprIn<Context> {
 
 impl From<Expr<NoContext>> for ExprOnly {
     fn from(expr: Expr<NoContext>) -> Self {
-        ExprIn { context: (), expr }
+        ExprIn {
+            context: (),
+            expr: expr.into(),
+        }
     }
 }
 
@@ -139,7 +142,7 @@ impl From<At<Expr<PositionContext>>> for ExprAt {
                 start: value.start,
                 end: value.end,
             },
-            expr: value.value,
+            expr: value.value.into(),
         }
     }
 }
@@ -148,7 +151,7 @@ impl ExprIn<PositionContext> {
     pub fn strip_context(self) -> ExprIn<NoContext> {
         ExprIn {
             context: (),
-            expr: self.expr.strip_context(),
+            expr: self.expr.strip_context().into(),
         }
     }
 }
@@ -157,7 +160,7 @@ impl ExprIn<PositionTypeContext> {
     pub fn strip_position(self) -> ExprIn<TypeContext> {
         ExprIn {
             context: self.context.ty,
-            expr: self.expr.strip_position(),
+            expr: self.expr.strip_position().into(),
         }
     }
 
@@ -187,34 +190,30 @@ pub type PatternTypedAt = ExprTypedAt;
 pub enum Expr<Context> {
     Bool(bool),
     Int(i64),
-    IntBinOp(IntBinOp, Box<ExprIn<Context>>, Box<ExprIn<Context>>),
-    Negate(Box<ExprIn<Context>>),
-    EqualEqual(Box<ExprIn<Context>>, Box<ExprIn<Context>>),
+    IntBinOp(IntBinOp, ExprIn<Context>, ExprIn<Context>),
+    Negate(ExprIn<Context>),
+    EqualEqual(ExprIn<Context>, ExprIn<Context>),
     Var(String),
-    Call(Box<ExprIn<Context>>, Vec<ExprIn<Context>>),
-    Fun(Vec<PatternIn<Context>>, Box<ExprIn<Context>>),
-    Let(
-        Box<PatternIn<Context>>,
-        Box<ExprIn<Context>>,
-        Box<ExprIn<Context>>,
-    ),
-    RecordSelect(Box<ExprIn<Context>>, String),
-    RecordExtend(BTreeMap<String, ExprIn<Context>>, Box<ExprIn<Context>>),
-    RecordRestrict(Box<ExprIn<Context>>, String),
+    Call(ExprIn<Context>, Vec<ExprIn<Context>>),
+    Fun(Vec<PatternIn<Context>>, ExprIn<Context>),
+    Let(PatternIn<Context>, ExprIn<Context>, ExprIn<Context>),
+    RecordSelect(ExprIn<Context>, String),
+    RecordExtend(BTreeMap<String, ExprIn<Context>>, ExprIn<Context>),
+    RecordRestrict(ExprIn<Context>, String),
     RecordEmpty,
-    Variant(String, Box<ExprIn<Context>>),
+    Variant(String, ExprIn<Context>),
     Case(
-        Box<ExprIn<Context>>,
+        ExprIn<Context>,
         Vec<(String, String, ExprIn<Context>)>,
-        Option<(String, Box<ExprIn<Context>>)>,
+        Option<(String, ExprIn<Context>)>,
     ),
     If(
-        Box<ExprIn<Context>>,
-        Box<ExprIn<Context>>,
+        ExprIn<Context>,
+        ExprIn<Context>,
         Vec<(ExprIn<Context>, ExprIn<Context>)>,
-        Box<ExprIn<Context>>,
+        ExprIn<Context>,
     ),
-    Unwrap(Box<ExprIn<Context>>),
+    Unwrap(ExprIn<Context>),
 }
 
 impl<Context> fmt::Display for Expr<Context> {
@@ -243,7 +242,7 @@ impl<Context> fmt::Display for Expr<Context> {
                     .iter()
                     .map(|(label, val)| format!("{}: {}", label, val))
                     .join(", ");
-                match rest.expr {
+                match rest.expr.as_ref() {
                     Expr::RecordEmpty => write!(f, "{{{}}}", labels),
                     _ => write!(f, "{{{} | {}}}", labels, rest),
                 }
@@ -260,9 +259,8 @@ impl<Context> fmt::Display for Expr<Context> {
 
 impl Expr<PositionContext> {
     fn strip_context(self) -> Expr<NoContext> {
-        #[allow(clippy::boxed_local)]
-        fn fix(e: Box<ExprAt>) -> Box<ExprOnly> {
-            e.strip_context().into()
+        fn fix(e: ExprAt) -> ExprOnly {
+            e.strip_context()
         }
         match self {
             Expr::Bool(b) => Expr::Bool(b),
@@ -316,14 +314,13 @@ impl Expr<PositionTypeContext> {
         let ty = TypeContext { ty };
         ExprIn {
             context: PositionTypeContext { position, ty },
-            expr: self,
+            expr: self.into(),
         }
     }
 
     pub fn strip_position(self) -> Expr<TypeContext> {
-        #[allow(clippy::boxed_local)]
-        fn fix(e: Box<ExprTypedAt>) -> Box<ExprTyped> {
-            e.strip_position().into()
+        fn fix(e: ExprTypedAt) -> ExprTyped {
+            e.strip_position()
         }
         match self {
             Expr::Bool(b) => Expr::Bool(b),
