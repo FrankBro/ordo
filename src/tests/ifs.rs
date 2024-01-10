@@ -12,7 +12,8 @@ fn pass(source_expr: &str, source_ty: &str, expected_val: Value) {
     let mut env = infer::Env::default();
     let expected = env.replace_ty_constants_with_vars(forall, ty);
     let expr = Parser::expr(source_expr).unwrap();
-    let actual = env.infer(&expr).unwrap();
+    let typed_expr = env.infer(expr.clone()).unwrap();
+    let actual = typed_expr.context.ty.ty;
     let expected_ty = env.ty_to_string(&expected).unwrap();
     let actual_ty = env.ty_to_string(&actual).unwrap();
     assert_eq!(expected_ty, actual_ty);
@@ -25,7 +26,7 @@ fn pass(source_expr: &str, source_ty: &str, expected_val: Value) {
 fn fail_ty(source_expr: &str, expected: infer::Error) {
     let mut env = infer::Env::default();
     let expr = Parser::expr(source_expr).unwrap();
-    let actual = env.infer(&expr).unwrap_err();
+    let actual = env.infer(expr).unwrap_err();
     assert_eq!(expected, actual);
 }
 

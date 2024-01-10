@@ -71,9 +71,9 @@ impl Default for Env {
 impl Env {
     fn process(&mut self, source: &str) -> Result<Output> {
         let expr = Parser::repl(source)?;
-        let ty = self.infer.infer(&expr)?;
+        let typed_expr = self.infer.infer(expr.clone())?;
         let value = self.eval.eval(&expr)?;
-        let ty = self.infer.ty_to_string(&ty).unwrap();
+        let ty = self.infer.ty_to_string(&typed_expr.context.ty.ty).unwrap();
         let val = value.to_string();
         Ok(Output { ty, val })
     }
@@ -174,3 +174,7 @@ mod parse_at;
 #[cfg(test)]
 #[path = "tests/infer_tests.rs"]
 mod infer_tests;
+
+#[cfg(test)]
+#[path = "tests/typed_exprs.rs"]
+mod typed_exprs;
