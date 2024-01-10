@@ -4,7 +4,10 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap};
 use itertools::Itertools;
 
 use crate::{
-    expr::{Constraints, Expr, ExprAt, Id, Level, Pattern, PatternAt, Type, TypeVar, OK_LABEL},
+    expr::{
+        Constraints, Expr, ExprAt, ExprIn, ExprTypedAt, Id, Level, Pattern, PatternAt,
+        PatternTypedAt, Type, TypeVar, OK_LABEL,
+    },
     parser::ForAll,
 };
 
@@ -587,60 +590,75 @@ impl Env {
         self.vars.insert(name, ty);
     }
 
-    pub fn infer(&mut self, expr: &ExprAt) -> Result<Type> {
-        let ty = self.infer_inner(0, expr)?;
-        let ty = self.wrapped(ty)?;
-        self.generalize(-1, &ty)?;
-        Ok(ty)
+    pub fn infer(&mut self, expr: ExprAt) -> Result<ExprTypedAt> {
+        let expr = self.infer_inner(0, expr)?;
+        let expr = self.wrapped(expr)?;
+        self.generalize(-1, &expr.context.ty.ty)?;
+        Ok(expr)
     }
 
-    fn assign_pattern(&mut self, pattern: &PatternAt, ty: Type) -> Result<()> {
-        match (&pattern.expr, ty) {
-            (Pattern::Var(name), ty) => self.insert_var(name.clone(), ty),
+    fn assign_pattern(&mut self, pattern: PatternAt, ty: Type) -> Result<PatternTypedAt> {
+        match (pattern.expr, ty) {
+            (Pattern::Var(name), ty) => {
+                self.insert_var(name.clone(), ty.clone());
+                Ok(Pattern::Var(name).with(pattern.context, ty))
+            }
             (Pattern::RecordExtend(labels, rest), Type::Record(row)) => {
                 match rest.expr {
-                    Expr::RecordEmpty => (),
+                    Pattern::RecordEmpty => (),
                     _ => return Err(Error::PatternRecordRestNotEmpty(*rest.clone())),
                 }
-                let (labels_ty, _) = self.match_row_ty(&row)?;
+                let (labels_ty, rest_ty) = self.match_row_ty(&row)?;
+                let mut label_patterns = BTreeMap::new();
                 for (label, label_pattern) in labels {
-                    match labels_ty.get(label) {
+                    match labels_ty.get(&label) {
                         None => return Err(Error::MissingLabel(label.clone())),
-                        Some(label_ty) => self.assign_pattern(label_pattern, label_ty.clone())?,
+                        Some(label_ty) => {
+                            let label_pattern =
+                                self.assign_pattern(label_pattern, label_ty.clone())?;
+                            label_patterns.insert(label, label_pattern);
+                        }
                     }
                 }
+                let rest = Pattern::RecordEmpty.with(rest.context, rest_ty);
+                Ok(Pattern::RecordExtend(label_patterns, rest.into())
+                    .with(pattern.context, Type::Record(row)))
             }
             (Pattern::RecordExtend(_, _), ty) => {
                 let ty = self.ty_to_string(&ty)?;
-                return Err(Error::RecordPatternNotRecord(ty));
+                Err(Error::RecordPatternNotRecord(ty))
             }
-            _ => return Err(Error::InvalidPattern(pattern.clone())),
+            (expr, _) => Err(Error::InvalidPattern(ExprIn {
+                context: pattern.context,
+                expr,
+            })),
         }
-        Ok(())
     }
 
-    fn infer_pattern(&mut self, level: Level, pattern: &PatternAt) -> Result<Type> {
-        match &pattern.expr {
+    fn infer_pattern(&mut self, level: Level, pattern: PatternAt) -> Result<PatternTypedAt> {
+        match pattern.expr {
             Pattern::Var(name) => {
                 let ty = self.new_unbound(level);
                 self.insert_var(name.clone(), ty.clone());
-                Ok(ty)
+                Ok(Pattern::Var(name).with(pattern.context, ty))
             }
             Pattern::RecordExtend(labels, rest) => {
                 match &rest.expr {
-                    Expr::RecordEmpty => (),
+                    Pattern::RecordEmpty => (),
                     _ => return Err(Error::PatternRecordRestNotEmpty(*rest.clone())),
                 }
                 let constraints = labels.keys().cloned().collect();
-                let labels = labels
-                    .iter()
-                    .map(|(label, pat)| {
-                        self.infer_pattern(level, pat)
-                            .map(|pat| (label.clone(), pat))
-                    })
-                    .collect::<Result<_, _>>()?;
-                let rest = self.new_unbound_row(level, constraints);
-                Ok(Type::Record(Type::RowExtend(labels, rest.into()).into()))
+                let mut label_exprs = BTreeMap::new();
+                let mut label_tys = BTreeMap::new();
+                for (label, pat) in labels {
+                    let label_expr = self.infer_pattern(level, pat)?;
+                    label_tys.insert(label.clone(), label_expr.context.ty.ty.clone());
+                    label_exprs.insert(label, label_expr);
+                }
+                let rest_ty = self.new_unbound_row(level, constraints);
+                let ty = Type::Record(Type::RowExtend(label_tys, rest_ty.clone().into()).into());
+                let rest = Pattern::RecordEmpty.with(rest.context, rest_ty);
+                Ok(Pattern::RecordExtend(label_exprs, rest.into()).with(pattern.context, ty))
             }
             _ => Err(Error::InvalidPattern(pattern.clone())),
         }
@@ -661,77 +679,88 @@ impl Env {
         Ok(())
     }
 
-    fn wrapped(&mut self, ty: Type) -> Result<Type> {
+    fn wrapped(&mut self, mut expr: ExprTypedAt) -> Result<ExprTypedAt> {
         let mut labels = std::mem::take(&mut self.wrap);
         if labels.is_empty() {
-            return Ok(ty);
+            return Ok(expr);
         }
-        labels.insert(OK_LABEL.to_owned(), ty);
+        labels.insert(OK_LABEL.to_owned(), expr.context.ty.ty.clone());
         let rest = Type::RowEmpty;
-        Ok(Type::Variant(Type::RowExtend(labels, rest.into()).into()))
+        let ty = Type::Variant(Type::RowExtend(labels, rest.into()).into());
+        expr.context.ty.ty = ty;
+        Ok(expr)
     }
 
-    fn infer_inner(&mut self, level: Level, expr: &ExprAt) -> Result<Type> {
-        match &expr.expr {
-            Expr::Bool(_) => Ok(Type::bool()),
-            Expr::Int(_) => Ok(Type::int()),
+    fn infer_inner(&mut self, level: Level, expr: ExprAt) -> Result<ExprTypedAt> {
+        match expr.expr {
+            Expr::Bool(b) => Ok(Expr::Bool(b).with(expr.context, Type::bool())),
+            Expr::Int(i) => Ok(Expr::Int(i).with(expr.context, Type::int())),
             Expr::IntBinOp(op, lhs, rhs) => {
                 let ty = Type::int();
-                let lhs_ty = self.infer_inner(level, lhs)?;
-                self.unify(&ty, &lhs_ty)?;
-                let rhs_ty = self.infer_inner(level, rhs)?;
-                self.unify(&ty, &rhs_ty)?;
-                Ok(op.output_ty())
+                let lhs = self.infer_inner(level, *lhs)?;
+                self.unify(&ty, &lhs.context.ty.ty)?;
+                let rhs = self.infer_inner(level, *rhs)?;
+                self.unify(&ty, &rhs.context.ty.ty)?;
+                let ty = op.output_ty();
+                Ok(Expr::IntBinOp(op, lhs.into(), rhs.into()).with(expr.context, ty))
             }
-            Expr::Negate(expr) => {
+            Expr::Negate(value) => {
                 let ty = Type::bool();
-                let expr_ty = self.infer_inner(level, expr)?;
-                self.unify(&ty, &expr_ty)?;
-                Ok(ty)
+                let value = self.infer_inner(level, *value)?;
+                self.unify(&ty, &value.context.ty.ty)?;
+                Ok(Expr::Negate(value.into()).with(expr.context, ty))
             }
             Expr::EqualEqual(lhs, rhs) => {
-                let lhs = self.infer_inner(level, lhs)?;
-                let rhs = self.infer_inner(level, rhs)?;
-                self.unify(&lhs, &rhs)?;
-                Ok(Type::bool())
+                let lhs = self.infer_inner(level, *lhs)?;
+                let rhs = self.infer_inner(level, *rhs)?;
+                self.unify(&lhs.context.ty.ty, &rhs.context.ty.ty)?;
+                Ok(Expr::EqualEqual(lhs.into(), rhs.into()).with(expr.context, Type::bool()))
             }
             Expr::Var(name) => {
-                let ty = self.get_var(name)?.clone();
+                let ty = self.get_var(&name)?.clone();
                 let ty = self.instantiate(level, ty)?;
-                Ok(ty)
+                Ok(Expr::Var(name).with(expr.context, ty))
             }
             Expr::Fun(params, body) => {
+                let mut param_exprs = Vec::with_capacity(params.len());
                 let mut param_tys = Vec::with_capacity(params.len());
                 let old_vars = self.vars.clone();
                 let old_wrap = self.wrap.clone();
                 for param in params {
-                    let param_ty = self.infer_pattern(level, param)?;
-                    param_tys.push(param_ty);
+                    let param_expr = self.infer_pattern(level, param)?;
+                    param_tys.push(param_expr.context.ty.ty.clone());
+                    param_exprs.push(param_expr);
                 }
-                let ret_ty = self.infer_inner(level, body)?;
+                let body = self.infer_inner(level, *body)?;
                 self.vars = old_vars;
                 self.wrap = old_wrap;
-                Ok(Type::Arrow(param_tys, ret_ty.into()))
+                let ty = Type::Arrow(param_tys, body.context.ty.ty.clone().into());
+                Ok(Expr::Fun(param_exprs, body.into()).with(expr.context, ty))
             }
             Expr::Let(pattern, value, body) => {
-                let var_ty = self.infer_inner(level + 1, value)?;
-                self.generalize(level, &var_ty)?;
-                self.assign_pattern(pattern, var_ty)?;
-                let ty = self.infer_inner(level, body)?;
-                Ok(ty)
+                let value = self.infer_inner(level + 1, *value)?;
+                self.generalize(level, &value.context.ty.ty)?;
+                let pattern = self.assign_pattern(*pattern, value.context.ty.ty.clone())?;
+                let body = self.infer_inner(level, *body)?;
+                let ty = body.context.ty.ty.clone();
+                Ok(Expr::Let(pattern.into(), value.into(), body.into()).with(expr.context, ty))
             }
-            Expr::Call(f, args) => {
-                let f_ty = self.infer_inner(level, f)?;
-                let (params, ret) = self.match_fun_ty(args.len(), f_ty)?;
-                for i in 0..args.len() {
-                    let arg = &args[i];
-                    let arg_ty = self.infer_inner(level, arg)?;
+            Expr::Call(fun, args) => {
+                let fun = self.infer_inner(level, *fun)?;
+                let (params, ret) = self.match_fun_ty(args.len(), fun.context.ty.ty.clone())?;
+                let mut typed_args = Vec::with_capacity(args.len());
+                for (i, arg) in args.into_iter().enumerate() {
+                    let arg = self.infer_inner(level, arg)?;
                     let param = &params[i];
-                    self.unify(&arg_ty, param)?;
+                    self.unify(&arg.context.ty.ty, param)?;
+                    typed_args.push(arg);
                 }
-                Ok(*ret)
+                Ok(Expr::Call(fun.into(), typed_args).with(expr.context, *ret))
             }
-            Expr::RecordEmpty => Ok(Type::Record(Type::RowEmpty.into())),
+            Expr::RecordEmpty => {
+                let ty = Type::Record(Type::RowEmpty.into());
+                Ok(Expr::RecordEmpty.with(expr.context, ty))
+            }
             Expr::RecordSelect(record, label) => {
                 let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
                 let field = self.new_unbound(level);
@@ -743,9 +772,9 @@ impl Env {
                     .into(),
                 );
                 let ret = field;
-                let record = self.infer_inner(level, record)?;
-                self.unify(&param, &record)?;
-                Ok(ret)
+                let record = self.infer_inner(level, *record)?;
+                self.unify(&param, &record.context.ty.ty)?;
+                Ok(Expr::RecordSelect(record.into(), label).with(expr.context, ret))
             }
             Expr::RecordRestrict(record, label) => {
                 let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
@@ -758,23 +787,26 @@ impl Env {
                     .into(),
                 );
                 let ret = Type::Record(rest.into());
-                let record = self.infer_inner(level, record)?;
-                self.unify(&param, &record)?;
-                Ok(ret)
+                let record = self.infer_inner(level, *record)?;
+                self.unify(&param, &record.context.ty.ty)?;
+                Ok(Expr::RecordRestrict(record.into(), label).with(expr.context, ret))
             }
             Expr::RecordExtend(labels, record) => {
                 let mut tys = BTreeMap::new();
                 let constraints = labels.keys().cloned().collect();
+                let mut typed_labels = BTreeMap::new();
                 for (label, expr) in labels {
-                    let ty = self.infer_inner(level, expr)?;
-                    tys.insert(label.clone(), ty);
+                    let expr = self.infer_inner(level, expr)?;
+                    tys.insert(label.clone(), expr.context.ty.ty.clone());
+                    typed_labels.insert(label, expr);
                 }
                 let rest = self.new_unbound_row(level, constraints);
-                let record = self.infer_inner(level, record)?;
-                self.unify(&Type::Record(rest.clone().into()), &record)?;
-                Ok(Type::Record(Type::RowExtend(tys, rest.into()).into()))
+                let record = self.infer_inner(level, *record)?;
+                self.unify(&Type::Record(rest.clone().into()), &record.context.ty.ty)?;
+                let ty = Type::Record(Type::RowExtend(tys, rest.into()).into());
+                Ok(Expr::RecordExtend(typed_labels, record.into()).with(expr.context, ty))
             }
-            Expr::Variant(label, expr) => {
+            Expr::Variant(label, value) => {
                 let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
                 let variant = self.new_unbound(level);
                 let param = variant.clone();
@@ -782,97 +814,119 @@ impl Env {
                     Type::RowExtend(BTreeMap::singleton(label.clone(), variant), rest.into())
                         .into(),
                 );
-                let ty = &self.infer_inner(level, expr)?;
-                self.unify(&param, ty)?;
-                Ok(ret)
+                let value = self.infer_inner(level, *value)?;
+                self.unify(&param, &value.context.ty.ty)?;
+                Ok(Expr::Variant(label, value.into()).with(expr.context, ret))
             }
-            Expr::Case(expr, cases, None) => {
+            Expr::Case(value, cases, None) => {
                 let ret = self.new_unbound(level);
-                let expr = self.infer_inner(level, expr)?;
-                let cases_row = self.infer_cases(level, &ret, Type::RowEmpty, cases)?;
-                self.unify(&expr, &Type::Variant(cases_row.into()))?;
-                Ok(ret)
+                let value = self.infer_inner(level, *value)?;
+                let (cases_row, cases) = self.infer_cases(level, &ret, Type::RowEmpty, cases)?;
+                self.unify(&value.context.ty.ty, &Type::Variant(cases_row.into()))?;
+                Ok(Expr::Case(value.into(), cases, None).with(expr.context, ret))
             }
-            Expr::Case(expr, cases, Some((def_var, def_expr))) => {
+            Expr::Case(value, cases, Some((def_var, def_expr))) => {
                 let constraints = cases.iter().map(|(label, _, _)| label).cloned().collect();
                 let def_variant = self.new_unbound_row(level, constraints);
                 let old_vars = self.vars.clone();
                 self.vars
                     .insert(def_var.clone(), Type::Variant(def_variant.clone().into()));
-                let ret = self.infer_inner(level, def_expr)?;
+                let def_expr = self.infer_inner(level, *def_expr)?;
+                let ret = def_expr.context.ty.ty.clone();
                 self.vars = old_vars;
-                let expr = self.infer_inner(level, expr)?;
-                let cases_row = self.infer_cases(level, &ret, def_variant, cases)?;
-                self.unify(&expr, &Type::Variant(cases_row.into()))?;
-                Ok(ret)
+                let value = self.infer_inner(level, *value)?;
+                let (cases_row, cases) = self.infer_cases(level, &ret, def_variant, cases)?;
+                self.unify(&value.context.ty.ty, &Type::Variant(cases_row.into()))?;
+                Ok(
+                    Expr::Case(value.into(), cases, Some((def_var, def_expr.into())))
+                        .with(expr.context, ret),
+                )
             }
-            Expr::Unwrap(expr) => {
-                let ty = self.infer_inner(level, expr)?;
-                match &ty {
+            Expr::Unwrap(value) => {
+                let value = self.infer_inner(level, *value)?;
+                match &value.context.ty.ty {
                     Type::Variant(rows) => {
                         let (mut labels, _) = self.match_row_ty(rows)?;
                         match labels.remove(OK_LABEL) {
                             None => {
-                                let ty = self.ty_to_string(&ty)?;
+                                let ty = self.ty_to_string(&value.context.ty.ty)?;
                                 Err(Error::UnwrapMissingOk(ty))
                             }
                             Some(ty) => {
                                 self.wrap_with(labels)?;
-                                Ok(ty)
+                                Ok(Expr::Unwrap(value.into()).with(expr.context, ty))
                             }
                         }
                     }
                     _ => {
-                        let ty = self.ty_to_string(&ty)?;
+                        let ty = self.ty_to_string(&value.context.ty.ty)?;
                         Err(Error::UnwrapNotVariant(ty))
                     }
                 }
             }
             Expr::If(if_expr, if_body, elifs, else_body) => {
                 let bool = Type::bool();
-                let ty = self.infer_inner(level, if_expr)?;
-                self.unify(&bool, &ty)?;
-                let if_ty = self.infer_inner(level, if_body)?;
+                let if_expr = self.infer_inner(level, *if_expr)?;
+                self.unify(&bool, &if_expr.context.ty.ty)?;
+                let if_body = self.infer_inner(level, *if_body)?;
+                let mut typed_elifs = Vec::with_capacity(elifs.len());
                 for (elif_expr, elif_body) in elifs {
-                    let ty = self.infer_inner(level, elif_expr)?;
-                    self.unify(&bool, &ty)?;
-                    let ty = self.infer_inner(level, elif_body)?;
-                    self.unify(&if_ty, &ty)?;
+                    let elif_expr = self.infer_inner(level, elif_expr)?;
+                    self.unify(&bool, &elif_expr.context.ty.ty)?;
+                    let elif_body = self.infer_inner(level, elif_body)?;
+                    self.unify(&if_body.context.ty.ty, &elif_body.context.ty.ty)?;
+                    typed_elifs.push((elif_expr, elif_body));
                 }
-                let ty = self.infer_inner(level, else_body)?;
-                self.unify(&if_ty, &ty)?;
+                let else_body = self.infer_inner(level, *else_body)?;
+                self.unify(&if_body.context.ty.ty, &else_body.context.ty.ty)?;
                 // TODO: if calling a function with an open variant should keep it open
-                match if_ty {
+                match if_body.context.ty.ty.clone() {
                     Type::Variant(row) => {
-                        let (labels, _) = self.match_row_ty(&row)?;
-                        Ok(Type::Variant(
-                            Type::RowExtend(labels, Type::RowEmpty.into()).into(),
-                        ))
+                        let (labels, _rest) = self.match_row_ty(&row)?;
+                        let ty =
+                            Type::Variant(Type::RowExtend(labels, Type::RowEmpty.into()).into());
+                        Ok(Expr::If(
+                            if_expr.into(),
+                            if_body.into(),
+                            typed_elifs,
+                            else_body.into(),
+                        )
+                        .with(expr.context, ty))
                     }
-                    _ => Ok(if_ty),
+                    ty => Ok(Expr::If(
+                        if_expr.into(),
+                        if_body.into(),
+                        typed_elifs,
+                        else_body.into(),
+                    )
+                    .with(expr.context, ty)),
                 }
             }
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn infer_cases(
         &mut self,
         level: Level,
         ret: &Type,
         rest: Type,
-        cases: &Vec<(String, String, ExprAt)>,
-    ) -> Result<Type> {
+        cases: Vec<(String, String, ExprAt)>,
+    ) -> Result<(Type, Vec<(String, String, ExprTypedAt)>)> {
         let mut labels = BTreeMap::new();
-        for (label, var, expr) in cases {
+        let mut typed_cases = Vec::with_capacity(cases.len());
+        for (label, var, case) in cases {
             let variant = self.new_unbound(level);
             let old_vars = self.vars.clone();
             self.vars.insert(var.clone(), variant.clone());
-            let ty = self.infer_inner(level, expr)?;
+            let case = self.infer_inner(level, case)?;
             self.vars = old_vars;
-            self.unify(ret, &ty)?;
+            self.unify(ret, &case.context.ty.ty)?;
             labels.insert(label.clone(), variant);
+            typed_cases.push((label, var, case));
         }
-        Ok(Type::RowExtend(labels, rest.into()))
+        let ty = Type::RowExtend(labels, rest.into());
+        Ok((ty, typed_cases))
     }
 
     pub fn replace_ty_constants_with_vars(&mut self, forall: ForAll, mut ty: Type) -> Type {

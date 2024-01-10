@@ -104,6 +104,17 @@ impl<T> From<At<T>> for PositionContext {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct TypeContext {
+    pub ty: Type,
+}
+
+impl From<Type> for TypeContext {
+    fn from(ty: Type) -> Self {
+        Self { ty }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct ExprIn<Context> {
     pub context: Context,
     pub expr: Expr<Context>,
@@ -142,13 +153,31 @@ impl ExprIn<PositionContext> {
     }
 }
 
+impl ExprIn<PositionTypeContext> {
+    pub fn strip_position(self) -> ExprIn<TypeContext> {
+        ExprIn {
+            context: self.context.ty,
+            expr: self.expr.strip_position(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PositionTypeContext {
+    pub position: PositionContext,
+    pub ty: TypeContext,
+}
+
 pub type ExprOnly = ExprIn<NoContext>;
 pub type ExprAt = ExprIn<PositionContext>;
+pub type ExprTyped = ExprIn<TypeContext>;
+pub type ExprTypedAt = ExprIn<PositionTypeContext>;
 
 pub type Pattern<Context> = Expr<Context>;
 pub type PatternIn<Context> = ExprIn<Context>;
 pub type PatternOnly = ExprOnly;
 pub type PatternAt = ExprAt;
+pub type PatternTypedAt = ExprTypedAt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr<Context> {
@@ -270,6 +299,70 @@ impl Expr<PositionContext> {
                 let ies = ies
                     .into_iter()
                     .map(|(ie, ieb)| (ie.strip_context(), ieb.strip_context()))
+                    .collect();
+                Expr::If(fix(i), fix(ib), ies, fix(eb))
+            }
+            Expr::Unwrap(e) => Expr::Unwrap(fix(e)),
+        }
+    }
+}
+
+impl Expr<PositionTypeContext> {
+    pub fn with(self, position: PositionContext, ty: Type) -> ExprTypedAt {
+        let ty = TypeContext { ty };
+        ExprIn {
+            context: PositionTypeContext { position, ty },
+            expr: self,
+        }
+    }
+
+    pub fn strip_position(self) -> Expr<TypeContext> {
+        #[allow(clippy::boxed_local)]
+        fn fix(e: Box<ExprTypedAt>) -> Box<ExprTyped> {
+            e.strip_position().into()
+        }
+        match self {
+            Expr::Bool(b) => Expr::Bool(b),
+            Expr::Int(i) => Expr::Int(i),
+            Expr::IntBinOp(op, a, b) => Expr::IntBinOp(op, fix(a), fix(b)),
+            Expr::Negate(e) => Expr::Negate(fix(e)),
+            Expr::EqualEqual(a, b) => Expr::EqualEqual(fix(a), fix(b)),
+            Expr::Var(s) => Expr::Var(s),
+            Expr::Call(fun, args) => {
+                let args = args.into_iter().map(ExprTypedAt::strip_position).collect();
+                Expr::Call(fix(fun), args)
+            }
+            Expr::Fun(params, body) => {
+                let params = params
+                    .into_iter()
+                    .map(ExprTypedAt::strip_position)
+                    .collect();
+                Expr::Fun(params, fix(body))
+            }
+            Expr::Let(p, v, b) => Expr::Let(fix(p), fix(v), fix(b)),
+            Expr::RecordSelect(r, l) => Expr::RecordSelect(fix(r), l),
+            Expr::RecordExtend(ls, r) => {
+                let ls = ls
+                    .into_iter()
+                    .map(|(l, e)| (l, e.strip_position()))
+                    .collect();
+                Expr::RecordExtend(ls, fix(r))
+            }
+            Expr::RecordRestrict(r, l) => Expr::RecordRestrict(fix(r), l),
+            Expr::RecordEmpty => Expr::RecordEmpty,
+            Expr::Variant(l, e) => Expr::Variant(l, fix(e)),
+            Expr::Case(e, cs, d) => {
+                let cs = cs
+                    .into_iter()
+                    .map(|(l, v, b)| (l, v, b.strip_position()))
+                    .collect();
+                let d = d.map(|(v, b)| (v, fix(b)));
+                Expr::Case(fix(e), cs, d)
+            }
+            Expr::If(i, ib, ies, eb) => {
+                let ies = ies
+                    .into_iter()
+                    .map(|(ie, ieb)| (ie.strip_position(), ieb.strip_position()))
                     .collect();
                 Expr::If(fix(i), fix(ib), ies, fix(eb))
             }
