@@ -160,6 +160,10 @@ impl ExprIn<PositionTypeContext> {
             expr: self.expr.strip_position(),
         }
     }
+
+    pub fn ty(&self) -> &Type {
+        &self.context.ty.ty
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
