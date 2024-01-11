@@ -6,28 +6,28 @@ use crate::{
 pub fn int_at(i: i64, context: PositionContext) -> ExprAt {
     ExprAt {
         context,
-        expr: Expr::Int(i),
+        expr: Expr::Int(i).into(),
     }
 }
 
 pub fn var_at(var: &str, context: PositionContext) -> ExprAt {
     ExprAt {
         context,
-        expr: Expr::Var(var.to_owned()),
+        expr: Expr::Var(var.to_owned()).into(),
     }
 }
 
 pub fn let_at(var: PatternAt, value: ExprAt, body: ExprAt, context: PositionContext) -> ExprAt {
     ExprAt {
         context,
-        expr: Expr::Let(var.into(), value.into(), body.into()),
+        expr: Expr::Let(var, value, body).into(),
     }
 }
 
 pub fn plus_at(lhs: ExprAt, rhs: ExprAt, context: PositionContext) -> ExprAt {
     ExprAt {
         context,
-        expr: Expr::IntBinOp(IntBinOp::Plus, lhs.into(), rhs.into()),
+        expr: Expr::IntBinOp(IntBinOp::Plus, lhs, rhs).into(),
     }
 }
 

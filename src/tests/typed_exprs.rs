@@ -15,6 +15,7 @@ fn pass(expr_str: &str, expected: ExprTyped) {
 
 fn expr(expr: Expr<TypeContext>, ty: Type) -> ExprTyped {
     let context = TypeContext { ty };
+    let expr = Box::new(expr);
     ExprIn { context, expr }
 }
 
@@ -28,7 +29,7 @@ fn var(name: &str, ty: Type) -> ExprTyped {
 
 fn let_(pattern: ExprTyped, value: ExprTyped, body: ExprTyped) -> ExprTyped {
     let ty = body.context.ty.clone();
-    expr(Expr::Let(pattern.into(), value.into(), body.into()), ty)
+    expr(Expr::Let(pattern, value, body), ty)
 }
 
 #[test]

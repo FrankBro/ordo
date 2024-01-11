@@ -17,7 +17,7 @@ pub fn precord(labels: Vec<(&str, PatternOnly)>) -> PatternOnly {
         .into_iter()
         .map(|(label, pattern)| (label.to_owned(), pattern))
         .collect();
-    Expr::RecordExtend(labels, Box::new(Expr::RecordEmpty.into())).into()
+    Expr::RecordExtend(labels, Expr::RecordEmpty.into()).into()
 }
 
 pub fn bool(b: bool) -> ExprOnly {
@@ -33,15 +33,15 @@ pub fn var(var: &str) -> ExprOnly {
 }
 
 pub fn call(fn_expr: ExprOnly, args: Vec<ExprOnly>) -> ExprOnly {
-    Expr::Call(fn_expr.into(), args).into()
+    Expr::Call(fn_expr, args).into()
 }
 
 pub fn fun(args: Vec<PatternOnly>, body: ExprOnly) -> ExprOnly {
-    Expr::Fun(args, body.into()).into()
+    Expr::Fun(args, body).into()
 }
 
 pub fn let_(var: PatternOnly, value: ExprOnly, body: ExprOnly) -> ExprOnly {
-    Expr::Let(var.into(), value.into(), body.into()).into()
+    Expr::Let(var, value, body).into()
 }
 
 pub fn empty() -> ExprOnly {
@@ -49,11 +49,11 @@ pub fn empty() -> ExprOnly {
 }
 
 pub fn select(r: ExprOnly, label: &str) -> ExprOnly {
-    Expr::RecordSelect(r.into(), label.to_owned()).into()
+    Expr::RecordSelect(r, label.to_owned()).into()
 }
 
 pub fn restrict(r: ExprOnly, label: &str) -> ExprOnly {
-    Expr::RecordRestrict(r.into(), label.to_owned()).into()
+    Expr::RecordRestrict(r, label.to_owned()).into()
 }
 
 pub fn record(labels: Vec<(&str, ExprOnly)>, r: ExprOnly) -> ExprOnly {
@@ -61,35 +61,35 @@ pub fn record(labels: Vec<(&str, ExprOnly)>, r: ExprOnly) -> ExprOnly {
         .into_iter()
         .map(|(label, expr)| (label.to_owned(), expr))
         .collect();
-    Expr::RecordExtend(labels, r.into()).into()
+    Expr::RecordExtend(labels, r).into()
 }
 
 pub fn plus(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
-    Expr::IntBinOp(IntBinOp::Plus, lhs.into(), rhs.into()).into()
+    Expr::IntBinOp(IntBinOp::Plus, lhs, rhs).into()
 }
 
 pub fn minus(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
-    Expr::IntBinOp(IntBinOp::Minus, lhs.into(), rhs.into()).into()
+    Expr::IntBinOp(IntBinOp::Minus, lhs, rhs).into()
 }
 
 pub fn multiply(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
-    Expr::IntBinOp(IntBinOp::Multiply, lhs.into(), rhs.into()).into()
+    Expr::IntBinOp(IntBinOp::Multiply, lhs, rhs).into()
 }
 
 pub fn divide(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
-    Expr::IntBinOp(IntBinOp::Divide, lhs.into(), rhs.into()).into()
+    Expr::IntBinOp(IntBinOp::Divide, lhs, rhs).into()
 }
 
 pub fn negate(expr: ExprOnly) -> ExprOnly {
-    Expr::Negate(expr.into()).into()
+    Expr::Negate(expr).into()
 }
 
 pub fn equalequal(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
-    Expr::EqualEqual(lhs.into(), rhs.into()).into()
+    Expr::EqualEqual(lhs, rhs).into()
 }
 
 pub fn gt(lhs: ExprOnly, rhs: ExprOnly) -> ExprOnly {
-    Expr::IntBinOp(IntBinOp::GreaterThan, lhs.into(), rhs.into()).into()
+    Expr::IntBinOp(IntBinOp::GreaterThan, lhs, rhs).into()
 }
 
 pub fn match_(
@@ -101,8 +101,8 @@ pub fn match_(
         .into_iter()
         .map(|(variant, var, body)| (variant.to_owned(), var.to_owned(), body))
         .collect();
-    let def = def.map(|(var, body)| (var.to_owned(), body.into()));
-    Expr::Case(val.into(), cases, def).into()
+    let def = def.map(|(var, body)| (var.to_owned(), body));
+    Expr::Case(val, cases, def).into()
 }
 
 pub fn if_(
@@ -111,7 +111,7 @@ pub fn if_(
     elifs: Vec<(ExprOnly, ExprOnly)>,
     else_body: ExprOnly,
 ) -> ExprOnly {
-    Expr::If(if_expr.into(), if_body.into(), elifs, else_body.into()).into()
+    Expr::If(if_expr, if_body, elifs, else_body).into()
 }
 
 #[track_caller]

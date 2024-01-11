@@ -217,7 +217,7 @@ impl<'a> Parser<'a> {
             let (labels, r) = self.pattern_expr_inner()?;
             Ok(l.span_with(
                 r.clone(),
-                Expr::RecordExtend(labels, Box::new(r.map(|()| Expr::RecordEmpty).into())),
+                Expr::RecordExtend(labels, r.map(|()| Expr::RecordEmpty).into()),
             )
             .into())
         } else {
@@ -243,7 +243,7 @@ impl<'a> Parser<'a> {
 
     fn let_expr(&mut self, at: At<()>) -> Result<ExprAt> {
         let pattern = self.pattern_expr()?;
-        match pattern.expr {
+        match *pattern.expr {
             Pattern::Var(_) if self.matches(Token::LParen)?.is_some() => {
                 let params = self.pattern_list()?;
                 self.expect(Token::Equal, "let expr fun")?;
@@ -256,12 +256,12 @@ impl<'a> Parser<'a> {
                 };
                 let fun = ExprAt {
                     context: at.clone().into(),
-                    expr: Expr::Fun(params, fun_body.into()),
+                    expr: Expr::Fun(params, fun_body).into(),
                 };
-                let expr = Expr::Let(pattern.into(), fun.into(), body.into());
+                let expr = Expr::Let(pattern, fun, body);
                 Ok(ExprAt {
                     context: at.into(),
-                    expr,
+                    expr: expr.into(),
                 })
             }
             _ => {
@@ -271,14 +271,14 @@ impl<'a> Parser<'a> {
                     let body = pattern.clone();
                     Ok(ExprAt {
                         context: at.into(),
-                        expr: Expr::Let(pattern.into(), value.into(), body.into()),
+                        expr: Expr::Let(pattern, value, body).into(),
                     })
                 } else {
                     self.expect(Token::In, "let expr")?;
                     let body = self.expr_inner(0)?;
                     Ok(ExprAt {
                         context: at.into(),
-                        expr: Expr::Let(pattern.into(), value.into(), body.into()),
+                        expr: Expr::Let(pattern, value, body).into(),
                     })
                 }
             }
@@ -292,7 +292,7 @@ impl<'a> Parser<'a> {
         let body = self.expr_inner(0)?;
         Ok(ExprAt {
             context: at.into(),
-            expr: Expr::Fun(params, body.into()),
+            expr: Expr::Fun(params, body).into(),
         })
     }
 
@@ -316,7 +316,7 @@ impl<'a> Parser<'a> {
             } else if let Some(r) = self.matches(Token::RBrace)? {
                 let rest = ExprAt {
                     context: r.clone().into(),
-                    expr: Expr::RecordEmpty,
+                    expr: Expr::RecordEmpty.into(),
                 };
                 return Ok((labels, rest, r));
             } else if self.matches(Token::Pipe)?.is_some() {
@@ -339,7 +339,7 @@ impl<'a> Parser<'a> {
         let (labels, rest, r) = self.record_expr_inner()?;
         Ok(ExprAt {
             context: l.span_with(r, ()).into(),
-            expr: Expr::RecordExtend(labels, rest.into()),
+            expr: Expr::RecordExtend(labels, rest).into(),
         })
     }
 
@@ -350,7 +350,7 @@ impl<'a> Parser<'a> {
         let context = at.span_with(label, ()).into();
         Ok(ExprAt {
             context,
-            expr: Expr::Variant(label_only, expr.into()),
+            expr: Expr::Variant(label_only, expr).into(),
         })
     }
 
@@ -369,7 +369,7 @@ impl<'a> Parser<'a> {
             } else if let Some(var) = self.matches_ident()? {
                 self.expect(Token::Arrow, "match expr default case")?;
                 let expr = self.expr_inner(0)?;
-                default_case = Some((var.value, Box::new(expr)));
+                default_case = Some((var.value, expr));
                 self.expect(Token::RBrace, "match expr default case")?;
                 break;
             } else {
@@ -385,7 +385,7 @@ impl<'a> Parser<'a> {
         }
         Ok(ExprAt {
             context: at.into(),
-            expr: Expr::Case(expr.into(), cases, default_case),
+            expr: Expr::Case(expr, cases, default_case).into(),
         })
     }
 
@@ -409,7 +409,7 @@ impl<'a> Parser<'a> {
         let else_body = self.expr_inner(0)?;
         Ok(ExprAt {
             context: at.into(),
-            expr: Expr::If(if_expr.into(), if_body.into(), elifs, else_body.into()),
+            expr: Expr::If(if_expr, if_body, elifs, else_body).into(),
         })
     }
 
@@ -440,7 +440,7 @@ impl<'a> Parser<'a> {
             let r_bp = self.prefix_bp()?;
             if let Some(at) = self.matches(Token::Negate)? {
                 let rhs = self.expr_inner(r_bp)?;
-                Ok(at.map(|()| Expr::Negate(rhs.into())).into())
+                Ok(at.map(|()| Expr::Negate(rhs)).into())
             } else {
                 Err(Error::InvalidPrefix(self.token.take()))
             }
@@ -461,26 +461,22 @@ impl<'a> Parser<'a> {
         }
         Ok(ExprAt {
             context: lhs.context.clone(),
-            expr: Expr::Call(lhs.into(), args),
+            expr: Expr::Call(lhs, args).into(),
         })
     }
 
     fn record_select_expr(&mut self, lhs: ExprAt) -> Result<ExprAt> {
         let field = self.expect_ident("record select expr")?;
-        Ok(field
-            .map(|field| Expr::RecordSelect(lhs.into(), field))
-            .into())
+        Ok(field.map(|field| Expr::RecordSelect(lhs, field)).into())
     }
 
     fn record_restrict_expr(&mut self, lhs: ExprAt) -> Result<ExprAt> {
         let field = self.expect_ident("record restrict expr")?;
-        Ok(field
-            .map(|field| Expr::RecordRestrict(lhs.into(), field))
-            .into())
+        Ok(field.map(|field| Expr::RecordRestrict(lhs, field)).into())
     }
 
     fn unwrap_expr(&mut self, lhs: ExprAt, at: At<()>) -> Result<ExprAt> {
-        Ok(at.map(|()| Expr::Unwrap(lhs.into())).into())
+        Ok(at.map(|()| Expr::Unwrap(lhs)).into())
     }
 
     fn expr_postfix(&mut self, lhs: ExprAt) -> Result<ExprAt> {
@@ -502,9 +498,7 @@ impl<'a> Parser<'a> {
 
     fn binop_expr(&mut self, at: At<()>, op: IntBinOp, lhs: ExprAt, r_bp: u8) -> Result<ExprAt> {
         let rhs = self.expr_inner(r_bp)?;
-        Ok(at
-            .map(|()| Expr::IntBinOp(op, lhs.into(), rhs.into()))
-            .into())
+        Ok(at.map(|()| Expr::IntBinOp(op, lhs, rhs)).into())
     }
 
     fn expr_infix(&mut self, lhs: ExprAt, r_bp: u8) -> Result<ExprAt> {
@@ -518,7 +512,7 @@ impl<'a> Parser<'a> {
             self.binop_expr(at, IntBinOp::Divide, lhs, r_bp)
         } else if let Some(at) = self.matches(Token::EqualEqual)? {
             let rhs = self.expr_inner(r_bp)?;
-            Ok(at.map(|()| Expr::EqualEqual(lhs.into(), rhs.into())).into())
+            Ok(at.map(|()| Expr::EqualEqual(lhs, rhs)).into())
         } else if let Some(at) = self.matches(Token::LessThan)? {
             self.binop_expr(at, IntBinOp::LessThan, lhs, r_bp)
         } else if let Some(at) = self.matches(Token::LessThanOrEqual)? {

@@ -170,14 +170,14 @@ impl Env {
     }
 
     fn eval_pattern(&mut self, pattern: &PatternAt, value: Value) -> Result<()> {
-        match &pattern.expr {
+        match pattern.expr.as_ref() {
             Pattern::Var(var) => {
                 self.vars.insert(var.clone(), value);
             }
             Pattern::RecordExtend(labels, rest) => {
-                match &rest.expr {
+                match rest.expr.as_ref() {
                     Expr::RecordEmpty => (),
-                    _ => return Err(Error::PatternRecordRestNotEmpty(*rest.clone())),
+                    _ => return Err(Error::PatternRecordRestNotEmpty(rest.clone())),
                 }
                 let labels_value = match value {
                     Value::Record(labels) => labels,
@@ -198,7 +198,7 @@ impl Env {
     }
 
     fn eval_inner(&mut self, expr: &ExprAt) -> Result<Wrap> {
-        match &expr.expr {
+        match expr.expr.as_ref() {
             Expr::Bool(b) => Ok(Wrap::Value(Value::Bool(*b))),
             Expr::Int(i) => Ok(Wrap::Value(Value::Int(*i))),
             Expr::IntBinOp(op, lhs, rhs) => {
@@ -265,7 +265,7 @@ impl Env {
             Expr::Fun(params, body) => {
                 let env = self.clone();
                 let params = params.clone();
-                let body = *body.clone();
+                let body = body.clone();
                 let fun = Function { env, params, body };
                 Ok(Wrap::Value(Value::Function(fun)))
             }
