@@ -7,6 +7,7 @@ use std::{
 use parser::Parser;
 
 pub mod core;
+// pub mod emit;
 pub mod eval;
 pub mod expr;
 pub mod infer;
@@ -73,7 +74,7 @@ impl Env {
         let expr = Parser::repl(source)?;
         let typed_expr = self.infer.infer(expr.clone())?;
         let value = self.eval.eval(&expr)?;
-        let ty = self.infer.ty_to_string(&typed_expr.context.ty.ty).unwrap();
+        let ty = self.infer.ty_to_string(typed_expr.ty()).unwrap();
         let val = value.to_string();
         Ok(Output { ty, val })
     }
