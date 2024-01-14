@@ -598,8 +598,8 @@ impl Env {
         Ok(expr)
     }
 
-    // TODO: I got lazy here, make this more efficient
     fn sanitize_types(&self, expr: &mut ExprTypedAt) -> Result<()> {
+        // TODO: I got lazy here, make this more efficient
         expr.context.ty.ty = self.real_ty(expr.context.ty.ty.clone())?;
         match expr.expr.as_mut() {
             Expr::Bool(_) => Ok(()),
