@@ -592,9 +592,75 @@ impl Env {
 
     pub fn infer(&mut self, expr: ExprAt) -> Result<ExprTypedAt> {
         let expr = self.infer_inner(0, expr)?;
-        let expr = self.wrapped(expr)?;
+        let mut expr = self.wrapped(expr)?;
         self.generalize(-1, expr.ty())?;
+        self.sanitize_types(&mut expr)?;
         Ok(expr)
+    }
+
+    fn sanitize_types(&self, expr: &mut ExprTypedAt) -> Result<()> {
+        // TODO: I got lazy here, make this more efficient
+        expr.context.ty.ty = self.real_ty(expr.context.ty.ty.clone())?;
+        match expr.expr.as_mut() {
+            Expr::Bool(_) => Ok(()),
+            Expr::Int(_) => Ok(()),
+            Expr::IntBinOp(_, a, b) => {
+                self.sanitize_types(a)?;
+                self.sanitize_types(b)
+            }
+            Expr::Negate(value) => self.sanitize_types(value),
+            Expr::EqualEqual(a, b) => {
+                self.sanitize_types(a)?;
+                self.sanitize_types(b)
+            }
+            Expr::Var(_) => Ok(()),
+            Expr::Call(fun, args) => {
+                for arg in args.iter_mut() {
+                    self.sanitize_types(arg)?;
+                }
+                self.sanitize_types(fun)
+            }
+            Expr::Fun(params, body) => {
+                for param in params.iter_mut() {
+                    self.sanitize_types(param)?;
+                }
+                self.sanitize_types(body)
+            }
+            Expr::Let(pattern, value, body) => {
+                self.sanitize_types(pattern)?;
+                self.sanitize_types(value)?;
+                self.sanitize_types(body)
+            }
+            Expr::RecordSelect(record, _) => self.sanitize_types(record),
+            Expr::RecordExtend(labels, rest) => {
+                for (_, expr) in labels.iter_mut() {
+                    self.sanitize_types(expr)?;
+                }
+                self.sanitize_types(rest)
+            }
+            Expr::RecordRestrict(record, _) => self.sanitize_types(record),
+            Expr::RecordEmpty => Ok(()),
+            Expr::Variant(_, expr) => self.sanitize_types(expr),
+            Expr::Case(value, cases, def) => {
+                for (_, _, case) in cases.iter_mut() {
+                    self.sanitize_types(case)?;
+                }
+                if let Some((_, expr)) = def {
+                    self.sanitize_types(expr)?;
+                }
+                self.sanitize_types(value)
+            }
+            Expr::If(if_expr, if_body, elifs, else_body) => {
+                self.sanitize_types(if_expr)?;
+                self.sanitize_types(if_body)?;
+                for (elif_expr, elif_body) in elifs.iter_mut() {
+                    self.sanitize_types(elif_expr)?;
+                    self.sanitize_types(elif_body)?;
+                }
+                self.sanitize_types(else_body)
+            }
+            Expr::Unwrap(value) => self.sanitize_types(value),
+        }
     }
 
     fn assign_pattern(&mut self, pattern: PatternAt, ty: Type) -> Result<PatternTypedAt> {
@@ -981,6 +1047,15 @@ impl Env {
                     TypeVar::Link(ty) => self.real_ty(ty),
                     _ => Ok(ty),
                 }
+            }
+            Type::Arrow(params, ret) => {
+                let mut real_params = Vec::with_capacity(params.len());
+                for param in params {
+                    let real_param = self.real_ty(param)?;
+                    real_params.push(real_param);
+                }
+                let ret = self.real_ty(*ret)?;
+                Ok(Type::Arrow(real_params, ret.into()))
             }
             _ => Ok(ty),
         }
