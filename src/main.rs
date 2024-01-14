@@ -7,7 +7,7 @@ use std::{
 use parser::Parser;
 
 pub mod core;
-// pub mod emit;
+pub mod emit;
 pub mod eval;
 pub mod expr;
 pub mod infer;
@@ -179,3 +179,7 @@ mod infer_tests;
 #[cfg(test)]
 #[path = "tests/typed_exprs.rs"]
 mod typed_exprs;
+
+#[cfg(test)]
+#[path = "tests/emit_tests.rs"]
+mod emit_tests;
