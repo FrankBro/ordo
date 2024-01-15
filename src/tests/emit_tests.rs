@@ -31,4 +31,5 @@ fn pass(source: &str, expected: i64) {
 #[test]
 fn test() {
     pass("let add(a, b) = a + b in add(1, 2)", 3);
+    pass("let a = 1 in a", 1);
 }
