@@ -87,18 +87,46 @@ impl std::fmt::Display for WasmValue {
     }
 }
 
+enum LocalKind {
+    Param,
+    Local,
+}
+
+impl std::fmt::Display for LocalKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            LocalKind::Param => "param",
+            LocalKind::Local => "local",
+        };
+        write!(f, "{}", name)
+    }
+}
+
 struct WasmLocal {
+    kind: LocalKind,
     name: String,
     ty: WasmType,
 }
 
-impl From<PatternTypedAt> for WasmLocal {
-    fn from(value: PatternTypedAt) -> Self {
+impl WasmLocal {
+    fn param(value: PatternTypedAt) -> Self {
+        let kind = LocalKind::Param;
         let ty = value.ty().into();
         match *value.expr {
-            Pattern::Var(name) => WasmLocal { name, ty },
+            Pattern::Var(name) => WasmLocal { kind, name, ty },
             _ => todo!(),
         }
+    }
+
+    fn local(name: String, ty: WasmType) -> Self {
+        let kind = LocalKind::Local;
+        Self { kind, name, ty }
+    }
+}
+
+impl std::fmt::Display for WasmLocal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({} ${} {})", self.kind, self.name, self.ty)
     }
 }
 
@@ -166,13 +194,13 @@ impl std::fmt::Display for WasmFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "  (func ${}", self.name)?;
         for param in &self.params {
-            write!(f, " (param ${} {})", param.name, param.ty)?;
+            write!(f, " {}", param)?;
         }
         if let Some(result) = &self.result {
             write!(f, " (result {})", result)?;
         }
         for local in &self.locals {
-            write!(f, " (local ${} {})", local.name, local.ty)?;
+            write!(f, " {}", local)?;
         }
         for code in &self.code {
             write!(f, "\n    {}", code)?;
@@ -207,7 +235,7 @@ impl Module {
         match *expr.expr {
             Expr::Let(pattern, value, body) => match (*pattern.expr, *value.expr) {
                 (Pattern::Var(name), Expr::Fun(params, fun_body)) => {
-                    let params = params.into_iter().map(WasmLocal::from).collect();
+                    let params = params.into_iter().map(WasmLocal::param).collect();
                     let mut function = WasmFunction::new(name, params);
                     std::mem::swap(&mut self.function, &mut function);
                     self.emit(fun_body)?;
@@ -229,10 +257,9 @@ impl Module {
                         .last()
                         .map(|code| code.ty())
                         .ok_or(Error::NoCode)?;
-                    self.function.locals.push(WasmLocal {
-                        name: name.clone(),
-                        ty: ty.clone(),
-                    });
+                    self.function
+                        .locals
+                        .push(WasmLocal::local(name.clone(), ty.clone()));
                     self.function.code.push(WasmCode::LocalSet(name, ty));
                     self.emit(body)
                 }
