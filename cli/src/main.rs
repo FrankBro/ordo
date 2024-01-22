@@ -32,7 +32,7 @@ fn main() {
 
 #[test]
 fn readme_test() {
-    let file = std::fs::read_to_string("README.md").unwrap();
+    let file = std::fs::read_to_string("../README.md").unwrap();
     let lines: Vec<&str> = file.lines().collect();
     let mut i = 0;
 
