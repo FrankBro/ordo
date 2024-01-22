@@ -94,7 +94,7 @@ impl<K: std::cmp::Ord, V> BTreeMapExt<K, V> for BTreeMap<K, V> {
 
 #[derive(Clone, Default)]
 pub struct Env {
-    pub vars: HashMap<String, Type>,
+    pub vars: BTreeMap<String, Type>,
     pub type_vars: Vec<TypeVar>,
     wrap: BTreeMap<String, Type>,
 }
