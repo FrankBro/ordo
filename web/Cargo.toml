@@ -1,0 +1,17 @@
+[package]
+name = "web"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.20"
+ordo = { path = "../ordo" }
+wasm-logger = "0.2.0"
+yew = { git = "https://github.com/yewstack/yew/", features = ["csr"] }
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "HtmlElement",
+    "HtmlInputElement",
+]

@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use itertools::Itertools;
 
@@ -160,7 +160,7 @@ impl Wrap {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Env {
-    vars: HashMap<String, Value>,
+    pub vars: BTreeMap<String, Value>,
 }
 
 impl Env {
