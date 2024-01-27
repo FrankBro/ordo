@@ -942,20 +942,8 @@ impl Env {
                 }
                 let else_body = self.infer_inner(level, else_body)?;
                 self.unify(if_body.ty(), else_body.ty())?;
-                // TODO: if calling a function with an open variant should keep it open
-                match if_body.ty().clone() {
-                    Type::Variant(row) => {
-                        let (labels, _rest) = self.match_row_ty(&row)?;
-                        let ty =
-                            Type::Variant(Type::RowExtend(labels, Type::RowEmpty.into()).into());
-                        Ok(Expr::If(if_expr, if_body, typed_elifs, else_body)
-                            .with(expr.context, ty))
-                    }
-                    ty => {
-                        Ok(Expr::If(if_expr, if_body, typed_elifs, else_body)
-                            .with(expr.context, ty))
-                    }
-                }
+                let ty = if_body.ty().clone();
+                Ok(Expr::If(if_expr, if_body, typed_elifs, else_body).with(expr.context, ty))
             }
         }
     }

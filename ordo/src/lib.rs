@@ -34,3 +34,7 @@ mod typed_exprs;
 #[cfg(test)]
 #[path = "tests/emit_tests.rs"]
 mod emit_tests;
+
+#[cfg(test)]
+#[path = "tests/variant_tests.rs"]
+mod variant_tests;
