@@ -18,11 +18,11 @@ impl Env {
         let mut env = Self { infer, eval };
         env.add(
             "let safe_div(n, d) = if d == 0 then :div_by_zero {} else :ok (n / d)",
-            "(int, int) -> [div_by_zero: {}, ok: int]",
+            "forall ra. (ra\\div_by_zero\\ok) => (int, int) -> [div_by_zero: {}, ok: int | ra]",
         );
         env.add(
             "let safe_minus(x, y) = if y < 0 then :would_add {} else :ok (x - y)",
-            "(int, int) -> [ok: int, would_add: {}]",
+            "forall ra. (ra\\ok\\would_add) => (int, int) -> [ok: int, would_add: {} | ra]",
         );
         env
     }
@@ -59,12 +59,12 @@ fn pass(source: &str, source_ty: &str, expected_val: Value) {
 fn unwrap_ok() {
     pass(
         "safe_div(2, 2)?",
-        "[div_by_zero: {}, ok: int]",
+        "forall ra. (ra\\div_by_zero\\ok) => [div_by_zero: {}, ok: int | ra]",
         Value::Int(1),
     );
     pass(
         "safe_div(2, 0)?",
-        "[div_by_zero: {}, ok: int]",
+        "forall ra. (ra\\div_by_zero\\ok) => [div_by_zero: {}, ok: int | ra]",
         Value::Variant(
             "div_by_zero".to_owned(),
             Value::Record(BTreeMap::new()).into(),
@@ -72,17 +72,17 @@ fn unwrap_ok() {
     );
     pass(
         "let x = safe_div(2, 2)? in x",
-        "[div_by_zero: {}, ok: int]",
+        "forall ra. (ra\\div_by_zero\\ok) => [div_by_zero: {}, ok: int | ra]",
         Value::Int(1),
     );
     pass(
         "let x = safe_div(2, 0)? in x",
-        "[div_by_zero: {}, ok: int]",
+        "forall ra. (ra\\div_by_zero\\ok) => [div_by_zero: {}, ok: int | ra]",
         Value::Variant("div_by_zero".to_owned(), Value::record(Vec::new()).into()),
     );
     pass(
         "let x = safe_div(2, 2)? in let y = safe_minus(x, 1)? in y",
-        "[div_by_zero: {}, ok: int, would_add: {}]",
+        "forall ra. (ra\\div_by_zero\\ok\\would_add) => [div_by_zero: {}, ok: int, would_add: {} | ra]",
         Value::Int(0),
     );
 }
