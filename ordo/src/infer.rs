@@ -751,7 +751,9 @@ impl Env {
             return Ok(expr);
         }
         labels.insert(OK_LABEL.to_owned(), expr.ty().clone());
-        let rest = Type::RowEmpty;
+        let constraints = labels.keys().cloned().collect();
+        // TODO: I shouldn't need to do an unbound row and then generalize here, right?
+        let rest = self.new_generic_row(constraints);
         let ty = Type::Variant(Type::RowExtend(labels, rest.into()).into());
         expr.context.ty.ty = ty;
         Ok(expr)
@@ -909,6 +911,7 @@ impl Env {
                 let value = self.infer_inner(level, value)?;
                 match value.ty() {
                     Type::Variant(rows) => {
+                        // TODO: Should I use this rest or I can make a new one
                         let (mut labels, _) = self.match_row_ty(rows)?;
                         match labels.remove(OK_LABEL) {
                             None => {
@@ -942,20 +945,8 @@ impl Env {
                 }
                 let else_body = self.infer_inner(level, else_body)?;
                 self.unify(if_body.ty(), else_body.ty())?;
-                // TODO: if calling a function with an open variant should keep it open
-                match if_body.ty().clone() {
-                    Type::Variant(row) => {
-                        let (labels, _rest) = self.match_row_ty(&row)?;
-                        let ty =
-                            Type::Variant(Type::RowExtend(labels, Type::RowEmpty.into()).into());
-                        Ok(Expr::If(if_expr, if_body, typed_elifs, else_body)
-                            .with(expr.context, ty))
-                    }
-                    ty => {
-                        Ok(Expr::If(if_expr, if_body, typed_elifs, else_body)
-                            .with(expr.context, ty))
-                    }
-                }
+                let ty = if_body.ty().clone();
+                Ok(Expr::If(if_expr, if_body, typed_elifs, else_body).with(expr.context, ty))
             }
         }
     }

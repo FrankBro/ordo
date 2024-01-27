@@ -48,7 +48,7 @@ fn ifs() {
     );
     pass(
         "if 1 == 1 then :one {} else :zero {}",
-        "[one: {}, zero: {}]",
+        "forall ra. (ra\\one\\zero) => [one: {}, zero: {} | ra]",
         Value::Variant("one".to_owned(), Value::Record(BTreeMap::new()).into()),
     );
     pass(
