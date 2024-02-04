@@ -154,7 +154,6 @@ impl<'a> Parser<'a> {
         Self::expr_source(source, true)
     }
 
-    #[cfg(test)]
     pub fn expr(source: &str) -> Result<ExprAt> {
         Self::expr_source(source, false)
     }
