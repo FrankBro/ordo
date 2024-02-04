@@ -338,6 +338,10 @@ fn exprs() {
             vec![record(vec![("x", var("x")), ("y", var("y"))], empty())],
         ),
     );
+    pass("-9223372036854775807", int(i64::MIN + 1));
+    fail("-9223372036854775808", Error::Lexer);
+    pass("9223372036854775807", int(i64::MAX));
+    fail("9223372036854775808", Error::Lexer);
 }
 
 #[test]
