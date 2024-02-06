@@ -40,8 +40,8 @@ pub fn fun(args: Vec<PatternOnly>, body: ExprOnly) -> ExprOnly {
     Expr::Fun(args, body).into()
 }
 
-pub fn let_(var: PatternOnly, value: ExprOnly, body: ExprOnly) -> ExprOnly {
-    Expr::Let(var, value, body).into()
+pub fn let_(var: PatternOnly, value: ExprOnly) -> ExprOnly {
+    Expr::Let(var, value).into()
 }
 
 pub fn empty() -> ExprOnly {
@@ -116,22 +116,35 @@ pub fn if_(
 
 #[track_caller]
 fn pass(source: &str, expected: ExprOnly) {
-    let actual = Parser::expr(source).unwrap();
-    let actual = actual.strip_context();
+    let actual: Vec<ExprOnly> = Parser::new(source)
+        .unwrap()
+        .map(|e| e.unwrap().strip_context())
+        .collect();
+    assert_eq!(vec![expected], actual);
+}
+
+#[track_caller]
+fn pass_let(source: &str, expected: Vec<ExprOnly>) {
+    let actual: Vec<ExprOnly> = Parser::new(source)
+        .unwrap()
+        .map(|e| e.unwrap().strip_context())
+        .collect();
     assert_eq!(expected, actual);
 }
 
 #[track_caller]
 fn fail(source: &str, expected: Error) {
-    let actual = Parser::expr(source).unwrap_err();
-    assert_eq!(expected, actual, "for {}", source);
-}
-
-#[track_caller]
-fn pass_repl(source: &str, expected: ExprOnly) {
-    let actual = Parser::repl(source).unwrap();
-    let actual = actual.strip_context();
-    assert_eq!(expected, actual);
+    let parser = match Parser::new(source) {
+        Ok(parser) => parser,
+        Err(_) => return,
+    };
+    for expr in parser {
+        if let Err(actual) = expr {
+            assert_eq!(expected, actual, "for {}", source);
+            return;
+        }
+    }
+    unreachable!("expected an error")
 }
 
 #[test]
@@ -170,29 +183,35 @@ fn ifs() {
 
 #[test]
 fn patterns() {
-    pass(
+    pass_let(
         "let {a} = {a = 1} in a",
-        let_(
-            precord(vec![("a", pvar("a"))]),
-            record(vec![("a", int(1))], empty()),
+        vec![
+            let_(
+                precord(vec![("a", pvar("a"))]),
+                record(vec![("a", int(1))], empty()),
+            ),
             var("a"),
-        ),
+        ],
     );
-    pass(
+    pass_let(
         "let f(a, b) = a + b in f(1, 2)",
-        let_(
-            pvar("f"),
-            fun(vec![pvar("a"), pvar("b")], plus(var("a"), var("b"))),
+        vec![
+            let_(
+                pvar("f"),
+                fun(vec![pvar("a"), pvar("b")], plus(var("a"), var("b"))),
+            ),
             call(var("f"), vec![int(1), int(2)]),
-        ),
+        ],
     );
-    pass(
+    pass_let(
         "let {x = {y = y}} = {x = {y = 1}} in y",
-        let_(
-            precord(vec![("x", precord(vec![("y", pvar("y"))]))]),
-            record(vec![("x", record(vec![("y", int(1))], empty()))], empty()),
+        vec![
+            let_(
+                precord(vec![("x", precord(vec![("y", pvar("y"))]))]),
+                record(vec![("x", record(vec![("y", int(1))], empty()))], empty()),
+            ),
             var("y"),
-        ),
+        ],
     );
 }
 
@@ -205,36 +224,30 @@ fn exprs() {
         "f(x)(y)",
         call(call(var("f"), vec![var("x")]), vec![var("y")]),
     );
-    pass(
+    pass_let(
         "let f = fun(x, y) -> g(x, y) in f(a, b)",
-        let_(
-            pvar("f"),
-            fun(
-                vec![pvar("x"), pvar("y")],
-                call(var("g"), vec![var("x"), var("y")]),
+        vec![
+            let_(
+                pvar("f"),
+                fun(
+                    vec![pvar("x"), pvar("y")],
+                    call(var("g"), vec![var("x"), var("y")]),
+                ),
             ),
             call(var("f"), vec![var("a"), var("b")]),
-        ),
+        ],
     );
-    pass(
+    pass_let(
         "let x = a in
                 let y = b in
                 f(x, y)",
-        let_(
-            pvar("x"),
-            var("a"),
-            let_(
-                pvar("y"),
-                var("b"),
-                call(var("f"), vec![var("x"), var("y")]),
-            ),
-        ),
+        vec![
+            let_(pvar("x"), var("a")),
+            let_(pvar("y"), var("b")),
+            call(var("f"), vec![var("x"), var("y")]),
+        ],
     );
     fail("f x", Error::ExpectedEof(Token::Ident("x".to_owned())));
-    fail(
-        "let a = one",
-        Error::Expected("let expr", vec![Token::In], None),
-    );
     fail("a, b", Error::ExpectedEof(Token::Comma));
     fail("a = b", Error::ExpectedEof(Token::Equal));
     // TODO: Not an ideal error here
@@ -302,22 +315,24 @@ fn exprs() {
             restrict(var("m"), "a"),
         ),
     );
-    pass(
+    pass_let(
         "let x = {a = f(x), b = y.b} in { a = fun(z) -> z | x \\ a }",
-        let_(
-            pvar("x"),
-            record(
-                vec![
-                    ("a", call(var("f"), vec![var("x")])),
-                    ("b", select(var("y"), "b")),
-                ],
-                empty(),
+        vec![
+            let_(
+                pvar("x"),
+                record(
+                    vec![
+                        ("a", call(var("f"), vec![var("x")])),
+                        ("b", select(var("y"), "b")),
+                    ],
+                    empty(),
+                ),
             ),
             record(
                 vec![("a", fun(vec![pvar("z")], var("z")))],
                 restrict(var("x"), "a"),
             ),
-        ),
+        ],
     );
     fail(
         "{a = x, a = y}",
@@ -346,35 +361,33 @@ fn exprs() {
 
 #[test]
 fn repl() {
-    pass_repl("let a = 0", let_(pvar("a"), int(0), var("a")));
-    pass_repl(
+    pass_let("let a = 0", vec![let_(pvar("a"), int(0))]);
+    pass_let(
         "let f(x) = x",
-        let_(pvar("f"), fun(vec![pvar("x")], var("x")), var("f")),
+        vec![let_(pvar("f"), fun(vec![pvar("x")], var("x")))],
     );
-    pass_repl(
+    pass_let(
         "let {x = x} = {x = 1}",
-        let_(
+        vec![let_(
             precord(vec![("x", pvar("x"))]),
             record(vec![("x", int(1))], empty()),
-            record(vec![("x", var("x"))], empty()),
-        ),
+        )],
     );
-    pass_repl(
+    pass_let(
         "let f({ x = x }) = x",
-        let_(
+        vec![let_(
             pvar("f"),
             fun(vec![precord(vec![("x", pvar("x"))])], var("x")),
-            var("f"),
-        ),
+        )],
     );
-    pass_repl(
+    pass_let(
             "let default_with(default, value) = match value { :some value -> value, :none x -> default }",
-            let_(
+            vec![let_(
                 pvar("default_with"),
                 fun(vec![pvar("default"), pvar("value")],
                 match_(var("value"), vec![
                     ("some", "value", var("value")),
                     ("none", "x", var("default"))
                 ], None)),
-                var("default_with")));
+            )]);
 }

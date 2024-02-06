@@ -196,7 +196,7 @@ pub enum Expr<Context> {
     Var(String),
     Call(ExprIn<Context>, Vec<ExprIn<Context>>),
     Fun(Vec<PatternIn<Context>>, ExprIn<Context>),
-    Let(PatternIn<Context>, ExprIn<Context>, ExprIn<Context>),
+    Let(PatternIn<Context>, ExprIn<Context>),
     RecordSelect(ExprIn<Context>, String),
     RecordExtend(BTreeMap<String, ExprIn<Context>>, ExprIn<Context>),
     RecordRestrict(ExprIn<Context>, String),
@@ -233,8 +233,8 @@ impl<Context> fmt::Display for Expr<Context> {
                 let params = params.iter().map(|param| param.to_string()).join(", ");
                 write!(f, "fun({}) -> {}", params, body)
             }
-            Expr::Let(var, val, body) => {
-                write!(f, "let {} = {} in {}", var, val, body)
+            Expr::Let(var, val) => {
+                write!(f, "let {} = {} in ", var, val)
             }
             Expr::RecordSelect(rec, label) => write!(f, "{}.{}", rec, label),
             Expr::RecordExtend(labels, rest) => {
@@ -277,7 +277,7 @@ impl Expr<PositionContext> {
                 let params = params.into_iter().map(ExprAt::strip_context).collect();
                 Expr::Fun(params, fix(body))
             }
-            Expr::Let(p, v, b) => Expr::Let(fix(p), fix(v), fix(b)),
+            Expr::Let(p, v) => Expr::Let(fix(p), fix(v)),
             Expr::RecordSelect(r, l) => Expr::RecordSelect(fix(r), l),
             Expr::RecordExtend(ls, r) => {
                 let ls = ls
@@ -340,7 +340,7 @@ impl Expr<PositionTypeContext> {
                     .collect();
                 Expr::Fun(params, fix(body))
             }
-            Expr::Let(p, v, b) => Expr::Let(fix(p), fix(v), fix(b)),
+            Expr::Let(p, v) => Expr::Let(fix(p), fix(v)),
             Expr::RecordSelect(r, l) => Expr::RecordSelect(fix(r), l),
             Expr::RecordExtend(ls, r) => {
                 let ls = ls

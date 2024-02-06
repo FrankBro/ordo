@@ -17,10 +17,10 @@ pub fn var_at(var: &str, context: PositionContext) -> ExprAt {
     }
 }
 
-pub fn let_at(var: PatternAt, value: ExprAt, body: ExprAt, context: PositionContext) -> ExprAt {
+pub fn let_at(var: PatternAt, value: ExprAt, context: PositionContext) -> ExprAt {
     ExprAt {
         context,
-        expr: Expr::Let(var, value, body).into(),
+        expr: Expr::Let(var, value).into(),
     }
 }
 
@@ -31,8 +31,8 @@ pub fn plus_at(lhs: ExprAt, rhs: ExprAt, context: PositionContext) -> ExprAt {
     }
 }
 
-fn pass_at(source: &str, expected: ExprAt) {
-    let actual = Parser::expr(source).unwrap();
+fn pass_at(source: &str, expected: Vec<ExprAt>) {
+    let actual: Vec<ExprAt> = Parser::new(source).unwrap().map(|e| e.unwrap()).collect();
     assert_eq!(expected, actual);
 }
 
@@ -51,24 +51,26 @@ fn loc(sl: usize, sc: usize, el: usize, ec: usize) -> PositionContext {
 
 #[test]
 fn at() {
-    pass_at("a", var_at("a", loc(0, 0, 0, 1)));
-    pass_at("1", int_at(1, loc(0, 0, 0, 1)));
+    pass_at("a", vec![var_at("a", loc(0, 0, 0, 1))]);
+    pass_at("1", vec![int_at(1, loc(0, 0, 0, 1))]);
     pass_at(
         "1 + 2",
-        plus_at(
+        vec![plus_at(
             int_at(1, loc(0, 0, 0, 1)),
             int_at(2, loc(0, 4, 0, 5)),
             loc(0, 2, 0, 3),
-        ),
+        )],
     );
     pass_at(
         "let a = 1 in\na",
-        let_at(
-            var_at("a", loc(0, 4, 0, 5)),
-            int_at(1, loc(0, 8, 0, 9)),
+        vec![
+            let_at(
+                var_at("a", loc(0, 4, 0, 5)),
+                int_at(1, loc(0, 8, 0, 9)),
+                loc(0, 0, 0, 3),
+            ),
             var_at("a", loc(1, 0, 1, 1)),
-            loc(0, 0, 0, 3),
-        ),
+        ],
     );
-    pass_at("10", int_at(10, loc(0, 0, 0, 2)));
+    pass_at("10", vec![int_at(10, loc(0, 0, 0, 2))]);
 }
