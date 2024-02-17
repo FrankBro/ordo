@@ -1,12 +1,17 @@
-use crate::{core::make_env, infer::Error, parser::Parser};
+use crate::{
+    core::make_env,
+    infer::{Error, Inferer},
+    parser::Parser,
+};
 
 #[track_caller]
 fn pass(expr_str: &str, expected: &str) {
     let (forall, ty) = Parser::ty(expected).unwrap();
     let mut env = make_env();
     let expected = env.replace_ty_constants_with_vars(forall, ty);
-    let expr = Parser::expr(expr_str).unwrap();
-    let typed_expr = env.infer(expr).unwrap();
+    let mut inferer = Inferer::new(env, expr_str).unwrap();
+    let typed_expr = inferer.by_ref().last().unwrap().unwrap();
+    let env = inferer.env();
     let actual = typed_expr.context.ty.ty;
     let expected = env.ty_to_string(&expected).unwrap();
     let actual = env.ty_to_string(&actual).unwrap();
@@ -15,10 +20,21 @@ fn pass(expr_str: &str, expected: &str) {
 
 #[track_caller]
 fn fail(expr_str: &str, expected: Error) {
-    let mut env = make_env();
-    let expr = Parser::expr(expr_str).unwrap();
-    let actual = env.infer(expr).unwrap_err();
+    let env = make_env();
+    let actual = Inferer::new(env, expr_str)
+        .unwrap()
+        .last()
+        .unwrap()
+        .unwrap_err();
     assert_eq!(expected, actual, "for {}", expr_str);
+}
+
+#[test]
+fn debug() {
+    pass(
+        "fun(x) -> let y = fun(z) -> z in y",
+        "forall a b => a -> b -> b",
+    );
 }
 
 #[test]
