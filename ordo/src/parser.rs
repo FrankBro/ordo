@@ -562,13 +562,13 @@ impl<'a> Parser<'a> {
         // For the repl, we will insert what was just declared
         // For a file, we will export the module
         if self.state == State::Let && self.matches_eof() {
+            self.state = State::Eof;
             return Ok(None);
         }
         if self.state != State::Init {
             self.expect(Token::In, "let in")?;
         }
         self.state = State::Unknown;
-        // For the repl,
         self.expr(0).map(Some)
     }
 

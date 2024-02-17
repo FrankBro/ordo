@@ -8,11 +8,12 @@ use crate::{
         Constraints, Expr, ExprAt, ExprIn, ExprTypedAt, Id, Level, Pattern, PatternAt,
         PatternTypedAt, Type, TypeVar, OK_LABEL,
     },
-    parser::ForAll,
+    parser::{self, ForAll, Parser},
 };
 
 #[derive(Debug, PartialEq)]
 pub enum Error {
+    Parser(parser::Error),
     TypeVarNotFound(Id),
     RecursiveType,
     CannotUnify(String, String),
@@ -34,6 +35,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Error::Parser(e) => write!(f, "parser error: {}", e),
             Error::TypeVarNotFound(id) => write!(f, "type var not found: {}", id),
             Error::RecursiveType => write!(f, "recursive type"),
             Error::CannotUnify(ty1, ty2) => {
@@ -66,6 +68,12 @@ impl fmt::Display for Error {
     }
 }
 
+impl From<parser::Error> for Error {
+    fn from(value: parser::Error) -> Self {
+        Self::Parser(value)
+    }
+}
+
 type Result<T, E = Error> = std::result::Result<T, E>;
 
 trait BTreeSetExt<K: std::cmp::Ord> {
@@ -89,6 +97,40 @@ impl<K: std::cmp::Ord, V> BTreeMapExt<K, V> for BTreeMap<K, V> {
         let mut map = BTreeMap::new();
         map.insert(k, v);
         map
+    }
+}
+
+#[derive(PartialEq)]
+enum State {
+    Init,
+    Let,
+    Other,
+    Eof,
+    Error,
+}
+
+pub struct Inferer<'a> {
+    env: Env,
+    parser: Parser<'a>,
+    expr: Option<ExprAt>,
+    state: State,
+}
+
+impl<'a> Inferer<'a> {
+    pub fn new(env: Env, source: &'a str) -> Result<Inferer<'a>> {
+        let mut parser = Parser::new(source)?;
+        let expr = parser.next().transpose()?;
+        let state = State::Init;
+        Ok(Self {
+            env,
+            parser,
+            expr,
+            state,
+        })
+    }
+
+    pub fn env(self) -> Env {
+        self.env
     }
 }
 
@@ -589,18 +631,51 @@ impl Env {
     pub fn insert_var(&mut self, name: String, ty: Type) {
         self.vars.insert(name, ty);
     }
+}
+
+impl<'a> Iterator for Inferer<'a> {
+    type Item = Result<ExprTypedAt>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.state == State::Eof || self.state == State::Error {
+            return None;
+        }
+
+        let res = self.next_expr();
+        if res.is_err() {
+            self.state = State::Error;
+        }
+        res.transpose()
+    }
+}
+
+impl<'a> Inferer<'a> {
+    fn next_expr(&mut self) -> Result<Option<ExprTypedAt>> {
+        let res = match self.expr.take() {
+            Some(expr) => self.infer_inner(0, expr).map(Some),
+            None => unreachable!(),
+        };
+        self.expr = self.parser.next().transpose()?;
+        if self.expr.is_none() {
+            self.state = State::Eof;
+            if let Ok(Some(expr)) = &res {
+                self.env.generalize(-1, expr.ty())?;
+            }
+        }
+        res
+    }
 
     pub fn infer(&mut self, expr: ExprAt) -> Result<ExprTypedAt> {
         let expr = self.infer_inner(0, expr)?;
         let mut expr = self.wrapped(expr)?;
-        self.generalize(-1, expr.ty())?;
+        self.env.generalize(-1, expr.ty())?;
         self.sanitize_types(&mut expr)?;
         Ok(expr)
     }
 
     fn sanitize_types(&self, expr: &mut ExprTypedAt) -> Result<()> {
         // TODO: I got lazy here, make this more efficient
-        expr.context.ty.ty = self.real_ty(expr.context.ty.ty.clone())?;
+        expr.context.ty.ty = self.env.real_ty(expr.context.ty.ty.clone())?;
         match expr.expr.as_mut() {
             Expr::Bool(_) => Ok(()),
             Expr::Int(_) => Ok(()),
@@ -626,10 +701,9 @@ impl Env {
                 }
                 self.sanitize_types(body)
             }
-            Expr::Let(pattern, value, body) => {
+            Expr::Let(pattern, value) => {
                 self.sanitize_types(pattern)?;
-                self.sanitize_types(value)?;
-                self.sanitize_types(body)
+                self.sanitize_types(value)
             }
             Expr::RecordSelect(record, _) => self.sanitize_types(record),
             Expr::RecordExtend(labels, rest) => {
@@ -666,7 +740,7 @@ impl Env {
     fn assign_pattern(&mut self, pattern: PatternAt, ty: Type) -> Result<PatternTypedAt> {
         match (*pattern.expr, ty) {
             (Pattern::Var(name), ty) => {
-                self.insert_var(name.clone(), ty.clone());
+                self.env.insert_var(name.clone(), ty.clone());
                 Ok(Pattern::Var(name).with(pattern.context, ty))
             }
             (Pattern::RecordExtend(labels, rest), Type::Record(row)) => {
@@ -674,7 +748,7 @@ impl Env {
                     Pattern::RecordEmpty => (),
                     _ => return Err(Error::PatternRecordRestNotEmpty(rest.clone())),
                 }
-                let (labels_ty, rest_ty) = self.match_row_ty(&row)?;
+                let (labels_ty, rest_ty) = self.env.match_row_ty(&row)?;
                 let mut label_patterns = BTreeMap::new();
                 for (label, label_pattern) in labels {
                     match labels_ty.get(&label) {
@@ -691,7 +765,7 @@ impl Env {
                     .with(pattern.context, Type::Record(row)))
             }
             (Pattern::RecordExtend(_, _), ty) => {
-                let ty = self.ty_to_string(&ty)?;
+                let ty = self.env.ty_to_string(&ty)?;
                 Err(Error::RecordPatternNotRecord(ty))
             }
             (expr, _) => Err(Error::InvalidPattern(ExprIn {
@@ -704,8 +778,8 @@ impl Env {
     fn infer_pattern(&mut self, level: Level, pattern: PatternAt) -> Result<PatternTypedAt> {
         match *pattern.expr {
             Pattern::Var(name) => {
-                let ty = self.new_unbound(level);
-                self.insert_var(name.clone(), ty.clone());
+                let ty = self.env.new_unbound(level);
+                self.env.insert_var(name.clone(), ty.clone());
                 Ok(Pattern::Var(name).with(pattern.context, ty))
             }
             Pattern::RecordExtend(labels, rest) => {
@@ -721,7 +795,7 @@ impl Env {
                     label_tys.insert(label.clone(), label_expr.ty().clone());
                     label_exprs.insert(label, label_expr);
                 }
-                let rest_ty = self.new_unbound_row(level, constraints);
+                let rest_ty = self.env.new_unbound_row(level, constraints);
                 let ty = Type::Record(Type::RowExtend(label_tys, rest_ty.clone().into()).into());
                 let rest = Pattern::RecordEmpty.with(rest.context, rest_ty);
                 Ok(Pattern::RecordExtend(label_exprs, rest).with(pattern.context, ty))
@@ -732,13 +806,13 @@ impl Env {
 
     fn wrap_with(&mut self, labels: BTreeMap<String, Type>) -> Result<()> {
         for (label, ty) in labels {
-            match self.wrap.entry(label) {
+            match self.env.wrap.entry(label) {
                 Entry::Vacant(v) => {
                     v.insert(ty);
                 }
                 Entry::Occupied(o) => {
                     let old_ty = o.get().clone();
-                    self.unify(&old_ty, &ty)?;
+                    self.env.unify(&old_ty, &ty)?;
                 }
             }
         }
@@ -746,14 +820,14 @@ impl Env {
     }
 
     fn wrapped(&mut self, mut expr: ExprTypedAt) -> Result<ExprTypedAt> {
-        let mut labels = std::mem::take(&mut self.wrap);
+        let mut labels = std::mem::take(&mut self.env.wrap);
         if labels.is_empty() {
             return Ok(expr);
         }
         labels.insert(OK_LABEL.to_owned(), expr.ty().clone());
         let constraints = labels.keys().cloned().collect();
         // TODO: I shouldn't need to do an unbound row and then generalize here, right?
-        let rest = self.new_generic_row(constraints);
+        let rest = self.env.new_generic_row(constraints);
         let ty = Type::Variant(Type::RowExtend(labels, rest.into()).into());
         expr.context.ty.ty = ty;
         Ok(expr)
@@ -766,61 +840,61 @@ impl Env {
             Expr::IntBinOp(op, lhs, rhs) => {
                 let ty = Type::int();
                 let lhs = self.infer_inner(level, lhs)?;
-                self.unify(&ty, lhs.ty())?;
+                self.env.unify(&ty, lhs.ty())?;
                 let rhs = self.infer_inner(level, rhs)?;
-                self.unify(&ty, rhs.ty())?;
+                self.env.unify(&ty, rhs.ty())?;
                 let ty = op.output_ty();
                 Ok(Expr::IntBinOp(op, lhs, rhs).with(expr.context, ty))
             }
             Expr::Negate(value) => {
                 let ty = Type::bool();
                 let value = self.infer_inner(level, value)?;
-                self.unify(&ty, value.ty())?;
+                self.env.unify(&ty, value.ty())?;
                 Ok(Expr::Negate(value).with(expr.context, ty))
             }
             Expr::EqualEqual(lhs, rhs) => {
                 let lhs = self.infer_inner(level, lhs)?;
                 let rhs = self.infer_inner(level, rhs)?;
-                self.unify(lhs.ty(), rhs.ty())?;
+                self.env.unify(lhs.ty(), rhs.ty())?;
                 Ok(Expr::EqualEqual(lhs, rhs).with(expr.context, Type::bool()))
             }
             Expr::Var(name) => {
-                let ty = self.get_var(&name)?.clone();
-                let ty = self.instantiate(level, ty)?;
+                let ty = self.env.get_var(&name)?.clone();
+                let ty = self.env.instantiate(level, ty)?;
                 Ok(Expr::Var(name).with(expr.context, ty))
             }
             Expr::Fun(params, body) => {
                 let mut param_exprs = Vec::with_capacity(params.len());
                 let mut param_tys = Vec::with_capacity(params.len());
-                let old_vars = self.vars.clone();
-                let old_wrap = self.wrap.clone();
+                let old_vars = self.env.vars.clone();
+                let old_wrap = self.env.wrap.clone();
                 for param in params {
                     let param_expr = self.infer_pattern(level, param)?;
                     param_tys.push(param_expr.ty().clone());
                     param_exprs.push(param_expr);
                 }
+                dbg!(&body);
                 let body = self.infer_inner(level, body)?;
-                self.vars = old_vars;
-                self.wrap = old_wrap;
+                self.env.vars = old_vars;
+                self.env.wrap = old_wrap;
                 let ty = Type::Arrow(param_tys, body.ty().clone().into());
                 Ok(Expr::Fun(param_exprs, body).with(expr.context, ty))
             }
-            Expr::Let(pattern, value, body) => {
+            Expr::Let(pattern, value) => {
                 let value = self.infer_inner(level + 1, value)?;
-                self.generalize(level, value.ty())?;
+                self.env.generalize(level, value.ty())?;
                 let pattern = self.assign_pattern(pattern, value.ty().clone())?;
-                let body = self.infer_inner(level, body)?;
-                let ty = body.ty().clone();
-                Ok(Expr::Let(pattern, value, body).with(expr.context, ty))
+                let ty = pattern.ty().clone();
+                Ok(Expr::Let(pattern, value).with(expr.context, ty))
             }
             Expr::Call(fun, args) => {
                 let fun = self.infer_inner(level, fun)?;
-                let (params, ret) = self.match_fun_ty(args.len(), fun.ty().clone())?;
+                let (params, ret) = self.env.match_fun_ty(args.len(), fun.ty().clone())?;
                 let mut typed_args = Vec::with_capacity(args.len());
                 for (i, arg) in args.into_iter().enumerate() {
                     let arg = self.infer_inner(level, arg)?;
                     let param = &params[i];
-                    self.unify(arg.ty(), param)?;
+                    self.env.unify(arg.ty(), param)?;
                     typed_args.push(arg);
                 }
                 Ok(Expr::Call(fun, typed_args).with(expr.context, *ret))
@@ -830,8 +904,10 @@ impl Env {
                 Ok(Expr::RecordEmpty.with(expr.context, ty))
             }
             Expr::RecordSelect(record, label) => {
-                let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
-                let field = self.new_unbound(level);
+                let rest = self
+                    .env
+                    .new_unbound_row(level, Constraints::singleton(label.clone()));
+                let field = self.env.new_unbound(level);
                 let param = Type::Record(
                     Type::RowExtend(
                         BTreeMap::singleton(label.clone(), field.clone()),
@@ -841,12 +917,14 @@ impl Env {
                 );
                 let ret = field;
                 let record = self.infer_inner(level, record)?;
-                self.unify(&param, record.ty())?;
+                self.env.unify(&param, record.ty())?;
                 Ok(Expr::RecordSelect(record, label).with(expr.context, ret))
             }
             Expr::RecordRestrict(record, label) => {
-                let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
-                let field = self.new_unbound(level);
+                let rest = self
+                    .env
+                    .new_unbound_row(level, Constraints::singleton(label.clone()));
+                let field = self.env.new_unbound(level);
                 let param = Type::Record(
                     Type::RowExtend(
                         BTreeMap::singleton(label.clone(), field),
@@ -856,7 +934,7 @@ impl Env {
                 );
                 let ret = Type::Record(rest.into());
                 let record = self.infer_inner(level, record)?;
-                self.unify(&param, record.ty())?;
+                self.env.unify(&param, record.ty())?;
                 Ok(Expr::RecordRestrict(record, label).with(expr.context, ret))
             }
             Expr::RecordExtend(labels, record) => {
@@ -868,43 +946,49 @@ impl Env {
                     tys.insert(label.clone(), expr.ty().clone());
                     typed_labels.insert(label, expr);
                 }
-                let rest = self.new_unbound_row(level, constraints);
+                let rest = self.env.new_unbound_row(level, constraints);
                 let record = self.infer_inner(level, record)?;
-                self.unify(&Type::Record(rest.clone().into()), record.ty())?;
+                self.env
+                    .unify(&Type::Record(rest.clone().into()), record.ty())?;
                 let ty = Type::Record(Type::RowExtend(tys, rest.into()).into());
                 Ok(Expr::RecordExtend(typed_labels, record).with(expr.context, ty))
             }
             Expr::Variant(label, value) => {
-                let rest = self.new_unbound_row(level, Constraints::singleton(label.clone()));
-                let variant = self.new_unbound(level);
+                let rest = self
+                    .env
+                    .new_unbound_row(level, Constraints::singleton(label.clone()));
+                let variant = self.env.new_unbound(level);
                 let param = variant.clone();
                 let ret = Type::Variant(
                     Type::RowExtend(BTreeMap::singleton(label.clone(), variant), rest.into())
                         .into(),
                 );
                 let value = self.infer_inner(level, value)?;
-                self.unify(&param, value.ty())?;
+                self.env.unify(&param, value.ty())?;
                 Ok(Expr::Variant(label, value).with(expr.context, ret))
             }
             Expr::Case(value, cases, None) => {
-                let ret = self.new_unbound(level);
+                let ret = self.env.new_unbound(level);
                 let value = self.infer_inner(level, value)?;
                 let (cases_row, cases) = self.infer_cases(level, &ret, Type::RowEmpty, cases)?;
-                self.unify(value.ty(), &Type::Variant(cases_row.into()))?;
+                self.env
+                    .unify(value.ty(), &Type::Variant(cases_row.into()))?;
                 Ok(Expr::Case(value, cases, None).with(expr.context, ret))
             }
             Expr::Case(value, cases, Some((def_var, def_expr))) => {
                 let constraints = cases.iter().map(|(label, _, _)| label).cloned().collect();
-                let def_variant = self.new_unbound_row(level, constraints);
-                let old_vars = self.vars.clone();
-                self.vars
+                let def_variant = self.env.new_unbound_row(level, constraints);
+                let old_vars = self.env.vars.clone();
+                self.env
+                    .vars
                     .insert(def_var.clone(), Type::Variant(def_variant.clone().into()));
                 let def_expr = self.infer_inner(level, def_expr)?;
                 let ret = def_expr.ty().clone();
-                self.vars = old_vars;
+                self.env.vars = old_vars;
                 let value = self.infer_inner(level, value)?;
                 let (cases_row, cases) = self.infer_cases(level, &ret, def_variant, cases)?;
-                self.unify(value.ty(), &Type::Variant(cases_row.into()))?;
+                self.env
+                    .unify(value.ty(), &Type::Variant(cases_row.into()))?;
                 Ok(Expr::Case(value, cases, Some((def_var, def_expr))).with(expr.context, ret))
             }
             Expr::Unwrap(value) => {
@@ -912,10 +996,10 @@ impl Env {
                 match value.ty() {
                     Type::Variant(rows) => {
                         // TODO: Should I use this rest or I can make a new one
-                        let (mut labels, _) = self.match_row_ty(rows)?;
+                        let (mut labels, _) = self.env.match_row_ty(rows)?;
                         match labels.remove(OK_LABEL) {
                             None => {
-                                let ty = self.ty_to_string(value.ty())?;
+                                let ty = self.env.ty_to_string(value.ty())?;
                                 Err(Error::UnwrapMissingOk(ty))
                             }
                             Some(ty) => {
@@ -925,7 +1009,7 @@ impl Env {
                         }
                     }
                     _ => {
-                        let ty = self.ty_to_string(value.ty())?;
+                        let ty = self.env.ty_to_string(value.ty())?;
                         Err(Error::UnwrapNotVariant(ty))
                     }
                 }
@@ -933,18 +1017,18 @@ impl Env {
             Expr::If(if_expr, if_body, elifs, else_body) => {
                 let bool = Type::bool();
                 let if_expr = self.infer_inner(level, if_expr)?;
-                self.unify(&bool, if_expr.ty())?;
+                self.env.unify(&bool, if_expr.ty())?;
                 let if_body = self.infer_inner(level, if_body)?;
                 let mut typed_elifs = Vec::with_capacity(elifs.len());
                 for (elif_expr, elif_body) in elifs {
                     let elif_expr = self.infer_inner(level, elif_expr)?;
-                    self.unify(&bool, elif_expr.ty())?;
+                    self.env.unify(&bool, elif_expr.ty())?;
                     let elif_body = self.infer_inner(level, elif_body)?;
-                    self.unify(if_body.ty(), elif_body.ty())?;
+                    self.env.unify(if_body.ty(), elif_body.ty())?;
                     typed_elifs.push((elif_expr, elif_body));
                 }
                 let else_body = self.infer_inner(level, else_body)?;
-                self.unify(if_body.ty(), else_body.ty())?;
+                self.env.unify(if_body.ty(), else_body.ty())?;
                 let ty = if_body.ty().clone();
                 Ok(Expr::If(if_expr, if_body, typed_elifs, else_body).with(expr.context, ty))
             }
@@ -962,19 +1046,21 @@ impl Env {
         let mut labels = BTreeMap::new();
         let mut typed_cases = Vec::with_capacity(cases.len());
         for (label, var, case) in cases {
-            let variant = self.new_unbound(level);
-            let old_vars = self.vars.clone();
-            self.vars.insert(var.clone(), variant.clone());
+            let variant = self.env.new_unbound(level);
+            let old_vars = self.env.vars.clone();
+            self.env.vars.insert(var.clone(), variant.clone());
             let case = self.infer_inner(level, case)?;
-            self.vars = old_vars;
-            self.unify(ret, case.ty())?;
+            self.env.vars = old_vars;
+            self.env.unify(ret, case.ty())?;
             labels.insert(label.clone(), variant);
             typed_cases.push((label, var, case));
         }
         let ty = Type::RowExtend(labels, rest.into());
         Ok((ty, typed_cases))
     }
+}
 
+impl Env {
     pub fn replace_ty_constants_with_vars(&mut self, forall: ForAll, mut ty: Type) -> Type {
         if !forall.vars.is_empty() || !forall.row_vars.is_empty() {
             let mut env = HashMap::new();

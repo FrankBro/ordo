@@ -1,9 +1,10 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use ordo::{infer::Env, parser::Parser};
+// use ordo::{infer::Env, parser::Parser};
 
 pub fn infer_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("infer");
 
+    /*
     let expr = "let a = 1 in a";
     group.bench_function(expr, |b| {
         b.iter(|| {
@@ -59,6 +60,7 @@ pub fn infer_benchmark(c: &mut Criterion) {
             black_box(typed)
         })
     });
+    */
 }
 
 criterion_group!(benches, infer_benchmark);

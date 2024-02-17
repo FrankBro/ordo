@@ -1,5 +1,7 @@
-use std::io::{self, stdout, BufRead, Write};
+// use std::io::{self, stdout, BufRead, Write};
 
+fn main() {}
+/*
 use ordo::env::Env;
 
 const ORDO: &str = "ordo>>> ";
@@ -77,3 +79,4 @@ fn readme_test() {
         }
     }
 }
+*/

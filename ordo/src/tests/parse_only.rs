@@ -391,3 +391,11 @@ fn repl() {
                 ], None)),
             )]);
 }
+
+#[test]
+fn iter() {
+    pass_let(
+        "let a = let b = 1 in b in a",
+        vec![let_(pvar("a"), let_(pvar("b"), int(1))), var("b"), var("a")],
+    );
+}
