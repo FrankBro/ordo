@@ -6,7 +6,7 @@ use crate::{
 use wasmi::*;
 
 #[track_caller]
-fn pass(source: &str, expected: i64) {
+fn pass<T: WasmResults + PartialEq + std::fmt::Debug>(source: &str, expected: T) {
     let mut env = infer::Env::default();
     let expr = Parser::expr(source).unwrap();
     let typed_expr = env.infer(expr.clone()).unwrap();
@@ -21,15 +21,16 @@ fn pass(source: &str, expected: i64) {
         .unwrap()
         .start(&mut store)
         .unwrap();
-    let load = instance
-        .get_typed_func::<(), i64>(&store, LOAD_NAME)
-        .unwrap();
+    let load = instance.get_typed_func::<(), T>(&store, LOAD_NAME).unwrap();
     let actual = load.call(&mut store, ()).unwrap();
     assert_eq!(expected, actual);
 }
 
 #[test]
 fn test() {
-    pass("let add(a, b) = a + b in add(1, 2)", 3);
-    pass("let a = 1 in a", 1);
+    pass("let add(a, b) = a + b in add(1, 2)", 3_u64);
+    pass("let a = 1 in a", 1_u64);
+    pass("4 * 5 / 2 - 1 + 4", 13_u64);
+    pass("2 == 2", 1_i32);
+    pass("3 > 4", 0_i32);
 }
