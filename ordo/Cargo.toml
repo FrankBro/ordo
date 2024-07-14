@@ -17,3 +17,7 @@ criterion = "0.5.1"
 [[bench]]
 name = "infer_benchmark"
 harness = false
+
+[[bench]]
+name = "eval_benchmark"
+harness = false

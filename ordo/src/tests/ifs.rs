@@ -13,12 +13,12 @@ fn pass(source_expr: &str, source_ty: &str, expected_val: Value) {
     let expected = env.replace_ty_constants_with_vars(forall, ty);
     let expr = Parser::expr(source_expr).unwrap();
     let typed_expr = env.infer(expr.clone()).unwrap();
-    let actual = typed_expr.context.ty.ty;
+    let actual = typed_expr.context.ty.ty.clone();
     let expected_ty = env.ty_to_string(&expected).unwrap();
     let actual_ty = env.ty_to_string(&actual).unwrap();
     assert_eq!(expected_ty, actual_ty);
     let mut env = eval::Env::default();
-    let actual_val = env.eval(&expr).unwrap();
+    let actual_val = env.eval(typed_expr).unwrap();
     assert_eq!(expected_val, actual_val);
 }
 
