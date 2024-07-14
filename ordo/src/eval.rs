@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 
-use crate::expr::{Expr, ExprAt, IntBinOp, Pattern, PatternAt, OK_LABEL};
+use crate::expr::{Expr, ExprTypedAt, IntBinOp, Pattern, PatternTypedAt, OK_LABEL};
 
 #[derive(Debug)]
 pub enum Error {
@@ -17,8 +17,8 @@ pub enum Error {
     LabelNotFound(String),
     NoCase,
     UnwrapNotVariant(Value),
-    PatternRecordRestNotEmpty(ExprAt),
-    InvalidPattern(ExprAt),
+    PatternRecordRestNotEmpty(ExprTypedAt),
+    InvalidPattern(ExprTypedAt),
 }
 
 impl fmt::Display for Error {
@@ -46,8 +46,8 @@ type Result<T, E = Error> = std::result::Result<T, E>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     env: Env,
-    params: Vec<PatternAt>,
-    body: ExprAt,
+    params: Vec<PatternTypedAt>,
+    body: ExprTypedAt,
 }
 
 impl fmt::Display for Function {
@@ -62,11 +62,10 @@ impl Function {
         if self.params.len() != args.len() {
             return Err(Error::UnexpectedNumberOfArguments);
         }
-        for (i, arg) in args.into_iter().enumerate() {
-            let param = &self.params[i];
+        for (arg, param) in args.into_iter().zip(self.params.clone().into_iter()) {
             self.env.eval_pattern(param, arg)?;
         }
-        self.env.eval_inner(&self.body)
+        self.env.eval_inner(self.body.clone())
     }
 }
 
@@ -108,37 +107,37 @@ impl Value {
         Value::Record(labels)
     }
 
-    fn as_bool(&self) -> Result<bool> {
+    fn as_bool(self) -> Result<bool> {
         match self {
-            Value::Bool(b) => Ok(*b),
+            Value::Bool(b) => Ok(b),
             _ => Err(Error::NotBool(self.clone())),
         }
     }
 
-    fn as_int(&self) -> Result<i64> {
+    fn as_int(self) -> Result<i64> {
         match self {
-            Value::Int(i) => Ok(*i),
+            Value::Int(i) => Ok(i),
             _ => Err(Error::NotInt(self.clone())),
         }
     }
 
-    fn as_function(&self) -> Result<Function> {
+    fn as_function(self) -> Result<Function> {
         match self {
-            Value::Function(fun) => Ok(fun.clone()),
+            Value::Function(fun) => Ok(fun),
             _ => Err(Error::NotFunction(self.clone())),
         }
     }
 
-    fn as_record(&self) -> Result<&BTreeMap<String, Value>> {
+    fn as_record(self) -> Result<BTreeMap<String, Value>> {
         match self {
             Value::Record(record) => Ok(record),
             _ => Err(Error::NotRecord(self.clone())),
         }
     }
 
-    fn as_variant(&self) -> Result<(&String, &Value)> {
+    fn as_variant(self) -> Result<(String, Value)> {
         match self {
-            Value::Variant(label, value) => Ok((label, value)),
+            Value::Variant(label, value) => Ok((label, *value)),
             _ => Err(Error::NotVariant(self.clone())),
         }
     }
@@ -164,13 +163,13 @@ pub struct Env {
 }
 
 impl Env {
-    pub fn eval(&mut self, expr: &ExprAt) -> Result<Value> {
+    pub fn eval(&mut self, expr: ExprTypedAt) -> Result<Value> {
         let wrap = self.eval_inner(expr)?;
         Ok(wrap.value())
     }
 
-    fn eval_pattern(&mut self, pattern: &PatternAt, value: Value) -> Result<()> {
-        match pattern.expr.as_ref() {
+    fn eval_pattern(&mut self, pattern: PatternTypedAt, value: Value) -> Result<()> {
+        match *pattern.expr {
             Pattern::Var(var) => {
                 self.vars.insert(var.clone(), value);
             }
@@ -179,12 +178,12 @@ impl Env {
                     Expr::RecordEmpty => (),
                     _ => return Err(Error::PatternRecordRestNotEmpty(rest.clone())),
                 }
-                let labels_value = match value {
+                let mut labels_value = match value {
                     Value::Record(labels) => labels,
                     _ => return Err(Error::NotRecord(value)),
                 };
                 for (label, label_pattern) in labels {
-                    match labels_value.get(label) {
+                    match labels_value.remove(&label) {
                         None => return Err(Error::LabelNotFound(label.clone())),
                         Some(label_value) => {
                             self.eval_pattern(label_pattern, label_value.clone())?
@@ -197,10 +196,10 @@ impl Env {
         Ok(())
     }
 
-    fn eval_inner(&mut self, expr: &ExprAt) -> Result<Wrap> {
-        match expr.expr.as_ref() {
-            Expr::Bool(b) => Ok(Wrap::Value(Value::Bool(*b))),
-            Expr::Int(i) => Ok(Wrap::Value(Value::Int(*i))),
+    fn eval_inner(&mut self, expr: ExprTypedAt) -> Result<Wrap> {
+        match *expr.expr {
+            Expr::Bool(b) => Ok(Wrap::Value(Value::Bool(b))),
+            Expr::Int(i) => Ok(Wrap::Value(Value::Int(i))),
             Expr::IntBinOp(op, lhs, rhs) => {
                 let lhs = match self.eval_inner(lhs)? {
                     Wrap::Value(value) => value.as_int()?,
@@ -243,7 +242,7 @@ impl Env {
             Expr::Var(s) => {
                 let value = self
                     .vars
-                    .get(s)
+                    .get(&s)
                     .ok_or_else(|| Error::VarNotFound(s.clone()))?;
                 Ok(Wrap::Value(value.clone()))
             }
@@ -284,7 +283,7 @@ impl Env {
                 };
                 let record = record.as_record()?;
                 let val = record
-                    .get(label)
+                    .get(&label)
                     .ok_or_else(|| Error::LabelNotFound(label.clone()))?;
                 Ok(Wrap::Value(val.clone()))
             }
@@ -311,7 +310,7 @@ impl Env {
                 };
                 let record = record.as_record()?;
                 let mut record = record.clone();
-                record.remove(label);
+                record.remove(&label);
                 Ok(Wrap::Value(Value::Record(record)))
             }
             Expr::RecordEmpty => Ok(Wrap::Value(Value::Record(BTreeMap::new()))),
@@ -381,7 +380,7 @@ impl Env {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::Parser;
+    use crate::{infer, parser::Parser};
 
     use super::{Env, Value};
 
@@ -403,7 +402,8 @@ mod tests {
         ];
         for (expr_str, expected) in cases {
             let expr = Parser::expr(expr_str).unwrap();
-            let actual = Env::default().eval(&expr).unwrap();
+            let expr = infer::Env::default().infer(expr).unwrap();
+            let actual = Env::default().eval(expr).unwrap();
             assert_eq!(expected, actual);
         }
     }

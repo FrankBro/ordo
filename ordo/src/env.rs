@@ -65,8 +65,8 @@ impl Env {
     pub fn process(&mut self, source: &str) -> Result<Output> {
         let expr = Parser::repl(source)?;
         let typed_expr = self.infer.infer(expr.clone())?;
-        let value = self.eval.eval(&expr)?;
         let ty = self.infer.ty_to_string(typed_expr.ty()).unwrap();
+        let value = self.eval.eval(typed_expr)?;
         let val = value.to_string();
         Ok(Output { ty, val })
     }

@@ -32,11 +32,11 @@ impl Env {
         let expected_ty = self.infer.replace_ty_constants_with_vars(forall, ty);
         let expr = Parser::repl(source).unwrap();
         let typed_expr = self.infer.infer(expr.clone()).unwrap();
-        let actual_ty = typed_expr.context.ty.ty;
+        let actual_ty = typed_expr.context.ty.ty.clone();
         let expected_ty = self.infer.ty_to_string(&expected_ty).unwrap();
         let actual_ty = self.infer.ty_to_string(&actual_ty).unwrap();
         assert_eq!(expected_ty, actual_ty);
-        let _ = self.eval.eval(&expr).unwrap();
+        let _ = self.eval.eval(typed_expr).unwrap();
     }
 }
 
@@ -47,11 +47,11 @@ fn pass(source: &str, source_ty: &str, expected_val: Value) {
     let expected_ty = env.infer.replace_ty_constants_with_vars(forall, ty);
     let expr = Parser::expr(source).unwrap();
     let typed_expr = env.infer.infer(expr.clone()).unwrap();
-    let actual_ty = typed_expr.context.ty.ty;
+    let actual_ty = typed_expr.context.ty.ty.clone();
     let expected_ty = env.infer.ty_to_string(&expected_ty).unwrap();
     let actual_ty = env.infer.ty_to_string(&actual_ty).unwrap();
     assert_eq!(expected_ty, actual_ty);
-    let actual_val = env.eval.eval(&expr).unwrap();
+    let actual_val = env.eval.eval(typed_expr).unwrap();
     assert_eq!(expected_val, actual_val);
 }
 
